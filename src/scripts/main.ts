@@ -16,7 +16,7 @@ import { Building, type PieceKind } from './building'
 import { Inventory } from './inventory'
 import { ITEMS, type ItemId } from './items'
 import { Hud } from './hud'
-import { saveGame, loadGame, type SaveFile } from './save'
+import { saveGame, loadGame, SAVE_VERSION, type SaveFile } from './save'
 import { heightAt, SPAWN, SEA_LEVEL, HALF_SIZE } from './heightmap'
 
 const SWING_COOLDOWN = 0.45
@@ -295,7 +295,7 @@ async function boot(): Promise<void> {
 
   // --- save loop ---
   const collectSave = (): SaveFile => ({
-    version: 1,
+    version: SAVE_VERSION,
     savedAt: Date.now(),
     time: daynight.time,
     player: { x: player.mover.position.x, y: player.mover.position.y, z: player.mover.position.z, hp: playerHp },

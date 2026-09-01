@@ -13,16 +13,20 @@ import { CHUNK_SIZE, CHUNKS_PER_SIDE } from './terrain'
 import type { Physics } from './physics'
 import type { ItemId } from './items'
 
-export type NodeKind = 'tree' | 'pine' | 'rock' | 'bush'
+export type NodeKind = 'tree' | 'pine' | 'rock' | 'bush' | 'grass'
 
 export interface ScatterNode {
   id: number
   kind: NodeKind
+  /** which model variant of the kind this instance uses */
+  variant: number
   x: number
   y: number
   z: number
   scale: number
   rotY: number
+  /** per-instance tint jitter (multiplies material color) */
+  tint: number
   hp: number
   alive: boolean
   /** epoch ms when a harvested node respawns */
@@ -34,6 +38,16 @@ const NODE_DEFS: Record<NodeKind, { hp: number; yields: Partial<Record<ItemId, [
   pine: { hp: 3, yields: { wood: [2, 4], fiber: [1, 2] } },
   rock: { hp: 3, yields: { stone: [2, 3], flint: [0, 2] } },
   bush: { hp: 2, yields: { berry: [2, 4], fiber: [1, 3] } },
+  grass: { hp: 1, yields: { fiber: [1, 2] } },
+}
+
+/** Model files per kind — a node picks one variant deterministically. */
+const KIND_MODELS: Record<NodeKind, string[]> = {
+  tree: ['Tree1', 'Tree2', 'Tree3'],
+  pine: ['Pine1'],
+  rock: ['Rock1', 'Rock2'],
+  bush: ['Bush1'],
+  grass: ['Grass1'],
 }
 
 const RESPAWN_MS = 240_000
@@ -98,15 +112,18 @@ class InstancedProp {
     })
   }
 
-  setInstance(i: number, x: number, y: number, z: number, scale: number, rotY: number): void {
+  setInstance(i: number, x: number, y: number, z: number, scale: number, rotY: number, tint = 1): void {
     this.dummy.position.set(x, y, z)
     this.dummy.rotation.set(0, rotY, 0)
     this.dummy.scale.setScalar(scale)
     this.dummy.updateMatrix()
+    const c = new THREE.Color(tint, tint, tint)
     for (const m of this.meshes) {
       m.setMatrixAt(i, this.dummy.matrix)
+      m.setColorAt(i, c)
       m.count = Math.max(m.count, i + 1)
       m.instanceMatrix.needsUpdate = true
+      if (m.instanceColor) m.instanceColor.needsUpdate = true
     }
   }
 
@@ -121,9 +138,9 @@ class InstancedProp {
 export class Scatter {
   readonly group = new THREE.Group()
   readonly nodes: ScatterNode[] = []
-  private props = new Map<NodeKind, InstancedProp>()
-  /** kind → node ids in placement order (instance index = position in this list) */
-  private order = new Map<NodeKind, number[]>()
+  /** props + placement order keyed by `${kind}#${variant}` */
+  private props = new Map<string, InstancedProp>()
+  private order = new Map<string, number[]>()
   private treeColliders = new Map<number, RAPIER.Collider>() // node id → collider
   private activeChunks = new Set<number>()
   private lastChunkKey = -1
@@ -132,26 +149,31 @@ export class Scatter {
   async load(): Promise<void> {
     const loader = new GLTFLoader()
     loader.setMeshoptDecoder(MeshoptDecoder)
-    const [tree, pine, rock, bush] = await Promise.all(
-      ['Tree1', 'Pine1', 'Rock1', 'Bush1'].map(async (n) =>
-        (await loader.loadAsync(`models/props/${n}.glb`)).scene,
-      ),
+    const models = new Map<string, THREE.Group>()
+    const names = [...new Set(Object.values(KIND_MODELS).flat())]
+    await Promise.all(
+      names.map(async (n) => {
+        models.set(n, (await loader.loadAsync(`models/props/${n}.glb`)).scene)
+      }),
     )
+
     this.place('tree', 26, 0.55, 5, 8, 3200, mulberry32(101))
     this.place('pine', 30, 0.5, 6, 10, 2400, mulberry32(202))
     this.place('rock', 42, 0.35, 0.9, 2.0, 1400, mulberry32(303))
     this.place('bush', 34, 0.6, 1.0, 1.7, 1600, mulberry32(404))
+    this.place('grass', 13, 0.5, 0.5, 1.0, 5000, mulberry32(505))
 
-    const caps: Record<NodeKind, THREE.Group> = { tree, pine, rock, bush }
-    const heights: Record<NodeKind, number> = { tree: 1, pine: 1, rock: 1, bush: 1 }
-    for (const kind of ['tree', 'pine', 'rock', 'bush'] as NodeKind[]) {
-      const ids = this.order.get(kind) ?? []
-      const prop = new InstancedProp(caps[kind], Math.max(ids.length, 1), this.group, heights[kind])
-      this.props.set(kind, prop)
-      ids.forEach((nodeId, i) => {
-        const n = this.nodes[nodeId]
-        prop.setInstance(i, n.x, n.y, n.z, n.scale, n.rotY)
-      })
+    for (const kind of Object.keys(KIND_MODELS) as NodeKind[]) {
+      for (let v = 0; v < KIND_MODELS[kind].length; v++) {
+        const key = `${kind}#${v}`
+        const ids = this.order.get(key) ?? []
+        const prop = new InstancedProp(models.get(KIND_MODELS[kind][v])!, Math.max(ids.length, 1), this.group, 1)
+        this.props.set(key, prop)
+        ids.forEach((nodeId, i) => {
+          const n = this.nodes[nodeId]
+          prop.setInstance(i, n.x, n.y, n.z, n.scale, n.rotY, n.tint)
+        })
+      }
     }
   }
 
@@ -179,29 +201,33 @@ export class Scatter {
         const ds = Math.hypot(x - SPAWN.x, z - SPAWN.z)
         if (ds < 14) continue // keep the spawn point itself clear
         const id = this.nodes.length
+        const variant = Math.floor(rand() * KIND_MODELS[kind].length)
         this.nodes.push({
-          id, kind, x, y, z,
+          id, kind, variant, x, y, z,
           scale: sMin + rand() * (sMax - sMin),
           rotY: rand() * Math.PI * 2,
+          tint: 0.82 + rand() * 0.3,
           hp: NODE_DEFS[kind].hp,
           alive: true,
           respawnAt: 0,
         })
+        const key = `${kind}#${variant}`
+        if (!this.order.has(key)) this.order.set(key, [])
+        this.order.get(key)!.push(id)
         ids.push(id)
       }
     }
-    this.order.set(kind, ids)
   }
 
   /** Which node the aim ray hits, within `reach` meters OF THE PLAYER (not the
    *  camera — the camera sits on a 5 m boom, so ray distance lies about reach). */
   raycast(raycaster: THREE.Raycaster, playerFeet: THREE.Vector3, reach: number): ScatterNode | null {
     let best: { node: ScatterNode; dist: number } | null = null
-    for (const [kind, prop] of this.props) {
+    for (const [key, prop] of this.props) {
       const hits = raycaster.intersectObjects(prop.meshes, false)
       for (const h of hits) {
         if (h.instanceId == null) continue
-        const ids = this.order.get(kind)!
+        const ids = this.order.get(key)!
         const node = this.nodes[ids[h.instanceId]]
         if (!node?.alive) continue
         const d = Math.hypot(node.x - playerFeet.x, node.z - playerFeet.z)
@@ -242,9 +268,10 @@ export class Scatter {
   }
 
   private setNodeVisible(node: ScatterNode, visible: boolean): void {
-    const prop = this.props.get(node.kind)!
-    const idx = this.order.get(node.kind)!.indexOf(node.id)
-    if (visible) prop.setInstance(idx, node.x, node.y, node.z, node.scale, node.rotY)
+    const key = `${node.kind}#${node.variant}`
+    const prop = this.props.get(key)!
+    const idx = this.order.get(key)!.indexOf(node.id)
+    if (visible) prop.setInstance(idx, node.x, node.y, node.z, node.scale, node.rotY, node.tint)
     else prop.hideInstance(idx)
   }
 

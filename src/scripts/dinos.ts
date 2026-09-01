@@ -81,6 +81,29 @@ export class Dino {
       this.actions.run.play()
       this.actions.run.weight = 0
     }
+
+    // Ground-contact calibration. Box3.setFromObject measured the BIND pose,
+    // but the idle animation holds the feet elsewhere — that offset is why
+    // dinos float. Apply one idle frame, then measure the true skinned min-y
+    // (getVertexPosition applies the skeleton) and pull the model down to it.
+    this.mixer.update(0.01)
+    this.object.updateMatrixWorld(true)
+    let minY = Infinity
+    const v = new THREE.Vector3()
+    model.traverse((o) => {
+      if (!(o instanceof THREE.SkinnedMesh)) return
+      const count = o.geometry.attributes.position.count
+      const step = Math.max(1, Math.floor(count / 2500))
+      for (let i = 0; i < count; i += step) {
+        o.getVertexPosition(i, v)
+        v.applyMatrix4(o.matrixWorld)
+        if (v.y < minY) minY = v.y
+      }
+    })
+    if (Number.isFinite(minY)) {
+      const groundY = this.object.getWorldPosition(new THREE.Vector3()).y
+      model.position.y -= minY - groundY
+    }
   }
 
   /** A hit from the player. torporHit=true for fists (KO route), false for weapons (damage route). */
@@ -211,8 +234,16 @@ export class Dino {
       }
     }
 
-    pos.y = heightAt(pos.x, pos.z)
+    // slope-aware ground clamp: average front/back paw heights along the
+    // heading, and pitch the body to match — single-point clamping floats the
+    // feet on any slope
+    const fx = Math.sin(this.heading) * 0.8
+    const fz = Math.cos(this.heading) * 0.8
+    const hFront = heightAt(pos.x + fx, pos.z + fz)
+    const hBack = heightAt(pos.x - fx, pos.z - fz)
+    pos.y = (hFront + hBack) / 2
     this.object.rotation.y = this.heading
+    this.object.rotation.x = THREE.MathUtils.clamp(Math.atan2(hBack - hFront, 1.6), -0.3, 0.3)
     const running = this.speed > this.species.walkSpeed * 1.4
     this.animate(dt, this.speed / (running ? this.species.runSpeed : this.species.walkSpeed), running)
   }

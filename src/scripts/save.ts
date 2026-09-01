@@ -4,7 +4,7 @@
 const DB = 'jurassic-stack'
 const STORE = 'saves'
 const KEY = 'slot-0'
-export const SAVE_VERSION = 1
+export const SAVE_VERSION = 2 // v2: scatter RNG stream changed (variants) — v1 node ids invalid
 
 function withStore(mode: IDBTransactionMode): Promise<IDBObjectStore> {
   return new Promise((resolve, reject) => {

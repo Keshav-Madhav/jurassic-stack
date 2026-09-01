@@ -102,3 +102,7 @@ Bugs the gate caught: reach measured from camera (all swings whiffed); camera-dr
 - [ ] 4-player playtest with the actual three friends
 
 **Gate:** two browsers on the deployed URL, host + guest, tame and ride together.
+
+### M4.1 — playtest feedback round (user's first live-site review)
+- [x] Dinos floated above ground: bind-pose bbox lied about foot level — now calibrated from the true skinned vertices after an idle frame (`getVertexPosition`), plus slope-aware front/back-paw clamping and body pitch
+- [x] Foliage variety: all 10 intaken nature props in play (3 tree + 2 rock variants, grass kind added — ~13.6K instances), per-instance tint jitter; save v2 (RNG stream changed)
