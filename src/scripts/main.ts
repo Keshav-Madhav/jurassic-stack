@@ -17,7 +17,8 @@ import { Inventory } from './inventory'
 import { ITEMS, type ItemId } from './items'
 import { Hud } from './hud'
 import { saveGame, loadGame, SAVE_VERSION, type SaveFile } from './save'
-import { heightAt, loadHeightmap, SPAWN, SEA_LEVEL, HALF_SIZE } from './heightmap'
+import { heightAt, loadHeightmap, SPAWN } from './heightmap'
+import { WaterSystem } from './water'
 
 const SWING_COOLDOWN = 0.45
 const REACH = 3.2
@@ -36,12 +37,9 @@ async function boot(): Promise<void> {
   const terrain = new Terrain()
   scene.add(terrain.group)
 
-  const ocean = new THREE.Mesh(
-    new THREE.PlaneGeometry(HALF_SIZE * 6, HALF_SIZE * 6).rotateX(-Math.PI / 2),
-    new THREE.MeshStandardMaterial({ color: 0x2e6ba8, roughness: 0.35, transparent: true, opacity: 0.92 }),
-  )
-  ocean.position.y = SEA_LEVEL
-  scene.add(ocean)
+  const water = new WaterSystem()
+  water.build()
+  scene.add(water.group)
 
   const physics = new Physics()
   await physics.init()
@@ -326,6 +324,56 @@ async function boot(): Promise<void> {
     fps: () => hud.fps,
     ready: false,
     game: {
+      swimming: () => player.swimming,
+      waterLevelAt: (x: number, z: number) => water.waterLevelAt(x, z),
+      waterSpheres: () =>
+        water.group.children.map((c) => {
+          const g = (c as THREE.Mesh).geometry
+          g.computeBoundingSphere()
+          const s = g.boundingSphere!
+          const pos = g.getAttribute('position')
+          let nan = 0
+          for (let i = 0; i < pos.count; i++) {
+            if (!Number.isFinite(pos.getX(i)) || !Number.isFinite(pos.getY(i)) || !Number.isFinite(pos.getZ(i))) nan++
+          }
+          return { radius: +s.radius.toFixed(1), center: s.center.toArray().map((v) => +v.toFixed(0)), nan, culled: (c as THREE.Mesh).frustumCulled }
+        }),
+      waterNoCull: () => water.group.children.forEach((c) => ((c as THREE.Mesh).frustumCulled = false)),
+      waterVertsNear: (x: number, z: number, r: number) => {
+        const found: number[][] = []
+        water.group.children.forEach((c, ci) => {
+          const pos = (c as THREE.Mesh).geometry.getAttribute('position')
+          if (!pos) return
+          const wp = new THREE.Vector3()
+          for (let i = 0; i < pos.count && found.length < 8; i++) {
+            wp.set(pos.getX(i), pos.getY(i), pos.getZ(i)).applyMatrix4(c.matrixWorld)
+            if (Math.hypot(wp.x - x, wp.z - z) < r) found.push([ci, +wp.x.toFixed(1), +wp.y.toFixed(1), +wp.z.toFixed(1)])
+          }
+        })
+        return found
+      },
+      waterSolidRed: () => {
+        water.group.children.forEach((c) => {
+          const m = (c as THREE.Mesh).material as THREE.MeshStandardMaterial
+          m.transparent = false
+          m.opacity = 1
+          m.depthWrite = true
+          m.color.set(0xff0000)
+          m.needsUpdate = true
+        })
+      },
+      waterDebug: () =>
+        water.group.children.map((c) => {
+          const m = c as THREE.Mesh
+          m.geometry.computeBoundingBox()
+          const b = m.geometry.boundingBox!
+          return {
+            visible: m.visible,
+            pos: { x: +m.position.x.toFixed(0), y: +m.position.y.toFixed(1), z: +m.position.z.toFixed(0) },
+            box: { min: b.min.toArray().map((v) => +v.toFixed(1)), max: b.max.toArray().map((v) => +v.toFixed(1)) },
+          }
+        }),
+      riverFlowAt: (x: number, z: number) => water.riverFlowAt(x, z),
       swing,
       interact,
       craft: (id: ItemId) => inventory.craftById(id),
@@ -457,7 +505,10 @@ async function boot(): Promise<void> {
         if (m.intent.vx || m.intent.vz) riding.setHeading(Math.atan2(m.intent.vx, m.intent.vz))
         m.update(FIXED_DT, physics.world.gravity.y)
       } else {
-        player.fixedUpdate(FIXED_DT, input, cam.yaw, physics.world.gravity.y, debugIntent ?? undefined)
+        const feet = player.mover.position
+        const wl = water.waterLevelAt(feet.x, feet.z)
+        const flow = wl !== null ? water.riverFlowAt(feet.x, feet.z) : null
+        player.fixedUpdate(FIXED_DT, input, cam.yaw, physics.world.gravity.y, wl, flow, debugIntent ?? undefined)
       }
       physics.step()
       accumulator -= FIXED_DT
@@ -468,6 +519,7 @@ async function boot(): Promise<void> {
     const pFeet = feetPos()
     for (const d of dinos) d.update(dt, pFeet, hurtPlayer)
     scatter.ensureCollidersAround(focus.x, focus.z, physics)
+    water.update(dt)
     daynight.advance(dt)
     terrain.update(focus.x, focus.z)
 

@@ -7,6 +7,8 @@ import type { Physics } from './physics'
 
 const WALK_SPEED = 4.4
 const SPRINT_SPEED = 8.0
+const SWIM_SPEED = 3.4
+const CURRENT_SPEED = 2.2
 
 export class Player {
   readonly mover: Mover
@@ -31,20 +33,30 @@ export class Player {
     this.object.add(body, nose)
   }
 
+  /** True while the swim mode drove the last fixed step. */
+  swimming = false
+
   /** Fixed-step: translate keys + camera yaw into mover intent.
+   *  `waterLevel`: water surface at the player, or null on dry land.
+   *  `current`: river flow to add while swimming.
    *  `override` (harness/debug) replaces key input with a raw world-space velocity. */
   fixedUpdate(
     dt: number,
     input: Input,
     cameraYaw: number,
     gravityY: number,
+    waterLevel: number | null,
+    current: { x: number; z: number } | null,
     override?: { vx: number; vz: number },
   ): void {
+    const depth = waterLevel !== null ? waterLevel - (this.mover.position.y - this.mover.feetOffset) : -1
+    this.swimming = depth > 1.05 // chest-deep before swim kicks in
+
     if (override) {
       this.mover.intent.vx = override.vx
       this.mover.intent.vz = override.vz
       if (override.vx || override.vz) this.facing = Math.atan2(override.vx, override.vz)
-      this.mover.update(dt, gravityY)
+      this.applyStep(dt, gravityY, waterLevel, current)
       return
     }
     let fwd = 0
@@ -54,7 +66,11 @@ export class Player {
     if (input.down('KeyA')) strafe -= 1
     if (input.down('KeyD')) strafe += 1
 
-    const speed = input.down('ShiftLeft') || input.down('ShiftRight') ? SPRINT_SPEED : WALK_SPEED
+    const speed = this.swimming
+      ? SWIM_SPEED
+      : input.down('ShiftLeft') || input.down('ShiftRight')
+        ? SPRINT_SPEED
+        : WALK_SPEED
     const len = Math.hypot(fwd, strafe)
     if (len > 0) {
       // rotate input into world space around the camera yaw
@@ -71,7 +87,35 @@ export class Player {
     }
     if (input.down('Space')) this.mover.intent.jump = true
 
-    this.mover.update(dt, gravityY)
+    this.applyStep(dt, gravityY, waterLevel, current)
+  }
+
+  private applyStep(
+    dt: number,
+    gravityY: number,
+    waterLevel: number | null,
+    current: { x: number; z: number } | null,
+  ): void {
+    if (this.swimming && waterLevel !== null) {
+      // buoyant kinematics: no gravity; space paddles up, otherwise settle
+      // toward floating just under the surface; rivers push downstream
+      const head = this.mover.position.y + 0.4
+      if (this.mover.intent.jump) {
+        this.mover.velocityY = 2.6
+      } else if (head > waterLevel - 0.15) {
+        this.mover.velocityY = Math.max(this.mover.velocityY - 8 * dt, -1.2)
+      } else {
+        this.mover.velocityY = THREE.MathUtils.lerp(this.mover.velocityY, 1.4, 1 - Math.exp(-dt * 3))
+      }
+      this.mover.intent.jump = false
+      if (current) {
+        this.mover.intent.vx += current.x * CURRENT_SPEED
+        this.mover.intent.vz += current.z * CURRENT_SPEED
+      }
+      this.mover.update(dt, 0)
+    } else {
+      this.mover.update(dt, gravityY)
+    }
   }
 
   /** Render frame: interpolate the visible mesh between fixed steps. */

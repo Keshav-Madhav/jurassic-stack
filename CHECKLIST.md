@@ -106,3 +106,9 @@ Bugs the gate caught: reach measured from camera (all swings whiffed); camera-dr
 ### M4.1 — playtest feedback round (user's first live-site review)
 - [x] Dinos floated above ground: bind-pose bbox lied about foot level — now calibrated from the true skinned vertices after an idle frame (`getVertexPosition`), plus slope-aware front/back-paw clamping and body pitch
 - [x] Foliage variety: all 10 intaken nature props in play (3 tree + 2 rock variants, grass kind added — ~13.6K instances), per-instance tint jitter; save v2 (RNG stream changed)
+
+### M5 progress notes
+- [x] **M5a** — bake pipeline (compose → erode → validate → commit), baked-data heightmap swap. Gates green.
+- [x] **M5b** — water: ocean (Gerstner swell) + 2 lakes + 2 river ribbons on one refraction-only animated material; `waterLevelAt`/`riverFlowAt` queries and the river ribbon share ONE sample array (v1 derived them separately and disagreed); swim mode (buoyancy, surface float, space-paddle) + river currents carry the swimmer downstream. Gate `tools/gate-m5.mjs` 12/12; m3/m4 regression green.
+  Known issue for M6: lake surface seen edge-on from below reads as a floating band — fix by enforcing a shore ring (terrain ≥ level+0.6 around each lake) in the bake. Debug saga: ribbon wound face-down → invisible with FrontSide (now DoubleSide, which underwater views need anyway).
+- [ ] **M5c** — navmesh bake (recast) + DetourCrowd; ruin-site prefabs; graybox→island polish pass
