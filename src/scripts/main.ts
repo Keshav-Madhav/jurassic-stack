@@ -17,13 +17,14 @@ import { Inventory } from './inventory'
 import { ITEMS, type ItemId } from './items'
 import { Hud } from './hud'
 import { saveGame, loadGame, SAVE_VERSION, type SaveFile } from './save'
-import { heightAt, SPAWN, SEA_LEVEL, HALF_SIZE } from './heightmap'
+import { heightAt, loadHeightmap, SPAWN, SEA_LEVEL, HALF_SIZE } from './heightmap'
 
 const SWING_COOLDOWN = 0.45
 const REACH = 3.2
 const INTERACT_RANGE = 3.8
 
 async function boot(): Promise<void> {
+  await loadHeightmap() // everything below samples heightAt
   const app = document.getElementById('app')!
   const renderer = new THREE.WebGLRenderer({ antialias: true })
   renderer.setSize(innerWidth, innerHeight)

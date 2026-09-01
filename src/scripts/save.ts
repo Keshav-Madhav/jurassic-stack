@@ -4,7 +4,7 @@
 const DB = 'jurassic-stack'
 const STORE = 'saves'
 const KEY = 'slot-0'
-export const SAVE_VERSION = 2 // v2: scatter RNG stream changed (variants) — v1 node ids invalid
+export const SAVE_VERSION = 3 // v3: baked island replaced graybox terrain — all world coords shifted
 
 function withStore(mode: IDBTransactionMode): Promise<IDBObjectStore> {
   return new Promise((resolve, reject) => {

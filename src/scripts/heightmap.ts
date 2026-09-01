@@ -1,75 +1,83 @@
-// The island's height function — the single source of truth for terrain.
-// Renderer (terrain.ts), physics (physics.ts), and AI ground-clamping all
-// sample THIS function, so they can never disagree. At M5 the analytic
-// composition below is replaced by baked heightmap data behind the same
-// two exports (heightAt / normalAt) and nothing downstream changes.
+// The island's height function — single source of truth for terrain, shared
+// by the renderer, physics, and AI so they can never disagree.
 //
-// Graybox composition (a crude sketch of the real island's arc):
-//   - south coast (spawn): gentle beach, calm ground
-//   - interior: rolling hills, rising toward the north
-//   - north-center: the volcano cone — visible from the spawn beach
-//   - beyond ~940m radius: falls below sea level (ocean floor)
+// As of M5 this samples BAKED data (tools/bake-island.mjs → public/world/):
+// an int16 grid at 2 m resolution, bilinear-interpolated. The bake owns
+// composition, erosion, and validation; this file just serves heights.
+// loadHeightmap() must resolve before anything samples.
 import * as THREE from 'three'
 
 /** Island half-size in meters (world spans -SIZE..+SIZE on x and z). */
 export const HALF_SIZE = 1024
 /** Sea level (world y). */
 export const SEA_LEVEL = 0
-/** Volcano center (world coords) — the arc's landmark, due north of spawn. */
+/** Volcano center — the arc's landmark. Filled from world-meta on load. */
 export const VOLCANO = { x: 0, z: -620 }
-/** Spawn point: south beach, volcano sightline straight ahead (-z). */
+/** Spawn point: south beach, volcano sightline ahead. Filled on load. */
 export const SPAWN = { x: 0, z: 780 }
 
-export function heightAt(x: number, z: number): number {
-  // base rolling hills, four octaves — enough relief that the interior reads
-  // as landscape rather than a plane (graybox was too flat on review)
-  let h =
-    11.0 * Math.sin(x * 0.0042 + 1.7) * Math.cos(z * 0.0037 - 0.4) +
-    5.5 * Math.sin(x * 0.011 - 2.1) * Math.cos(z * 0.013 + 1.2) +
-    2.4 * Math.sin(x * 0.023 + 4.1) * Math.cos(z * 0.019 - 1.9) +
-    1.1 * Math.sin(x * 0.031 + 0.6) * Math.cos(z * 0.027 + 2.8)
-
-  // northward rise: the interior climbs toward the volcano's foothills
-  h += Math.max(0, -z) * 0.012
-
-  // the volcano: a proper cone (linear flanks read as "volcano" from afar in a
-  // way gaussian mounds never do), gaussian-smoothed tip, crater dish sunk in
-  const dvx = x - VOLCANO.x
-  const dvz = z - VOLCANO.z
-  const dv = Math.sqrt(dvx * dvx + dvz * dvz)
-  const cone = Math.max(0, 1 - dv / 320) // linear flank, 320 m footprint radius
-  h += 240 * cone * cone // squared → concave flanks, steepening to the top
-  h += 40 * Math.exp(-(dv * dv) / (2 * 90 * 90)) // shoulder mass near the top
-  h -= 95 * Math.exp(-(dv * dv) / (2 * 48 * 48)) // crater dish
-
-  // island falloff: radial fade to ocean floor, slightly squashed on z so the
-  // south beach is wide and shallow while the flanks drop faster
-  const r = Math.sqrt(x * x * 1.15 + z * z * 0.95)
-  const falloff = smoothstep(690, 960, r)
-  h = h * (1 - falloff) + (-14) * falloff
-
-  // the spawn beach: a firm apron around SPAWN held ABOVE sea level — it must
-  // win against the island falloff, or spawn ends up on the sea floor
-  const dsx = x - SPAWN.x
-  const dsz = z - SPAWN.z
-  const beach = Math.exp(-(dsx * dsx + dsz * dsz) / (2 * 210 * 210))
-  const w = beach * 0.92
-  h = h * (1 - w) + 3.0 * w
-
-  return h
+export interface RiverPoint { x: number; z: number }
+export interface LakeDef { x: number; z: number; r: number; level: number }
+export interface RuinSite { tag: string; x: number; z: number; y: number }
+export interface WorldMeta {
+  side: number
+  res: number
+  scale: number
+  half: number
+  sea: number
+  spawn: { x: number; z: number }
+  volcano: { x: number; z: number }
+  rivers: RiverPoint[][]
+  lakes: LakeDef[]
+  ruinSites: RuinSite[]
 }
 
-/** Analytic-ish normal via central differences. `out` avoids allocation. */
+let grid: Int16Array | null = null
+let side = 0
+let res = 2
+let scale = 0.01
+export let worldMeta: WorldMeta | null = null
+
+export async function loadHeightmap(base = ''): Promise<void> {
+  const [metaRes, binRes] = await Promise.all([
+    fetch(`${base}world/world-meta.json`),
+    fetch(`${base}world/heightmap.bin`),
+  ])
+  if (!metaRes.ok || !binRes.ok) throw new Error('world data missing — run tools/bake-island.mjs')
+  worldMeta = (await metaRes.json()) as WorldMeta
+  side = worldMeta.side
+  res = worldMeta.res
+  scale = worldMeta.scale
+  grid = new Int16Array(await binRes.arrayBuffer())
+  SPAWN.x = worldMeta.spawn.x
+  SPAWN.z = worldMeta.spawn.z
+  VOLCANO.x = worldMeta.volcano.x
+  VOLCANO.z = worldMeta.volcano.z
+}
+
+export function heightAt(x: number, z: number): number {
+  if (!grid) throw new Error('heightAt before loadHeightmap()')
+  const fx = (x + HALF_SIZE) / res
+  const fz = (z + HALF_SIZE) / res
+  if (fx < 0 || fz < 0 || fx >= side - 1 || fz >= side - 1) return -14
+  const ix = Math.floor(fx)
+  const iz = Math.floor(fz)
+  const u = fx - ix
+  const v = fz - iz
+  const i0 = iz * side + ix
+  const h00 = grid[i0]
+  const h10 = grid[i0 + 1]
+  const h01 = grid[i0 + side]
+  const h11 = grid[i0 + side + 1]
+  return (h00 * (1 - u) * (1 - v) + h10 * u * (1 - v) + h01 * (1 - u) * v + h11 * u * v) * scale
+}
+
+/** Normal via central differences on the sampled grid. `out` avoids allocation. */
 export function normalAt(x: number, z: number, out = new THREE.Vector3()): THREE.Vector3 {
-  const e = 0.75
+  const e = 1.0
   const hl = heightAt(x - e, z)
   const hr = heightAt(x + e, z)
   const hd = heightAt(x, z - e)
   const hu = heightAt(x, z + e)
   return out.set(hl - hr, 2 * e, hd - hu).normalize()
-}
-
-function smoothstep(a: number, b: number, t: number): number {
-  const u = Math.min(1, Math.max(0, (t - a) / (b - a)))
-  return u * u * (3 - 2 * u)
 }
