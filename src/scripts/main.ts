@@ -1,8 +1,7 @@
-// Jurassic Stack — M3 graybox: chunked island, Rapier KCC player, third-person
-// camera, one wandering raptor, day-night cycle with the M2 grade curve.
-//
-// Loop shape: fixed 60 Hz simulation steps via accumulator (physics + player),
-// render at rAF with player interpolation. AI + animation tick at render rate.
+// Jurassic Stack — M4: the core loop. Gather → craft → build → tame → ride,
+// on the M3 graybox island, with save/load. Fixed 60 Hz simulation, render-
+// rate AI/animation, DOM HUD, and a __g.game debug API that the E2E gate
+// drives through the same functions the input handlers call.
 import * as THREE from 'three'
 import { Terrain } from './terrain'
 import { Physics, FIXED_DT } from './physics'
@@ -10,9 +9,19 @@ import { Input } from './input'
 import { Player } from './player'
 import { ThirdPersonCamera } from './camera'
 import { DayNight } from './daynight'
-import { Dino } from './dino'
+import { Dino } from './dinos'
+import { SPECIES } from './species'
+import { Scatter } from './scatter'
+import { Building, type PieceKind } from './building'
+import { Inventory } from './inventory'
+import { ITEMS, type ItemId } from './items'
 import { Hud } from './hud'
+import { saveGame, loadGame, type SaveFile } from './save'
 import { heightAt, SPAWN, SEA_LEVEL, HALF_SIZE } from './heightmap'
+
+const SWING_COOLDOWN = 0.45
+const REACH = 3.2
+const INTERACT_RANGE = 3.8
 
 async function boot(): Promise<void> {
   const app = document.getElementById('app')!
@@ -23,11 +32,9 @@ async function boot(): Promise<void> {
 
   const scene = new THREE.Scene()
   const daynight = new DayNight(renderer, scene)
-
   const terrain = new Terrain()
   scene.add(terrain.group)
 
-  // ocean: a simple plane at sea level, graybox stand-in for M5's real water
   const ocean = new THREE.Mesh(
     new THREE.PlaneGeometry(HALF_SIZE * 6, HALF_SIZE * 6).rotateX(-Math.PI / 2),
     new THREE.MeshStandardMaterial({ color: 0x2e6ba8, roughness: 0.35, transparent: true, opacity: 0.92 }),
@@ -38,46 +45,365 @@ async function boot(): Promise<void> {
   const physics = new Physics()
   await physics.init()
 
-  const spawnPos = new THREE.Vector3(SPAWN.x, heightAt(SPAWN.x, SPAWN.z) + 1.2, SPAWN.z)
+  const save = await loadGame()
+
+  const spawnPos = save
+    ? new THREE.Vector3(save.player.x, save.player.y + 0.5, save.player.z)
+    : new THREE.Vector3(SPAWN.x, heightAt(SPAWN.x, SPAWN.z) + 1.2, SPAWN.z)
   const player = new Player(physics, spawnPos)
   scene.add(player.object)
+  let playerHp = save?.player.hp ?? 100
 
   const input = new Input(renderer.domElement)
   const cam = new ThirdPersonCamera(innerWidth / innerHeight)
-  cam.yaw = 0 // yaw 0 looks north (-z): the volcano sightline from spawn
+  cam.yaw = 0
 
-  // one raptor living near spawn
-  const dino = new Dino(SPAWN.x + 26, SPAWN.z - 30)
-  scene.add(dino.object)
-  void dino.load() // async; scene works before it resolves
+  const inventory = new Inventory()
+  if (save) inventory.restore(save.inventory as ReturnType<Inventory['serialize']>)
 
-  const hud = new Hud(document.getElementById('hud')!)
+  const scatter = new Scatter()
+  await scatter.load()
+  scene.add(scatter.group)
+  if (save) scatter.restore(save.deadNodes as { id: number; respawnAt: number }[])
+
+  const building = new Building(physics)
+  scene.add(building.group)
+  if (save) building.restore(save.pieces as ReturnType<Building['serialize']>)
+
+  if (save) daynight.setTime(save.time)
+
+  // --- dinos ---
+  const dinos: Dino[] = []
+  const spawnDino = (x: number, z: number): Dino => {
+    const d = new Dino(SPECIES.raptor, x, z, dinos.length)
+    dinos.push(d)
+    scene.add(d.object)
+    void d.load()
+    return d
+  }
+  if (save) {
+    for (const row of save.dinos as ReturnType<Dino['serialize']>[]) {
+      if (!row.alive) continue
+      const d = spawnDino(row.x, row.z)
+      d.hp = row.hp
+      d.saddled = row.saddled
+      d.tameProgress = row.tame
+      if (row.state === 'tamed') d.state = 'tamed'
+    }
+  } else {
+    spawnDino(SPAWN.x + 26, SPAWN.z - 30)
+    spawnDino(SPAWN.x - 40, SPAWN.z - 55)
+    spawnDino(120, 420)
+    spawnDino(-200, 260)
+    spawnDino(60, 80)
+    spawnDino(-320, -60)
+    spawnDino(240, -140)
+  }
+
+  const hud = new Hud(document.getElementById('hud')!, inventory, (id) => {
+    if (inventory.craftById(id)) hud.toast(`Crafted ${ITEMS[id].name}`)
+  })
+  const vignette = document.createElement('div')
+  vignette.id = 'hud-vignette'
+  document.body.appendChild(vignette)
   const status = document.getElementById('status')!
-  status.textContent = `graybox · three r${THREE.REVISION}`
+  status.textContent = `core loop · three r${THREE.REVISION}`
+
+  // --- interaction state ---
+  let riding: Dino | null = null
+  let swingT = 0
+  let camKick = 0
+  const raycaster = new THREE.Raycaster()
+  const aimPoint = new THREE.Vector3()
+
+  const feetPos = (): THREE.Vector3 => {
+    if (riding?.mover) {
+      const p = riding.mover.position.clone()
+      p.y -= riding.mover.feetOffset
+      return p
+    }
+    return player.mover.position.clone().setY(player.mover.position.y - player.mover.feetOffset)
+  }
+
+  /** Point on the terrain (or 6 m out) the camera center is aiming at. */
+  const updateAim = (): THREE.Vector3 => {
+    raycaster.setFromCamera(new THREE.Vector2(0, 0), cam.camera)
+    // march the ray against the height function (terrain aim, cheap + exact)
+    const o = raycaster.ray.origin
+    const dir = raycaster.ray.direction
+    for (let t = 2; t < 14; t += 0.5) {
+      const px = o.x + dir.x * t
+      const py = o.y + dir.y * t
+      const pz = o.z + dir.z * t
+      if (py <= heightAt(px, pz)) {
+        aimPoint.set(px, heightAt(px, pz), pz)
+        return aimPoint
+      }
+    }
+    // ray missed nearby terrain: fall back to "in front of the player", which
+    // is deterministic (camera drift on the boom must not change the build cell)
+    const feet = feetPos()
+    const vd = cam.camera.getWorldDirection(new THREE.Vector3())
+    const len = Math.hypot(vd.x, vd.z) || 1
+    aimPoint.set(feet.x + (vd.x / len) * 3.5, 0, feet.z + (vd.z / len) * 3.5)
+    aimPoint.y = heightAt(aimPoint.x, aimPoint.z)
+    return aimPoint
+  }
+
+  const nearestDino = (range: number, filter: (d: Dino) => boolean): Dino | null => {
+    const from = feetPos()
+    let best: Dino | null = null
+    let bd = range
+    for (const d of dinos) {
+      if (!d.object.visible || d === riding || !filter(d)) continue
+      const dist = d.object.position.distanceTo(from)
+      if (dist < bd) {
+        bd = dist
+        best = d
+      }
+    }
+    return best
+  }
+
+  const hurtPlayer = (damage: number): void => {
+    playerHp -= damage
+    vignette.classList.add('hurt')
+    setTimeout(() => vignette.classList.remove('hurt'), 220)
+    if (playerHp <= 0) {
+      playerHp = 100
+      if (riding) dismount()
+      player.mover.teleport(SPAWN.x, heightAt(SPAWN.x, SPAWN.z) + 1.2, SPAWN.z)
+      hud.toast('You died. Washed back ashore.')
+    }
+  }
+
+  // --- core verbs (used by both input handlers and the E2E gate) ---
+  const swing = (): boolean => {
+    if (swingT > 0 || riding) return false
+    swingT = SWING_COOLDOWN
+    camKick = 0.05
+    const held = inventory.held
+
+    // placeables: LMB places the ghost
+    if (held && ITEMS[held].placeable) {
+      const placed = building.place(held as PieceKind, updateAim())
+      if (placed && inventory.remove(placed, 1)) {
+        hud.toast(`Placed ${ITEMS[placed].name}`)
+        return true
+      }
+      return false
+    }
+
+    // dino in reach and roughly ahead? spear damages, fists build torpor
+    const target = nearestDino(REACH, (d) => d.state !== 'ko' && d.state !== 'tamed')
+    if (target) {
+      const from = feetPos()
+      if (held === 'spear') target.takeHit(10, 6, from.x, from.z)
+      else if (held === 'hatchet') target.takeHit(6, 4, from.x, from.z)
+      else target.takeHit(2, 14, from.x, from.z)
+      hud.toast(target.state === 'ko' ? `${target.species.name} knocked out!` : `Hit ${target.species.name} (torpor ${Math.round(target.torpor)}/${target.species.torporMax})`)
+      return true
+    }
+
+    // resource node under the crosshair (reach measured from the player)
+    raycaster.setFromCamera(new THREE.Vector2(0, 0), cam.camera)
+    const node = scatter.raycast(raycaster, feetPos(), REACH + 1.2)
+    if (node) {
+      const isWood = node.kind === 'tree' || node.kind === 'pine'
+      const hits = held === 'hatchet' && isWood ? 2 : 1
+      let yielded: Partial<Record<ItemId, number>> | null = null
+      for (let i = 0; i < hits && node.alive; i++) yielded = scatter.hit(node) ?? yielded
+      if (yielded && Object.keys(yielded).length) {
+        const parts: string[] = []
+        for (const [id, n] of Object.entries(yielded)) {
+          inventory.add(id as ItemId, n)
+          parts.push(`+${n} ${ITEMS[id as ItemId].icon}`)
+        }
+        scatter.flushColliderDrops(physics)
+        hud.toast(parts.join('  '))
+      }
+      return true
+    }
+    return false
+  }
+
+  const dismount = (): void => {
+    if (!riding) return
+    const d = riding
+    riding = null
+    d.endRide()
+    const side = new THREE.Vector3(Math.cos(d.object.rotation.y), 0, -Math.sin(d.object.rotation.y))
+    const px = d.object.position.x + side.x * 2.2
+    const pz = d.object.position.z + side.z * 2.2
+    player.mover.teleport(px, heightAt(px, pz) + 1.2, pz)
+    player.object.visible = true
+    hud.toast('Dismounted')
+  }
+
+  const interact = (): boolean => {
+    if (riding) {
+      dismount()
+      return true
+    }
+    // feed a KO'd dino
+    const ko = nearestDino(INTERACT_RANGE, (d) => d.state === 'ko')
+    if (ko) {
+      if (!inventory.remove(ko.species.tameFood, 1)) {
+        hud.toast(`Need ${ITEMS[ko.species.tameFood].name}s to tame`)
+        return false
+      }
+      const tamed = ko.feed()
+      hud.toast(tamed ? `${ko.species.name} tamed!` : `Feeding… ${Math.min(100, Math.round(ko.tameProgress))}%`)
+      return true
+    }
+    // saddle / mount a tamed dino
+    const tame = nearestDino(INTERACT_RANGE, (d) => d.state === 'tamed')
+    if (tame) {
+      if (!tame.saddled) {
+        if (inventory.remove('saddle', 1)) {
+          tame.saddled = true
+          hud.toast(`Saddled the ${tame.species.name}`)
+          return true
+        }
+        hud.toast('Needs a saddle')
+        return false
+      }
+      if (!tame.species.rideable) return false
+      riding = tame
+      tame.beginRide(physics)
+      player.object.visible = false
+      player.mover.teleport(tame.object.position.x, -520, tame.object.position.z) // park the player body
+      hud.toast(`Riding the ${tame.species.name} — E to dismount`)
+      return true
+    }
+    return false
+  }
+
+  // --- input events ---
+  addEventListener('keydown', (e) => {
+    if (e.code === 'KeyT') daynight.setTime(daynight.time + 1 / 24)
+    if (e.code === 'KeyE') interact()
+    if (e.code === 'Tab') {
+      e.preventDefault()
+      hud.togglePanel()
+    }
+    if (/^Digit[1-9]$/.test(e.code)) hud.selectSlot(Number(e.code.slice(5)) - 1)
+  })
+  addEventListener('mousedown', (e) => {
+    if (e.button === 0 && input.pointerLocked) swing()
+  })
+
+  // --- save loop ---
+  const collectSave = (): SaveFile => ({
+    version: 1,
+    savedAt: Date.now(),
+    time: daynight.time,
+    player: { x: player.mover.position.x, y: player.mover.position.y, z: player.mover.position.z, hp: playerHp },
+    inventory: inventory.serialize(),
+    pieces: building.serialize(),
+    deadNodes: scatter.serialize(),
+    dinos: dinos.map((d) => d.serialize()),
+  })
+  setInterval(() => void saveGame(collectSave()), 30_000)
+  addEventListener('pagehide', () => void saveGame(collectSave()))
 
   addEventListener('resize', () => {
     cam.camera.aspect = innerWidth / innerHeight
     cam.camera.updateProjectionMatrix()
     renderer.setSize(innerWidth, innerHeight)
   })
-  addEventListener('keydown', (e) => {
-    if (e.code === 'KeyT') daynight.setTime(daynight.time + 1 / 24)
-  })
 
-  // debug interface for tools/shots.mjs and gate verification
+  // --- debug/E2E API: the gate drives the same verbs the input layer calls ---
+  let debugIntent: { vx: number; vz: number } | null = null
   const dbg = {
     setTime: (t: number) => daynight.setTime(t),
     teleport: (x: number, z: number) => player.mover.teleport(x, heightAt(x, z) + 1.2, z),
     setCam: (yaw: number, pitch: number) => { cam.yaw = yaw; cam.pitch = pitch },
     setIntent: (vx: number, vz: number) => { debugIntent = vx || vz ? { vx, vz } : null },
-    player: () => ({ ...player.mover.position }),
+    player: () => ({ ...(riding?.mover ? riding.mover.position : player.mover.position) }),
     groundAt: (x: number, z: number) => heightAt(x, z),
     fps: () => hud.fps,
     ready: false,
+    game: {
+      swing,
+      interact,
+      craft: (id: ItemId) => inventory.craftById(id),
+      select: (i: number) => hud.selectSlot(i),
+      selectItem: (id: ItemId) => {
+        const slot = inventory.hotbar.indexOf(id)
+        if (slot < 0) return false
+        hud.selectSlot(slot)
+        return true
+      },
+      give: (id: ItemId, n: number) => inventory.add(id, n),
+      count: (id: ItemId) => inventory.count(id),
+      hp: () => playerHp,
+      riding: () => riding !== null,
+      pieces: () => building.pieces.length,
+      dinoStates: () => dinos.map((d) => ({ state: d.state, torpor: d.torpor, saddled: d.saddled })),
+      nearestNodeDist: () => {
+        const from = feetPos()
+        let best = Infinity
+        for (const n of scatter.nodes) {
+          if (!n.alive) continue
+          const d = Math.hypot(n.x - from.x, n.z - from.z)
+          if (d < best) best = d
+        }
+        return best
+      },
+      /** Teleport beside the nearest alive node of a kind and aim at it. */
+      gotoNearest: (kind: string) => {
+        const from = feetPos()
+        let best: { x: number; y: number; z: number } | null = null
+        let bd = Infinity
+        for (const n of scatter.nodes) {
+          if (!n.alive || n.kind !== kind) continue
+          const d = Math.hypot(n.x - from.x, n.z - from.z)
+          if (d < bd) { bd = d; best = n }
+        }
+        if (!best) return false
+        const px = best.x
+        const pz = best.z + 2.4
+        player.mover.teleport(px, heightAt(px, pz) + 1.2, pz)
+        cam.yaw = Math.atan2(-(best.x - px), -(best.z - pz))
+        cam.pitch = -0.15
+        return true
+      },
+      /** Teleport beside the nearest dino matching a state. */
+      gotoDino: (state: string) => {
+        const d = nearestDino(Infinity, (x) => x.state === state)
+        if (!d) return false
+        const px = d.object.position.x
+        const pz = d.object.position.z + 2.2
+        player.mover.teleport(px, heightAt(px, pz) + 1.2, pz)
+        cam.yaw = 0
+        return true
+      },
+      lookAtNearestNode: () => {
+        const from = feetPos()
+        let best: { x: number; y: number; z: number } | null = null
+        let bd = Infinity
+        for (const n of scatter.nodes) {
+          if (!n.alive) continue
+          const d = Math.hypot(n.x - from.x, n.z - from.z)
+          if (d < bd) { bd = d; best = n }
+        }
+        if (!best) return false
+        const head = feetPos().setY(feetPos().y + 1.55)
+        cam.yaw = Math.atan2(-(best.x - head.x), -(best.z - head.z))
+        cam.pitch = Math.atan2(best.y + 1 - head.y, Math.hypot(best.x - head.x, best.z - head.z)) * 0.8
+        return bd
+      },
+      wipeAndReload: async () => {
+        const { wipeSave } = await import('./save')
+        await wipeSave()
+        location.reload()
+      },
+    },
   }
-  let debugIntent: { vx: number; vz: number } | null = null
   ;(window as unknown as { __g: typeof dbg }).__g = dbg
 
+  // --- main loop ---
   let accumulator = 0
   let last = performance.now()
 
@@ -89,30 +415,90 @@ async function boot(): Promise<void> {
     }
     let dt = (now - last) / 1000
     last = now
-    dt = Math.min(dt, 0.1) // clamp tab-switch spikes
+    dt = Math.min(dt, 0.1)
+    swingT -= dt
+    camKick = Math.max(0, camKick - dt * 0.3)
+    if (playerHp < 100) playerHp = Math.min(100, playerHp + dt * 1.5)
 
-    // fixed-step simulation
+    const focus = riding?.mover ? riding.mover.position : player.mover.position
+
     accumulator += dt
     while (accumulator >= FIXED_DT) {
-      physics.ensureTerrainAround(player.mover.position.x, player.mover.position.z)
-      player.fixedUpdate(FIXED_DT, input, cam.yaw, physics.world.gravity.y, debugIntent ?? undefined)
+      physics.ensureTerrainAround(focus.x, focus.z)
+      if (riding?.mover) {
+        // rider intent → the dino's mover (the shared-controller payoff)
+        const m = riding.mover
+        let fwd = 0
+        let strafe = 0
+        if (input.down('KeyW')) fwd -= 1
+        if (input.down('KeyS')) fwd += 1
+        if (input.down('KeyA')) strafe -= 1
+        if (input.down('KeyD')) strafe += 1
+        if (debugIntent) {
+          m.intent.vx = debugIntent.vx
+          m.intent.vz = debugIntent.vz
+        } else {
+          const len = Math.hypot(fwd, strafe)
+          if (len > 0) {
+            const speed = input.down('ShiftLeft') || input.down('ShiftRight')
+              ? riding.species.runSpeed
+              : riding.species.walkSpeed * 2
+            const sin = Math.sin(cam.yaw)
+            const cos = Math.cos(cam.yaw)
+            m.intent.vx = ((strafe * cos + fwd * sin) / len) * speed
+            m.intent.vz = ((fwd * cos - strafe * sin) / len) * speed
+          } else {
+            m.intent.vx = 0
+            m.intent.vz = 0
+          }
+        }
+        if (input.down('Space')) m.intent.jump = true
+        if (m.intent.vx || m.intent.vz) riding.setHeading(Math.atan2(m.intent.vx, m.intent.vz))
+        m.update(FIXED_DT, physics.world.gravity.y)
+      } else {
+        player.fixedUpdate(FIXED_DT, input, cam.yaw, physics.world.gravity.y, debugIntent ?? undefined)
+      }
       physics.step()
       accumulator -= FIXED_DT
     }
     const alpha = accumulator / FIXED_DT
 
-    // render-rate updates
-    player.render(alpha)
-    dino.update(dt)
+    if (!riding) player.render(alpha)
+    const pFeet = feetPos()
+    for (const d of dinos) d.update(dt, pFeet, hurtPlayer)
+    scatter.ensureCollidersAround(focus.x, focus.z, physics)
     daynight.advance(dt)
-    terrain.update(player.mover.position.x, player.mover.position.z)
-    cam.update(input, player.object.position, dt)
-    hud.tick(dt, player.mover.position.x, player.mover.position.y, player.mover.position.z, daynight.time)
+    terrain.update(focus.x, focus.z)
 
+    // camera follows whoever is being driven
+    const camTargetFeet = pFeet.clone()
+    cam.update(input, camTargetFeet, dt)
+    cam.camera.position.y += camKick
+    if (riding) cam.camera.position.addScaledVector(cam.camera.getWorldDirection(new THREE.Vector3()), -2.2)
+
+    // ghost preview when holding a placeable
+    const held = inventory.held
+    building.updateGhost(held && ITEMS[held].placeable ? (held as PieceKind) : null, held && ITEMS[held].placeable ? updateAim() : null)
+
+    // context prompt
+    if (riding) hud.prompt('E — dismount')
+    else {
+      const ko = nearestDino(INTERACT_RANGE, (d) => d.state === 'ko')
+      const tame = nearestDino(INTERACT_RANGE, (d) => d.state === 'tamed')
+      if (ko) hud.prompt(`E — feed ${ITEMS[ko.species.tameFood].icon} (${Math.min(100, Math.round(ko.tameProgress))}%)`)
+      else if (tame && !tame.saddled) hud.prompt(inventory.count('saddle') > 0 ? 'E — saddle' : 'tamed — craft a saddle to ride')
+      else if (tame) hud.prompt('E — ride')
+      else hud.prompt(null)
+    }
+
+    hud.tick(dt, focus.x, focus.y, focus.z, daynight.time, playerHp)
     renderer.render(scene, cam.camera)
     dbg.ready = true
   }
   requestAnimationFrame(frame)
+
+  // periodic node respawns
+  setInterval(() => scatter.tickRespawns(physics), 1000)
 }
 
 void boot()

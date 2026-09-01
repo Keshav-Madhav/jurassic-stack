@@ -43,15 +43,18 @@ Plan of record: `PLAN.md`.
 Notable bugs caught by the screenshot loop: spawn beach below sea level; PMREM environment washing all materials to pastel (fixed with `environmentIntensity 0.35`); gaussian volcano reading as a mound (rebuilt as concave-flank cone, 184 m); camera yaw convention inverted in every vantage (yaw 0 = north).
 
 ## M4 — Core loop (THE DEMO MILESTONE)
-- [ ] Species table v1 (data-driven: stats, speeds, aggro, tame food, clip map) + generic dino brain
-- [ ] Gathering: hit tree/rock → resources to inventory (DOM HUD)
-- [ ] Crafting v1: ~10 recipes, hotbar
-- [ ] Building snap v1: foundation → wall → ceiling sockets, placement raycasts
-- [ ] Taming: torpor knockout → feed → tame bar → loyalty; tamed follow
-- [ ] Riding: mount/dismount, input redirect, camera boom swap
-- [ ] Save/load v1: idb-keyval world diff
+- [x] Species table v1 (`species.ts`: stats/speeds/torpor/tame-food/clip-regexes/seat) + one generic brain (`dinos.ts`: idle⇄wander⇄aggro⇄flee⇄ko⇄tamed)
+- [x] World scatter (`scatter.ts`): ~8.6K instanced trees/pines/rocks/bushes as harvestable nodes with hp/yields/respawn, deterministic seeded placement, streamed trunk colliders — **the island is no longer bare** (user feedback folded into this milestone; heightmap relief also doubled)
+- [x] Gathering: crosshair raycast vs instanced nodes, reach measured from the player (not the 5 m camera boom — first gate run caught that), hatchet 2× on wood
+- [x] Crafting: 7 recipes, hotbar with auto-slotting, TAB inventory/craft panel (DOM)
+- [x] Building snap: foundation (terrain-flatness or edge-chain) → wall (cell edges) → ceiling (wall/adjacent support) + campfire w/ light; ghost preview green/red; static colliders; deterministic player-forward aim fallback
+- [x] Taming: fists build torpor → KO (pose held) → feed berries → tame bar → wakes-if-torpor-empties; tamed follow w/ walk/run by distance
+- [x] Riding: saddle craft+equip, mount parks the player body, intent redirects to the dino's own KCC mover (the shared-mover payoff), longer camera boom, dismount re-places player
+- [x] Save/load: versioned IndexedDB blob — player/inventory/structures/dead-nodes/dinos/time; 30 s autosave + pagehide; full restore on boot
+- [x] E2E gate (`tools/gate-m4.mjs`): 29 checks driving the real verbs headless — all green
 
-**Gate:** a fresh session can gather → craft → build a hut → tame → ride, no console errors, saved and reloaded.
+**Gate:** gather → craft → build a hut → tame → ride → save → reload, headless, no console errors. ✅ **M4 complete — it's a game.**
+Bugs the gate caught: reach measured from camera (all swings whiffed); camera-drift aim landing walls in the wrong cell; ceiling/campfire building-key collision (both hashed to 'c'); meshopt quantization corrupting prop geometry when baking transforms (fix: raw props + float-promotion guard in the instancer).
 
 ## M5 — Real island, bake v1
 - [ ] Composition file format + island v1 (spawn coast, volcano sightline, danger gradient, ruin/keystone sites)

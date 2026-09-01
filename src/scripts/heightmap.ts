@@ -21,10 +21,12 @@ export const VOLCANO = { x: 0, z: -620 }
 export const SPAWN = { x: 0, z: 780 }
 
 export function heightAt(x: number, z: number): number {
-  // base rolling hills, three octaves
+  // base rolling hills, four octaves — enough relief that the interior reads
+  // as landscape rather than a plane (graybox was too flat on review)
   let h =
-    7.0 * Math.sin(x * 0.0042 + 1.7) * Math.cos(z * 0.0037 - 0.4) +
-    3.2 * Math.sin(x * 0.011 - 2.1) * Math.cos(z * 0.013 + 1.2) +
+    11.0 * Math.sin(x * 0.0042 + 1.7) * Math.cos(z * 0.0037 - 0.4) +
+    5.5 * Math.sin(x * 0.011 - 2.1) * Math.cos(z * 0.013 + 1.2) +
+    2.4 * Math.sin(x * 0.023 + 4.1) * Math.cos(z * 0.019 - 1.9) +
     1.1 * Math.sin(x * 0.031 + 0.6) * Math.cos(z * 0.027 + 2.8)
 
   // northward rise: the interior climbs toward the volcano's foothills
