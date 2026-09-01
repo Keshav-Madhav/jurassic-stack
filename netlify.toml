@@ -1,0 +1,7 @@
+# Netlify build config (backup host — primary is Vercel via vercel.json).
+[build]
+  command = "npm run build"   # tsc + vite build
+  publish = "dist"            # Vite's output dir
+
+[build.environment]
+  NODE_VERSION = "20"

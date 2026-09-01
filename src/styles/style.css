@@ -1,0 +1,15 @@
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #10150f; }
+
+#app { position: fixed; inset: 0; }
+#app canvas { display: block; }
+
+#hud, #status {
+  position: fixed;
+  color: #fff;
+  font-family: ui-monospace, Menlo, monospace;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.6);
+  user-select: none;
+  z-index: 2;
+}
+#status { bottom: 10px; left: 12px; font-size: 12px; opacity: 0.8; }
