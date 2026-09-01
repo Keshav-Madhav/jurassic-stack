@@ -9,9 +9,9 @@ Plan of record: `PLAN.md`.
 - [x] Boot scene renders (three r185, ACES, flat-shaded placeholder)
 - [x] PLAN.md + CHECKLIST.md + CLAUDE.md committed
 - [x] Origin added + first push (github.com/Keshav-Madhav/jurassic-stack)
-- [ ] Vercel project linked, first deploy renders the boot scene
+- [x] Vercel project linked, first deploy renders the boot scene (https://jurrasic.keshav-madhav.com — verified via `tools/deploy-check.mjs` screenshot)
 
-**Gate:** `npm run build` clean; deployed URL shows the boot scene.
+**Gate:** `npm run build` clean; deployed URL shows the boot scene. ✅ M0 complete.
 
 ## M1 — Asset intake gate
 - [ ] `tools/gate.mjs`: given a GLB → report tris, bones, animation clips, texture sizes; fail thresholds
