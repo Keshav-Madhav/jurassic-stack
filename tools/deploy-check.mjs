@@ -9,7 +9,10 @@ const shot = process.argv[3] ?? 'shots/deploy.png'
 const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-gl=angle'] })
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } })
 await page.goto(url, { waitUntil: 'networkidle' })
-await page.waitForTimeout(1500)
+// boot fetches world data + models over the real network — wait for readiness,
+// not a fixed delay (a fixed 1.5 s false-failed the M5 deploy)
+await page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 90000 })
+await page.waitForTimeout(500)
 
 const status = await page.textContent('#status')
 console.log('status line:', status)
