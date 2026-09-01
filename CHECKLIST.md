@@ -8,7 +8,7 @@ Plan of record: `PLAN.md`.
 - [x] Repo + git init, Vite/TS/vercel config matching minecraft-JS pattern
 - [x] Boot scene renders (three r185, ACES, flat-shaded placeholder)
 - [x] PLAN.md + CHECKLIST.md + CLAUDE.md committed
-- [ ] Origin added + first push (user provides remote)
+- [x] Origin added + first push (github.com/Keshav-Madhav/jurassic-stack)
 - [ ] Vercel project linked, first deploy renders the boot scene
 
 **Gate:** `npm run build` clean; deployed URL shows the boot scene.
