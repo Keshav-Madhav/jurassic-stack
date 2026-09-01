@@ -1,53 +1,113 @@
-// World props + resource nodes. Deterministic seeded placement of trees,
-// rocks, and berry bushes across the island (grid-jitter, constraints from
-// the shared height function), rendered as InstancedMesh per GLB submesh.
-// Every placement is also a harvestable NODE: swing at it → resources, hp
-// hits 0 → instance hidden + respawn timer. Trees near the player get
-// physics cylinders, streamed with the same 3×3 chunk logic as terrain.
+// World props + resource nodes, v2 (the M6a density pass).
+//
+// - ~15 prop types across 12 kinds, several extracted as named sub-nodes from
+//   Quaternius variant packs (DeadTree_10…, Flower clumps, berry bush).
+// - Placement is habitat-driven: a seeded forest-mask noise clusters trees
+//   into woods with real clearings; palms take the beach band, willows the
+//   riverbanks, dead trees the dry fringes, ferns/mushrooms the forest floor,
+//   flowers the clearings. Uniform sprinkle is gone.
+// - Every instance is still a harvestable node (hp / yields / respawn), and
+//   per-instance tint + wide scale ranges break up repetition.
 import * as THREE from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
-import { heightAt, normalAt, SEA_LEVEL, HALF_SIZE, SPAWN, VOLCANO } from './heightmap'
+import { heightAt, normalAt, SEA_LEVEL, HALF_SIZE, SPAWN, VOLCANO, worldMeta } from './heightmap'
 import { CHUNK_SIZE, CHUNKS_PER_SIDE } from './terrain'
 import type { Physics } from './physics'
 import type { ItemId } from './items'
 
-export type NodeKind = 'tree' | 'pine' | 'rock' | 'bush' | 'grass'
+export type NodeKind =
+  | 'tree' | 'pine' | 'deadtree' | 'palm' | 'willow'
+  | 'rock' | 'log' | 'bush' | 'fern' | 'flower' | 'grass' | 'mushroom'
 
 export interface ScatterNode {
   id: number
   kind: NodeKind
-  /** which model variant of the kind this instance uses */
   variant: number
   x: number
   y: number
   z: number
   scale: number
   rotY: number
-  /** per-instance tint jitter (multiplies material color) */
   tint: number
   hp: number
   alive: boolean
-  /** epoch ms when a harvested node respawns */
   respawnAt: number
 }
 
 const NODE_DEFS: Record<NodeKind, { hp: number; yields: Partial<Record<ItemId, [number, number]>> }> = {
   tree: { hp: 3, yields: { wood: [2, 4], fiber: [1, 2] } },
   pine: { hp: 3, yields: { wood: [2, 4], fiber: [1, 2] } },
+  deadtree: { hp: 2, yields: { wood: [2, 3] } },
+  palm: { hp: 3, yields: { wood: [2, 3], fiber: [1, 3] } },
+  willow: { hp: 3, yields: { wood: [2, 4] } },
   rock: { hp: 3, yields: { stone: [2, 3], flint: [0, 2] } },
+  log: { hp: 1, yields: { wood: [1, 2] } },
   bush: { hp: 2, yields: { berry: [2, 4], fiber: [1, 3] } },
+  fern: { hp: 1, yields: { fiber: [1, 2] } },
+  flower: { hp: 1, yields: { fiber: [1, 1] } },
   grass: { hp: 1, yields: { fiber: [1, 2] } },
+  mushroom: { hp: 1, yields: { berry: [1, 1] } },
 }
 
-/** Model files per kind — a node picks one variant deterministically. */
-const KIND_MODELS: Record<NodeKind, string[]> = {
-  tree: ['Tree1', 'Tree2', 'Tree3'],
-  pine: ['Pine1'],
-  rock: ['Rock1', 'Rock2'],
-  bush: ['Bush1'],
-  grass: ['Grass1'],
+/** Kinds whose trunks get physics cylinders. */
+const TRUNK_KINDS = new Set<NodeKind>(['tree', 'pine', 'palm', 'deadtree', 'willow'])
+
+interface ModelRef {
+  file: string
+  /** optional named sub-node to extract (variant packs) */
+  node?: string
+}
+
+const KIND_MODELS: Record<NodeKind, ModelRef[]> = {
+  tree: [{ file: 'Tree1' }, { file: 'Tree2' }, { file: 'Tree3' }],
+  pine: [{ file: 'Pine1' }],
+  deadtree: [
+    { file: 'DeadTree', node: 'DeadTree_10' },
+    { file: 'DeadTree', node: 'DeadTree_8' },
+    { file: 'DeadTree', node: 'DeadTree_6' },
+  ],
+  palm: [{ file: 'Palm' }],
+  willow: [{ file: 'Willow' }],
+  rock: [{ file: 'Rock1' }, { file: 'Rock2' }],
+  log: [{ file: 'MossRock' }],
+  bush: [{ file: 'Bush1' }, { file: 'BerryBush', node: 'Bush' }],
+  fern: [{ file: 'Fern' }],
+  flower: [
+    { file: 'Flower', node: 'Flower_1_Clump' },
+    { file: 'Flower', node: 'Flower_3_Clump' },
+    { file: 'Flower', node: 'Flower_5_Clump' },
+  ],
+  grass: [{ file: 'Grass1' }],
+  mushroom: [{ file: 'Mushroom', node: 'Mushroom' }],
+}
+
+/** cell size, base chance, scale range, cap, seed, habitat rule */
+interface PlaceSpec {
+  cell: number
+  chance: number
+  sMin: number
+  sMax: number
+  cap: number
+  seed: number
+  habitat: (h: number, ny: number, forest: number, riverD: number, r: number) => boolean
+}
+
+const SPECS: Record<NodeKind, PlaceSpec> = {
+  // woods: dense inside the forest mask, gone in clearings
+  tree: { cell: 15, chance: 0.62, sMin: 4.5, sMax: 11, cap: 6500, seed: 101, habitat: (h, _ny, f) => f > 0.12 && h > 3.2 },
+  pine: { cell: 16, chance: 0.6, sMin: 5, sMax: 12.5, cap: 5200, seed: 202, habitat: (h, _ny, f) => f > 0.05 && h > 6 },
+  deadtree: { cell: 34, chance: 0.4, sMin: 4, sMax: 8, cap: 700, seed: 707, habitat: (h, _ny, f) => f > -0.34 && f < -0.13 && h > 4 },
+  palm: { cell: 24, chance: 0.5, sMin: 5, sMax: 9, cap: 600, seed: 808, habitat: (h) => h > 1.1 && h < 4.2 },
+  willow: { cell: 30, chance: 0.55, sMin: 5, sMax: 8.5, cap: 350, seed: 909, habitat: (h, _ny, _f, riverD) => riverD < 34 && riverD > 13 && h > 2 },
+  rock: { cell: 40, chance: 0.4, sMin: 0.8, sMax: 2.4, cap: 1600, seed: 303, habitat: () => true },
+  log: { cell: 44, chance: 0.4, sMin: 1.2, sMax: 2.2, cap: 800, seed: 606, habitat: (h, _ny, f) => f > 0.1 && h > 3 },
+  bush: { cell: 26, chance: 0.5, sMin: 0.9, sMax: 2.0, cap: 2400, seed: 404, habitat: (h, _ny, f) => f < 0.3 && h > 2.2 },
+  fern: { cell: 13, chance: 0.55, sMin: 0.6, sMax: 1.4, cap: 6000, seed: 505, habitat: (h, _ny, f) => f > 0.16 && h > 3 },
+  flower: { cell: 18, chance: 0.5, sMin: 0.6, sMax: 1.2, cap: 2600, seed: 111, habitat: (h, _ny, f) => f < 0.05 && h > 2.4 },
+  grass: { cell: 7, chance: 0.72, sMin: 0.45, sMax: 1.2, cap: 30000, seed: 555, habitat: (h) => h > 1.6 },
+  mushroom: { cell: 30, chance: 0.45, sMin: 0.35, sMax: 0.8, cap: 650, seed: 222, habitat: (h, _ny, f) => f > 0.2 && h > 3 },
 }
 
 const RESPAWN_MS = 240_000
@@ -63,10 +123,62 @@ function mulberry32(seed: number): () => number {
   }
 }
 
+// --- tiny seeded gradient noise for the forest mask (independent of the bake) ---
+const perm = new Uint8Array(512)
+{
+  const r = mulberry32(77)
+  const p = [...Array(256).keys()]
+  for (let i = 255; i > 0; i--) {
+    const j = Math.floor(r() * (i + 1))
+    ;[p[i], p[j]] = [p[j], p[i]]
+  }
+  for (let i = 0; i < 512; i++) perm[i] = p[i & 255]
+}
+const fade = (t: number) => t * t * t * (t * (t * 6 - 15) + 10)
+const grad = (h: number, x: number, y: number) => (h & 1 ? -x : x) + (h & 2 ? -y : y)
+function noise2(x: number, y: number): number {
+  const X = Math.floor(x) & 255
+  const Y = Math.floor(y) & 255
+  x -= Math.floor(x)
+  y -= Math.floor(y)
+  const u = fade(x)
+  const v = fade(y)
+  const aa = perm[perm[X] + Y]
+  const ab = perm[perm[X] + Y + 1]
+  const ba = perm[perm[X + 1] + Y]
+  const bb = perm[perm[X + 1] + Y + 1]
+  const l = (a: number, b: number, t: number) => a + t * (b - a)
+  return l(l(grad(aa, x, y), grad(ba, x - 1, y), u), l(grad(ab, x, y - 1), grad(bb, x - 1, y - 1), u), v)
+}
+/** Forest mask in ~[-1, 1]: >0.1 woods, <0 open. */
+export function forestMaskAt(x: number, z: number): number {
+  return noise2(x * 0.0045, z * 0.0045) * 0.72 + noise2(x * 0.013, z * 0.013) * 0.28
+}
+
+function riverDistAt(x: number, z: number): number {
+  const meta = worldMeta
+  if (!meta) return Infinity
+  let best = Infinity
+  for (const path of meta.rivers) {
+    for (let i = 0; i < path.length - 1; i++) {
+      const ax = path[i].x
+      const az = path[i].z
+      const dx = path[i + 1].x - ax
+      const dz = path[i + 1].z - az
+      const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz)))
+      const d = Math.hypot(x - (ax + dx * t), z - (az + dz * t))
+      if (d < best) best = d
+    }
+  }
+  for (const lake of meta.lakes) {
+    best = Math.min(best, Math.abs(Math.hypot(x - lake.x, z - lake.z) - lake.r))
+  }
+  return best
+}
+
 /**
- * Clone a geometry with position/normal promoted to float32. Quantized
- * (normalized-int) attributes from meshopt/KHR_mesh_quantization would be
- * silently corrupted by applyMatrix4 writing floats back into int arrays.
+ * Clone a geometry with position/normal promoted to float32 — quantized
+ * attributes are corrupted by applyMatrix4 writing floats into int arrays.
  */
 function toFloatGeometry(src: THREE.BufferGeometry): THREE.BufferGeometry {
   const geo = src.clone()
@@ -84,21 +196,45 @@ function toFloatGeometry(src: THREE.BufferGeometry): THREE.BufferGeometry {
   return geo
 }
 
-/** One GLB rendered as N InstancedMeshes (one per submesh), sharing matrices. */
+/** One prop rendered as N InstancedMeshes (one per submesh), sharing matrices. */
 class InstancedProp {
   meshes: THREE.InstancedMesh[] = []
   private dummy = new THREE.Object3D()
 
-  constructor(gltf: THREE.Group, capacity: number, group: THREE.Group, normalizeH: number) {
-    // normalize the source so instances share a consistent base height
-    const box = new THREE.Box3().setFromObject(gltf)
+  constructor(root: THREE.Object3D, capacity: number, group: THREE.Group) {
+    const box = new THREE.Box3().setFromObject(root)
     const size = box.getSize(new THREE.Vector3())
-    const s = normalizeH / (size.y || 1)
-    gltf.updateMatrixWorld(true)
-    gltf.traverse((o) => {
+    const s = 1 / (size.y || 1) // normalize to 1 m tall; instance scale = world height
+    root.updateMatrixWorld(true)
+
+    // pivot on the BASE of the prop (avg xz of its lowest vertices), so trunks
+    // stand exactly on the node position — bbox-center pivoting shifted trunks
+    // by their canopy asymmetry and broke aimed swings + trunk colliders
+    let baseX = 0
+    let baseZ = 0
+    let baseN = 0
+    const bandTop = box.min.y + size.y * 0.15
+    const v = new THREE.Vector3()
+    root.traverse((o) => {
+      if (!(o instanceof THREE.Mesh)) return
+      const pos = (o.geometry as THREE.BufferGeometry).getAttribute('position')
+      for (let i = 0; i < pos.count; i++) {
+        v.set(pos.getX(i), pos.getY(i), pos.getZ(i)).applyMatrix4(o.matrixWorld)
+        if (v.y <= bandTop) {
+          baseX += v.x
+          baseZ += v.z
+          baseN++
+        }
+      }
+    })
+    const cx = baseN ? baseX / baseN : (box.min.x + box.max.x) / 2
+    const cz = baseN ? baseZ / baseN : (box.min.z + box.max.z) / 2
+
+    root.traverse((o) => {
       if (!(o instanceof THREE.Mesh)) return
       const geo = toFloatGeometry(o.geometry as THREE.BufferGeometry)
       geo.applyMatrix4(o.matrixWorld)
+      geo.translate(-cx, 0, -cz)
       geo.scale(s, s, s)
       geo.translate(0, -box.min.y * s, 0) // feet at y=0
       const mat = (o.material as THREE.MeshStandardMaterial).clone()
@@ -106,7 +242,7 @@ class InstancedProp {
       mat.metalness = 0
       const im = new THREE.InstancedMesh(geo, mat, capacity)
       im.count = 0
-      im.frustumCulled = false // instances span the island; per-chunk culling is M6's job
+      im.frustumCulled = false
       this.meshes.push(im)
       group.add(im)
     })
@@ -138,36 +274,37 @@ class InstancedProp {
 export class Scatter {
   readonly group = new THREE.Group()
   readonly nodes: ScatterNode[] = []
-  /** props + placement order keyed by `${kind}#${variant}` */
   private props = new Map<string, InstancedProp>()
   private order = new Map<string, number[]>()
-  private treeColliders = new Map<number, RAPIER.Collider>() // node id → collider
+  private treeColliders = new Map<number, RAPIER.Collider>()
   private activeChunks = new Set<number>()
   private lastChunkKey = -1
   private tmpN = new THREE.Vector3()
+  private pendingColliderDrops: number[] = []
 
   async load(): Promise<void> {
     const loader = new GLTFLoader()
     loader.setMeshoptDecoder(MeshoptDecoder)
-    const models = new Map<string, THREE.Group>()
-    const names = [...new Set(Object.values(KIND_MODELS).flat())]
+    const files = [...new Set(Object.values(KIND_MODELS).flat().map((m) => m.file))]
+    const loaded = new Map<string, THREE.Group>()
     await Promise.all(
-      names.map(async (n) => {
-        models.set(n, (await loader.loadAsync(`models/props/${n}.glb`)).scene)
+      files.map(async (f) => {
+        loaded.set(f, (await loader.loadAsync(`models/props/${f}.glb`)).scene)
       }),
     )
 
-    this.place('tree', 26, 0.55, 5, 8, 3200, mulberry32(101))
-    this.place('pine', 30, 0.5, 6, 10, 2400, mulberry32(202))
-    this.place('rock', 42, 0.35, 0.9, 2.0, 1400, mulberry32(303))
-    this.place('bush', 34, 0.6, 1.0, 1.7, 1600, mulberry32(404))
-    this.place('grass', 13, 0.5, 0.5, 1.0, 5000, mulberry32(505))
+    for (const kind of Object.keys(SPECS) as NodeKind[]) {
+      this.place(kind, SPECS[kind])
+    }
 
     for (const kind of Object.keys(KIND_MODELS) as NodeKind[]) {
       for (let v = 0; v < KIND_MODELS[kind].length; v++) {
+        const ref = KIND_MODELS[kind][v]
+        const src = loaded.get(ref.file)!
+        const root = ref.node ? (src.getObjectByName(ref.node) ?? src) : src
         const key = `${kind}#${v}`
         const ids = this.order.get(key) ?? []
-        const prop = new InstancedProp(models.get(KIND_MODELS[kind][v])!, Math.max(ids.length, 1), this.group, 1)
+        const prop = new InstancedProp(root, Math.max(ids.length, 1), this.group)
         this.props.set(key, prop)
         ids.forEach((nodeId, i) => {
           const n = this.nodes[nodeId]
@@ -177,36 +314,35 @@ export class Scatter {
     }
   }
 
-  /** Grid-jitter placement with terrain constraints. */
-  private place(
-    kind: NodeKind,
-    cell: number,
-    chance: number,
-    sMin: number,
-    sMax: number,
-    cap: number,
-    rand: () => number,
-  ): void {
-    const ids: number[] = []
-    for (let gz = -HALF_SIZE + cell; gz < HALF_SIZE - cell && ids.length < cap; gz += cell) {
-      for (let gx = -HALF_SIZE + cell; gx < HALF_SIZE - cell && ids.length < cap; gx += cell) {
-        if (rand() > chance) continue
-        const x = gx + (rand() - 0.5) * cell * 0.8
-        const z = gz + (rand() - 0.5) * cell * 0.8
-        const y = heightAt(x, z)
-        if (y < SEA_LEVEL + 1.2) continue // not in the water
-        if (normalAt(x, z, this.tmpN).y < (kind === 'rock' ? 0.55 : 0.74)) continue // slope limit
-        const dv = Math.hypot(x - VOLCANO.x, z - VOLCANO.z)
-        if (kind !== 'rock' && dv < 300) continue // barren volcano flanks
-        const ds = Math.hypot(x - SPAWN.x, z - SPAWN.z)
-        if (ds < 14) continue // keep the spawn point itself clear
-        const id = this.nodes.length
+  private place(kind: NodeKind, spec: PlaceSpec): void {
+    const rand = mulberry32(spec.seed)
+    let count = 0
+    for (let gz = -HALF_SIZE + spec.cell; gz < HALF_SIZE - spec.cell && count < spec.cap; gz += spec.cell) {
+      for (let gx = -HALF_SIZE + spec.cell; gx < HALF_SIZE - spec.cell && count < spec.cap; gx += spec.cell) {
+        // roll all randomness up front so the stream is stable per cell
+        const roll = rand()
+        const jx = (rand() - 0.5) * spec.cell * 0.85
+        const jz = (rand() - 0.5) * spec.cell * 0.85
         const variant = Math.floor(rand() * KIND_MODELS[kind].length)
+        const scale = spec.sMin + rand() * (spec.sMax - spec.sMin)
+        const rotY = rand() * Math.PI * 2
+        const tint = 0.72 + rand() * 0.42
+        if (roll > spec.chance) continue
+        const x = gx + jx
+        const z = gz + jz
+        const h = heightAt(x, z)
+        if (h < SEA_LEVEL + 1.1) continue
+        const ny = normalAt(x, z, this.tmpN).y
+        if (ny < (kind === 'rock' ? 0.55 : 0.72)) continue
+        const dv = Math.hypot(x - VOLCANO.x, z - VOLCANO.z)
+        if (kind !== 'rock' && kind !== 'deadtree' && dv < 300) continue
+        if (Math.hypot(x - SPAWN.x, z - SPAWN.z) < 14) continue
+        const riverD = riverDistAt(x, z)
+        if (riverD < 13 && kind !== 'willow') continue // keep channels clear
+        if (!spec.habitat(h, ny, forestMaskAt(x, z), riverD, Math.hypot(x, z))) continue
+        const id = this.nodes.length
         this.nodes.push({
-          id, kind, variant, x, y, z,
-          scale: sMin + rand() * (sMax - sMin),
-          rotY: rand() * Math.PI * 2,
-          tint: 0.82 + rand() * 0.3,
+          id, kind, variant, x, y: h, z, scale, rotY, tint,
           hp: NODE_DEFS[kind].hp,
           alive: true,
           respawnAt: 0,
@@ -214,15 +350,17 @@ export class Scatter {
         const key = `${kind}#${variant}`
         if (!this.order.has(key)) this.order.set(key, [])
         this.order.get(key)!.push(id)
-        ids.push(id)
+        count++
       }
     }
   }
 
-  /** Which node the aim ray hits, within `reach` meters OF THE PLAYER (not the
-   *  camera — the camera sits on a 5 m boom, so ray distance lies about reach). */
   raycast(raycaster: THREE.Raycaster, playerFeet: THREE.Vector3, reach: number): ScatterNode | null {
-    let best: { node: ScatterNode; dist: number } | null = null
+    // solid targets (trees, rocks…) win over ground cover — otherwise the
+    // 30K grass tufts soak up every swing aimed at a trunk behind them
+    const GROUND_COVER = new Set<NodeKind>(['grass', 'fern', 'flower', 'mushroom'])
+    let bestSolid: { node: ScatterNode; dist: number } | null = null
+    let bestCover: { node: ScatterNode; dist: number } | null = null
     for (const [key, prop] of this.props) {
       const hits = raycaster.intersectObjects(prop.meshes, false)
       for (const h of hits) {
@@ -232,13 +370,17 @@ export class Scatter {
         if (!node?.alive) continue
         const d = Math.hypot(node.x - playerFeet.x, node.z - playerFeet.z)
         if (d > reach) continue
-        if (!best || h.distance < best.dist) best = { node, dist: h.distance }
+        const slot = GROUND_COVER.has(node.kind) ? 'cover' : 'solid'
+        if (slot === 'solid') {
+          if (!bestSolid || h.distance < bestSolid.dist) bestSolid = { node, dist: h.distance }
+        } else if (!bestCover || h.distance < bestCover.dist) {
+          bestCover = { node, dist: h.distance }
+        }
       }
     }
-    return best?.node ?? null
+    return bestSolid?.node ?? bestCover?.node ?? null
   }
 
-  /** Apply one hit; returns yielded items when the node breaks, else null. */
   hit(node: ScatterNode): Partial<Record<ItemId, number>> | null {
     if (!node.alive) return null
     node.hp -= 1
@@ -246,7 +388,7 @@ export class Scatter {
     node.alive = false
     node.respawnAt = Date.now() + RESPAWN_MS
     this.setNodeVisible(node, false)
-    this.dropColliderFor(node.id)
+    this.pendingColliderDrops.push(node.id)
     const out: Partial<Record<ItemId, number>> = {}
     for (const [item, [lo, hi]] of Object.entries(NODE_DEFS[node.kind].yields)) {
       out[item as ItemId] = lo + Math.floor(Math.random() * (hi - lo + 1))
@@ -254,7 +396,17 @@ export class Scatter {
     return out
   }
 
-  /** Respawn expired nodes (called once a second is plenty). */
+  flushColliderDrops(physics: Physics): void {
+    for (const id of this.pendingColliderDrops) {
+      const col = this.treeColliders.get(id)
+      if (col) {
+        physics.world.removeCollider(col, false)
+        this.treeColliders.delete(id)
+      }
+    }
+    this.pendingColliderDrops.length = 0
+  }
+
   tickRespawns(physics: Physics): void {
     const now = Date.now()
     for (const n of this.nodes) {
@@ -262,7 +414,6 @@ export class Scatter {
       n.alive = true
       n.hp = NODE_DEFS[n.kind].hp
       this.setNodeVisible(n, true)
-      // re-add collider if it's inside the active ring
       this.ensureCollidersAround(Number.NaN, Number.NaN, physics, true)
     }
   }
@@ -275,7 +426,6 @@ export class Scatter {
     else prop.hideInstance(idx)
   }
 
-  /** Stream tree/pine trunk colliders for the 3×3 chunks around the player. */
   ensureCollidersAround(x: number, z: number, physics: Physics, force = false): void {
     if (!Number.isNaN(x)) {
       const cx = Math.floor((x + HALF_SIZE) / CHUNK_SIZE)
@@ -290,7 +440,6 @@ export class Scatter {
         }
       }
     }
-    // drop colliders that left the ring or whose node died
     for (const [id, col] of this.treeColliders) {
       const n = this.nodes[id]
       if (!n.alive || !this.activeChunks.has(this.chunkKeyOf(n))) {
@@ -298,9 +447,8 @@ export class Scatter {
         this.treeColliders.delete(id)
       }
     }
-    // add colliders for living trees inside the ring
     for (const n of this.nodes) {
-      if ((n.kind !== 'tree' && n.kind !== 'pine') || !n.alive) continue
+      if (!TRUNK_KINDS.has(n.kind) || !n.alive) continue
       if (!this.activeChunks.has(this.chunkKeyOf(n)) || this.treeColliders.has(n.id)) continue
       const half = n.scale * 0.5
       const col = physics.world.createCollider(
@@ -310,29 +458,23 @@ export class Scatter {
     }
   }
 
-  private pendingColliderDrops: number[] = []
-
-  /** Mark a node's collider for removal on the next collider-stream pass. */
-  private dropColliderFor(id: number): void {
-    this.pendingColliderDrops.push(id)
-  }
-
-  /** Remove any colliders queued by harvests (needs the physics handle). */
-  flushColliderDrops(physics: Physics): void {
-    for (const id of this.pendingColliderDrops) {
-      const col = this.treeColliders.get(id)
-      if (col) {
-        physics.world.removeCollider(col, false)
-        this.treeColliders.delete(id)
-      }
-    }
-    this.pendingColliderDrops.length = 0
-  }
-
   private chunkKeyOf(n: ScatterNode): number {
     const cx = Math.floor((n.x + HALF_SIZE) / CHUNK_SIZE)
     const cz = Math.floor((n.z + HALF_SIZE) / CHUNK_SIZE)
     return cz * CHUNKS_PER_SIDE + cx
+  }
+
+  debugSummary(): { key: string; nodes: number; submeshes: number; drawn: number }[] {
+    const out: { key: string; nodes: number; submeshes: number; drawn: number }[] = []
+    for (const [key, prop] of this.props) {
+      out.push({
+        key,
+        nodes: this.order.get(key)?.length ?? 0,
+        submeshes: prop.meshes.length,
+        drawn: prop.meshes[0]?.count ?? 0,
+      })
+    }
+    return out
   }
 
   serialize(): { id: number; respawnAt: number }[] {

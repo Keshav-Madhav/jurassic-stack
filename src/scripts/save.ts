@@ -4,7 +4,7 @@
 const DB = 'jurassic-stack'
 const STORE = 'saves'
 const KEY = 'slot-0'
-export const SAVE_VERSION = 3 // v3: baked island replaced graybox terrain — all world coords shifted
+export const SAVE_VERSION = 4 // v4: scatter v2 (new kinds/specs) — node ids reshuffled
 
 function withStore(mode: IDBTransactionMode): Promise<IDBObjectStore> {
   return new Promise((resolve, reject) => {

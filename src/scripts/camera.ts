@@ -25,6 +25,11 @@ export class ThirdPersonCamera {
     this.camera = new THREE.PerspectiveCamera(55, aspect, 0.1, 2600)
   }
 
+  /** Skip the follow smoothing on the next update (teleports). */
+  snap(): void {
+    this.first = true
+  }
+
   update(input: Input, targetFeet: THREE.Vector3, dt: number): void {
     const { dx, dy } = input.drainPointer()
     this.yaw -= dx * SENSITIVITY

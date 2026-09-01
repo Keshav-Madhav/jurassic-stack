@@ -29,26 +29,26 @@ interface Grade {
 }
 
 const NOON: Grade = {
-  exposure: 0.68,
+  exposure: 0.57, // darker, richer ground (M6a review: pale wash)
   fog: new THREE.Color(0x87b5d9),
   fogNear: 350, fogFar: 2450,
-  hemiSky: new THREE.Color(0xbfd9ff),
-  hemiGround: new THREE.Color(0x4a5d3f),
-  hemiIntensity: 1.0,
-  sun: new THREE.Color(0xfff4e0),
-  sunIntensity: 2.6,
+  hemiSky: new THREE.Color(0xaccce8),
+  hemiGround: new THREE.Color(0x2e3c28),
+  hemiIntensity: 0.65,
+  sun: new THREE.Color(0xfff2d8),
+  sunIntensity: 2.25,
   rimIntensity: 0,
   turbidity: 6,
   rayleigh: 1.8,
 }
 
 const GOLDEN: Grade = {
-  exposure: 0.72,
+  exposure: 0.66,
   fog: new THREE.Color(0xe8884e),
   fogNear: 240, fogFar: 1900,
-  hemiSky: new THREE.Color(0xffb066),
-  hemiGround: new THREE.Color(0x3f6b35),
-  hemiIntensity: 1.25,
+  hemiSky: new THREE.Color(0xffa858),
+  hemiGround: new THREE.Color(0x2c3a26),
+  hemiIntensity: 1.05,
   sun: new THREE.Color(0xff7a2e),
   sunIntensity: 3.6,
   rimIntensity: 0.8,

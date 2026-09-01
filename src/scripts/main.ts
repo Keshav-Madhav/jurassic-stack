@@ -316,7 +316,7 @@ async function boot(): Promise<void> {
   let debugIntent: { vx: number; vz: number } | null = null
   const dbg = {
     setTime: (t: number) => daynight.setTime(t),
-    teleport: (x: number, z: number) => player.mover.teleport(x, heightAt(x, z) + 1.2, z),
+    teleport: (x: number, z: number) => { player.mover.teleport(x, heightAt(x, z) + 1.2, z); cam.snap() },
     setCam: (yaw: number, pitch: number) => { cam.yaw = yaw; cam.pitch = pitch },
     setIntent: (vx: number, vz: number) => { debugIntent = vx || vz ? { vx, vz } : null },
     player: () => ({ ...(riding?.mover ? riding.mover.position : player.mover.position) }),
@@ -351,6 +351,18 @@ async function boot(): Promise<void> {
           }
         })
         return found
+      },
+      scatterDebug: () => scatter.debugSummary(),
+      probeSwing: () => {
+        raycaster.setFromCamera(new THREE.Vector2(0, 0), cam.camera)
+        const node = scatter.raycast(raycaster, feetPos(), REACH + 1.2)
+        const dino = nearestDino(REACH, (d) => d.state !== 'ko' && d.state !== 'tamed')
+        return {
+          node: node ? { kind: node.kind, x: +node.x.toFixed(1), z: +node.z.toFixed(1) } : null,
+          dino: dino ? dino.species.id : null,
+          held: inventory.held,
+          ray: { o: raycaster.ray.origin.toArray().map((v) => +v.toFixed(1)), d: raycaster.ray.direction.toArray().map((v) => +v.toFixed(2)) },
+        }
       },
       waterSolidRed: () => {
         water.group.children.forEach((c) => {
@@ -403,7 +415,7 @@ async function boot(): Promise<void> {
       /** Teleport beside the nearest alive node of a kind and aim at it. */
       gotoNearest: (kind: string) => {
         const from = feetPos()
-        let best: { x: number; y: number; z: number } | null = null
+        let best: { x: number; y: number; z: number; scale: number } | null = null
         let bd = Infinity
         for (const n of scatter.nodes) {
           if (!n.alive || n.kind !== kind) continue
@@ -415,7 +427,13 @@ async function boot(): Promise<void> {
         const pz = best.z + 2.4
         player.mover.teleport(px, heightAt(px, pz) + 1.2, pz)
         cam.yaw = Math.atan2(-(best.x - px), -(best.z - pz))
-        cam.pitch = -0.15
+        // aim at the node's mid-height. The center-screen ray pivots through
+        // the follow point (the head), so the relevant run is head→node
+        // horizontal distance (2.4 m), not camera→node.
+        const aimY = best.y + Math.min(best.scale * 0.45, 1.5)
+        const headY = heightAt(px, pz) + 1.55
+        cam.pitch = THREE.MathUtils.clamp(Math.atan2(aimY - headY, 2.4), -0.9, 0.35)
+        cam.snap()
         return true
       },
       /** Teleport beside the nearest dino matching a state. */
@@ -426,6 +444,7 @@ async function boot(): Promise<void> {
         const pz = d.object.position.z + 2.2
         player.mover.teleport(px, heightAt(px, pz) + 1.2, pz)
         cam.yaw = 0
+        cam.snap()
         return true
       },
       lookAtNearestNode: () => {

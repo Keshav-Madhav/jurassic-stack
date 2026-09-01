@@ -112,3 +112,9 @@ Bugs the gate caught: reach measured from camera (all swings whiffed); camera-dr
 - [x] **M5b** — water: ocean (Gerstner swell) + 2 lakes + 2 river ribbons on one refraction-only animated material; `waterLevelAt`/`riverFlowAt` queries and the river ribbon share ONE sample array (v1 derived them separately and disagreed); swim mode (buoyancy, surface float, space-paddle) + river currents carry the swimmer downstream. Gate `tools/gate-m5.mjs` 12/12; m3/m4 regression green.
   Known issue for M6: lake surface seen edge-on from below reads as a floating band — fix by enforcing a shore ring (terrain ≥ level+0.6 around each lake) in the bake. Debug saga: ribbon wound face-down → invisible with FrontSide (now DoubleSide, which underwater views need anyway).
 - [ ] **M5c** — navmesh bake (recast) + DetourCrowd; ruin-site prefabs; graybox→island polish pass
+
+### M6a — foliage & terrain beauty pass (user feedback: "more foliage, tree types, scales, darker, grass, ground variation")
+- [x] Prop library 8→16 (dead trees ×3, palms, willow, ferns, flowers ×3, mushrooms, mossy logs, berry bush — several extracted as named sub-nodes from Quaternius variant packs)
+- [x] Habitat-driven scatter v2: forest-mask noise clusters woods with real clearings; palms on the beach band, willows on riverbanks, dead trees on dry fringes, ferns/mushrooms on forest floor, flowers in clearings; ~30K grass tufts; ~55K instances total at 58-60 fps
+- [x] Terrain vertex colors (sand/grass lush-dry mottling/rock-by-slope/basalt-by-altitude) + flat shading; darker richer grade (noon + golden)
+- [x] Gates green after 3 real bugs: grass soaking swings aimed at trunks (solid-over-groundcover raycast priority); bbox-center prop pivot shifting trunks off node origins (base-band pivot); gate aim-pitch computed in the wrong frame (head-pivot, not camera)
