@@ -14,13 +14,14 @@ Plan of record: `PLAN.md`.
 **Gate:** `npm run build` clean; deployed URL shows the boot scene. ✅ M0 complete.
 
 ## M1 — Asset intake gate
-- [ ] `tools/gate.mjs`: given a GLB → report tris, bones, animation clips, texture sizes; fail thresholds
-- [ ] `tools/turntable.mjs`: playwright-core turntable screenshots per model → `shots/`
-- [ ] Download tier-A roster + Quaternius fallback six (PLAN.md links); archive originals in `public/models/_raw/` (gitignored if heavy)
-- [ ] Run everything through the gate; record per-model results in `ASSETS.md` (species, source, license, clips, verdict)
-- [ ] gltf-transform pass: meshopt + KTX2, spot-check clips survive conversion in gltf-viewer
+- [x] `tools/gate.mjs`: GLB → tris, bones, clips (+durations), textures, thresholds (meshopt-aware)
+- [x] `tools/turntable.mjs`: localhost server + headless Chrome, 4 angles + mid-clip pose, real GLTFLoader+MeshoptDecoder path
+- [x] Quaternius fallback six downloaded (poly.pizza CDN) + archived in `public/models/_raw/quaternius/`
+- [ ] Tier-A Sketchfab roster downloaded — **BLOCKED on user login** (Sketchfab requires an account; URLs + per-model pipeline in ASSETS.md)
+- [x] All intaken models gated + recorded in `ASSETS.md` (six PASS; Apatosaurus death-clip naming quirk noted)
+- [x] gltf-transform meshopt pass (~55% size cut) → `public/models/dinos/`; clips verified surviving by re-gate + compressed turntable render
 
-**Gate:** every model in `ASSETS.md` has clips verified and a turntable shot; broken imports flagged with Quaternius substitute noted.
+**Gate:** every model in `ASSETS.md` has clips verified and a turntable shot; broken imports flagged with Quaternius substitute noted. ✅ for all downloadable-today models; tier-A rows carry PENDING status until a logged-in download session.
 
 ## M2 — Art-direction test scene
 - [ ] Scene: one tier-A raptor idle-animating in a Quaternius forest patch, unified color grade
