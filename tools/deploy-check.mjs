@@ -17,7 +17,7 @@ await page.screenshot({ path: shot })
 console.log('screenshot:', shot)
 await browser.close()
 
-if (!status?.includes('boot OK')) {
-  console.error('FAIL: boot status line missing')
+if (!/three r\d+/.test(status ?? '')) {
+  console.error('FAIL: status line missing or malformed')
   process.exit(1)
 }

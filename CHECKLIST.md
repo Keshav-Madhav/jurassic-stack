@@ -32,14 +32,15 @@ Plan of record: `PLAN.md`.
 **Gate:** the user has picked a direction from the batch; PLAN.md updated. ✅ M2 complete.
 
 ## M3 — Graybox island + mover
-- [ ] Heightmap chunk renderer: fixed grid, 3–4 index-buffer LODs, skirts
-- [ ] Rapier heightfield collider from the same heightmap fn
-- [ ] Shared "mover" class (Rapier KCC): player on foot — walk/sprint/jump, third-person camera
-- [ ] One dino wandering on steering (wander/idle FSM), ground-clamped
-- [ ] Day-night cycle: Sky addon + sun animation + PMREM rebake
-- [ ] Screenshot harness (`tools/shots.mjs`) with authored vantage points
+- [x] Heightmap chunk renderer: 16×16 grid of 128 m chunks, 4 index-buffer LODs (64/32/16/8 quads), skirts; single height function (`heightmap.ts`) shared by render/physics/AI
+- [x] Terrain collision: per-chunk Rapier **trimeshes from the LOD0 grid** (chose trimesh over heightfield — collision is literally the render geometry, no orientation footguns), streamed 3×3 around the player
+- [x] Shared "mover" class (Rapier KCC): walk/sprint/jump, autostep, snap-to-ground, slope limits; player interpolated between fixed steps; third-person camera (immediate look, smoothed follow, terrain-aware boom)
+- [x] One raptor wandering on steering (idle⇄wander FSM, turn-rate-limited seek, water/slope avoidance, idle⇄walk crossfade with speed-matched stride)
+- [x] Day-night cycle: Sky addon + sun animation + PMREM rebake, **with the M2 grade curve implemented** (filmic noon ↔ vivid golden ↔ night as a function of sun elevation)
+- [x] `tools/shots.mjs` (6 authored vantages incl. the spawn→volcano arc sightline) + `tools/gate-m3.mjs` (automated FPS + 4 collision walks)
 
-**Gate:** 60 fps on the graybox; walk the whole island without falling through; dino wanders believably.
+**Gate:** 60 fps headless; 4 cross-island walks never below ground (worst 0.97 m = exact feet offset); raptor wanders/animates on camera. ✅ M3 complete.
+Notable bugs caught by the screenshot loop: spawn beach below sea level; PMREM environment washing all materials to pastel (fixed with `environmentIntensity 0.35`); gaussian volcano reading as a mound (rebuilt as concave-flank cone, 184 m); camera yaw convention inverted in every vantage (yaw 0 = north).
 
 ## M4 — Core loop (THE DEMO MILESTONE)
 - [ ] Species table v1 (data-driven: stats, speeds, aggro, tame food, clip map) + generic dino brain

@@ -1,59 +1,118 @@
+// Jurassic Stack — M3 graybox: chunked island, Rapier KCC player, third-person
+// camera, one wandering raptor, day-night cycle with the M2 grade curve.
+//
+// Loop shape: fixed 60 Hz simulation steps via accumulator (physics + player),
+// render at rAF with player interpolation. AI + animation tick at render rate.
 import * as THREE from 'three'
+import { Terrain } from './terrain'
+import { Physics, FIXED_DT } from './physics'
+import { Input } from './input'
+import { Player } from './player'
+import { ThirdPersonCamera } from './camera'
+import { DayNight } from './daynight'
+import { Dino } from './dino'
+import { Hud } from './hud'
+import { heightAt, SPAWN, SEA_LEVEL, HALF_SIZE } from './heightmap'
 
-// Boot scene: proves the toolchain (tsc + vite + three) end to end.
-// Everything here is placeholder; real systems land per CHECKLIST.md.
-
-const app = document.getElementById('app')!
-const status = document.getElementById('status')!
-
-const scene = new THREE.Scene()
-scene.background = new THREE.Color(0x87b5d9)
-scene.fog = new THREE.Fog(0x87b5d9, 40, 160)
-
-const camera = new THREE.PerspectiveCamera(60, innerWidth / innerHeight, 0.1, 500)
-camera.position.set(0, 6, 14)
-camera.lookAt(0, 1, 0)
-
-const renderer = new THREE.WebGLRenderer({ antialias: true })
-renderer.setSize(innerWidth, innerHeight)
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
-renderer.toneMapping = THREE.ACESFilmicToneMapping
-app.appendChild(renderer.domElement)
-
-addEventListener('resize', () => {
-  camera.aspect = innerWidth / innerHeight
-  camera.updateProjectionMatrix()
+async function boot(): Promise<void> {
+  const app = document.getElementById('app')!
+  const renderer = new THREE.WebGLRenderer({ antialias: true })
   renderer.setSize(innerWidth, innerHeight)
-})
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
+  app.appendChild(renderer.domElement)
 
-scene.add(new THREE.HemisphereLight(0xbfd9ff, 0x54713f, 1.2))
-const sun = new THREE.DirectionalLight(0xfff2dd, 2.4)
-sun.position.set(40, 60, 25)
-scene.add(sun)
+  const scene = new THREE.Scene()
+  const daynight = new DayNight(renderer, scene)
 
-const ground = new THREE.Mesh(
-  new THREE.CircleGeometry(80, 48).rotateX(-Math.PI / 2),
-  new THREE.MeshStandardMaterial({ color: 0x5e8c4f, flatShading: true })
-)
-scene.add(ground)
+  const terrain = new Terrain()
+  scene.add(terrain.group)
 
-// Placeholder inhabitant until the first real dino clears the intake gate.
-const placeholder = new THREE.Mesh(
-  new THREE.BoxGeometry(1.2, 1.2, 2.6),
-  new THREE.MeshStandardMaterial({ color: 0xc0563e, flatShading: true })
-)
-placeholder.position.y = 1.4
-scene.add(placeholder)
+  // ocean: a simple plane at sea level, graybox stand-in for M5's real water
+  const ocean = new THREE.Mesh(
+    new THREE.PlaneGeometry(HALF_SIZE * 6, HALF_SIZE * 6).rotateX(-Math.PI / 2),
+    new THREE.MeshStandardMaterial({ color: 0x2e6ba8, roughness: 0.35, transparent: true, opacity: 0.92 }),
+  )
+  ocean.position.y = SEA_LEVEL
+  scene.add(ocean)
 
-status.textContent = `jurassic-stack boot OK · three r${THREE.REVISION}`
+  const physics = new Physics()
+  await physics.init()
 
-const clock = new THREE.Clock()
-function loop() {
-  requestAnimationFrame(loop)
-  if (document.hidden) return
-  const t = clock.getElapsedTime()
-  placeholder.rotation.y = t * 0.5
-  placeholder.position.y = 1.4 + Math.sin(t * 2) * 0.15
-  renderer.render(scene, camera)
+  const spawnPos = new THREE.Vector3(SPAWN.x, heightAt(SPAWN.x, SPAWN.z) + 1.2, SPAWN.z)
+  const player = new Player(physics, spawnPos)
+  scene.add(player.object)
+
+  const input = new Input(renderer.domElement)
+  const cam = new ThirdPersonCamera(innerWidth / innerHeight)
+  cam.yaw = 0 // yaw 0 looks north (-z): the volcano sightline from spawn
+
+  // one raptor living near spawn
+  const dino = new Dino(SPAWN.x + 26, SPAWN.z - 30)
+  scene.add(dino.object)
+  void dino.load() // async; scene works before it resolves
+
+  const hud = new Hud(document.getElementById('hud')!)
+  const status = document.getElementById('status')!
+  status.textContent = `graybox · three r${THREE.REVISION}`
+
+  addEventListener('resize', () => {
+    cam.camera.aspect = innerWidth / innerHeight
+    cam.camera.updateProjectionMatrix()
+    renderer.setSize(innerWidth, innerHeight)
+  })
+  addEventListener('keydown', (e) => {
+    if (e.code === 'KeyT') daynight.setTime(daynight.time + 1 / 24)
+  })
+
+  // debug interface for tools/shots.mjs and gate verification
+  const dbg = {
+    setTime: (t: number) => daynight.setTime(t),
+    teleport: (x: number, z: number) => player.mover.teleport(x, heightAt(x, z) + 1.2, z),
+    setCam: (yaw: number, pitch: number) => { cam.yaw = yaw; cam.pitch = pitch },
+    setIntent: (vx: number, vz: number) => { debugIntent = vx || vz ? { vx, vz } : null },
+    player: () => ({ ...player.mover.position }),
+    groundAt: (x: number, z: number) => heightAt(x, z),
+    fps: () => hud.fps,
+    ready: false,
+  }
+  let debugIntent: { vx: number; vz: number } | null = null
+  ;(window as unknown as { __g: typeof dbg }).__g = dbg
+
+  let accumulator = 0
+  let last = performance.now()
+
+  function frame(now: number): void {
+    requestAnimationFrame(frame)
+    if (document.hidden) {
+      last = now
+      return
+    }
+    let dt = (now - last) / 1000
+    last = now
+    dt = Math.min(dt, 0.1) // clamp tab-switch spikes
+
+    // fixed-step simulation
+    accumulator += dt
+    while (accumulator >= FIXED_DT) {
+      physics.ensureTerrainAround(player.mover.position.x, player.mover.position.z)
+      player.fixedUpdate(FIXED_DT, input, cam.yaw, physics.world.gravity.y, debugIntent ?? undefined)
+      physics.step()
+      accumulator -= FIXED_DT
+    }
+    const alpha = accumulator / FIXED_DT
+
+    // render-rate updates
+    player.render(alpha)
+    dino.update(dt)
+    daynight.advance(dt)
+    terrain.update(player.mover.position.x, player.mover.position.z)
+    cam.update(input, player.object.position, dt)
+    hud.tick(dt, player.mover.position.x, player.mover.position.y, player.mover.position.z, daynight.time)
+
+    renderer.render(scene, cam.camera)
+    dbg.ready = true
+  }
+  requestAnimationFrame(frame)
 }
-loop()
+
+void boot()
