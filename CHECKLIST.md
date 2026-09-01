@@ -25,11 +25,11 @@ Plan of record: `PLAN.md`.
 **Gate:** every model in `ASSETS.md` has clips verified and a turntable shot; broken imports flagged with substitute noted. ✅ **M1 complete — 16 species game-ready.**
 
 ## M2 — Art-direction test scene
-- [ ] Scene: one tier-A raptor idle-animating in a Quaternius forest patch, unified color grade
-- [ ] Screenshot batch (3 grades × 2 times of day) for human review
-- [ ] **Decision recorded in PLAN.md: realistic-leaning vs stylized-leaning**
+- [x] Scene: tier-A raptor idle-animating in a Quaternius forest patch (`tools/artdir.mjs`, 10 CC0 nature props in `_raw/nature/`)
+- [x] Screenshot batch (3 grades × 2 times of day) published for review
+- [x] **Decision recorded in PLAN.md: filmic-vivid hybrid keyed to time of day** (ACES base at noon → vivid warm grade at low sun). Mixed fidelity holds. Re-review when Sky/CSM/post land (M5/M6).
 
-**Gate:** the user has picked a direction from the batch; PLAN.md updated.
+**Gate:** the user has picked a direction from the batch; PLAN.md updated. ✅ M2 complete.
 
 ## M3 — Graybox island + mover
 - [ ] Heightmap chunk renderer: fixed grid, 3–4 index-buffer LODs, skirts

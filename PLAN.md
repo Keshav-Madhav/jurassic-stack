@@ -72,9 +72,12 @@ A feature that does none of those is a checklist item wearing a costume, and it 
 
 1. **Ship WebGL2; port to WebGPU later.** The perf-critical libraries (InstancedMesh2, pmndrs
    postprocessing, N8AO) are WebGL-only. Isolate shader customizations so the TSL port is a port.
-2. **The art direction has a fork in it.** Free environment libraries are flat-colored low-poly;
-   the dino roster is realistic-ish PBR. Decide with an early one-dino-in-a-forest test scene
-   under a unified grade, before mass asset intake.
+2. **Art direction (decided at M2, 2026-09-01): filmic-vivid hybrid keyed to time of day.**
+   The M2 batch (PBR raptor in the Quaternius forest) settled it: ACES filmic base at midday,
+   grading ramping toward the vivid treatment (warmer key, saturated fog, colored rim) as sun
+   elevation drops — the user picked filmic-noon and vivid-golden as the two ends of one curve.
+   Mixed fidelity (PBR creatures in a low-poly world) holds. Provisional caveat: judged without
+   real sky/shadows/rays — re-review checkpoint when Sky + CSM + post land at M5/M6.
 3. **A free 15+ dino roster is real.** ~20 rigged+animated species censused, ~13 original CC-BY.
    Costs: style spread (three fidelity tiers) and animation poverty on some originals.
 4. **Physics is Rapier, pathfinding is Recast — both bake-friendly.** `rapier3d-compat` with a
