@@ -17,11 +17,12 @@ Plan of record: `PLAN.md`.
 - [x] `tools/gate.mjs`: GLB → tris, bones, clips (+durations), textures, thresholds (meshopt-aware)
 - [x] `tools/turntable.mjs`: localhost server + headless Chrome, 4 angles + mid-clip pose, real GLTFLoader+MeshoptDecoder path
 - [x] Quaternius fallback six downloaded (poly.pizza CDN) + archived in `public/models/_raw/quaternius/`
-- [ ] Tier-A Sketchfab roster downloaded — **BLOCKED on user login** (Sketchfab requires an account; URLs + per-model pipeline in ASSETS.md)
-- [x] All intaken models gated + recorded in `ASSETS.md` (six PASS; Apatosaurus death-clip naming quirk noted)
-- [x] gltf-transform meshopt pass (~55% size cut) → `public/models/dinos/`; clips verified surviving by re-gate + compressed turntable render
+- [x] Tier-A Sketchfab roster downloaded by user (16 zips) + unzipped, converted, archived (gitignored, ~400 MB)
+- [x] Spec-gloss → metalrough conversion (Sketchfab GLBs rendered untextured clay in three.js otherwise — gotcha recorded in ASSETS.md)
+- [x] All models gated + turntabled + recorded in `ASSETS.md`: **14 primary PASS** (37 MB webp+meshopt), 6 Quaternius fallbacks, 1 REJECTED (Brachiosaurus = museum diorama), 1 HOLD (Therizinosaurus = broken rig)
+- [x] gltf-transform pass: metalrough → resize 2048 → webp → meshopt; clips + textures verified surviving via re-gate + compressed turntable renders. KTX2 deferred to M6 (no toktx; WebP covers download size)
 
-**Gate:** every model in `ASSETS.md` has clips verified and a turntable shot; broken imports flagged with Quaternius substitute noted. ✅ for all downloadable-today models; tier-A rows carry PENDING status until a logged-in download session.
+**Gate:** every model in `ASSETS.md` has clips verified and a turntable shot; broken imports flagged with substitute noted. ✅ **M1 complete — 16 species game-ready.**
 
 ## M2 — Art-direction test scene
 - [ ] Scene: one tier-A raptor idle-animating in a Quaternius forest patch, unified color grade

@@ -13,7 +13,7 @@ import { statSync } from 'node:fs'
 
 const LIMITS = {
   maxTris: 250_000,      // beyond this even decimation is a project
-  maxBones: 120,
+  maxBones: 140,   // catches broken rigs (duplicate armatures); 125-137-bone hero rigs proven fine in turntable
   maxTextureDim: 4096,
   maxFileMB: 100,
   warnTris: 30_000,      // above tier-(a) game-ready budget → decimate

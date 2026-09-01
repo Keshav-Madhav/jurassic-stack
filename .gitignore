@@ -4,3 +4,8 @@ dist/
 .DS_Store
 .vercel/
 shots/
+
+# Raw Sketchfab archives (~400MB zips + extracted + GLBs) — archived locally per
+# ASSETS.md policy; only the compressed game-ready models in public/models/dinos
+# and public/models/fallback are committed. Quaternius raws are small and stay.
+public/models/_raw/sketchfab/
