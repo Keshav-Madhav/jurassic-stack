@@ -132,6 +132,8 @@ export class Building {
     this.keys.add(this.key(p))
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), p.kind === 'campfire' ? this.fireMat : this.woodMat)
     this.applyTransform(mesh, p)
+    mesh.castShadow = true
+    mesh.receiveShadow = true
     this.group.add(mesh)
     if (p.kind === 'campfire') {
       const flame = new THREE.PointLight(0xff8a3c, 60, 18)

@@ -47,6 +47,7 @@ export class Terrain {
         const originZ = -HALF_SIZE + cz * CHUNK_SIZE
         const mesh = new THREE.Mesh(undefined, this.material)
         mesh.frustumCulled = true
+        mesh.receiveShadow = true
         const chunk: Chunk = {
           cx, cz, originX, originZ,
           centerX: originX + CHUNK_SIZE / 2,

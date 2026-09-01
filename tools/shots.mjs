@@ -22,6 +22,10 @@ const VANTAGES = [
   { name: 'crater-approach', x: 0, z: -380, yaw: 0, pitch: 0.18, time: 0.58 },
   { name: 'river-bend', x: 392, z: -60, yaw: -Math.PI / 2, pitch: -0.3, time: 0.45 },
   { name: 'lake-west', x: -430, z: 95, yaw: 0, pitch: -0.32, time: 0.62 },
+  // ruin sites (coords from the committed bake's world-meta.json)
+  { name: 'beach-statue', x: 51, z: 625, yaw: 0, pitch: 0.02, time: 0.4 },
+  { name: 'forest-temple', x: 186, z: 92, yaw: 0, pitch: -0.02, time: 0.52 },
+  { name: 'caldera-gate', x: 396, z: -540, yaw: 0, pitch: 0.05, time: 0.68 },
 ]
 
 const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-gl=angle'] })

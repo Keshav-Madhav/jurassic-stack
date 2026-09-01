@@ -67,6 +67,12 @@ export class Dino {
     model.scale.setScalar(s)
     const box2 = new THREE.Box3().setFromObject(model)
     model.position.y -= box2.min.y
+    model.traverse((o) => {
+      if (o instanceof THREE.Mesh) {
+        o.castShadow = true
+        o.receiveShadow = true
+      }
+    })
     this.object.add(model)
 
     this.mixer = new THREE.AnimationMixer(model)

@@ -13,6 +13,7 @@ import { Dino } from './dinos'
 import { SPECIES } from './species'
 import { Scatter } from './scatter'
 import { Building, type PieceKind } from './building'
+import { Ruins } from './ruins'
 import { Inventory } from './inventory'
 import { ITEMS, type ItemId } from './items'
 import { Hud } from './hud'
@@ -30,6 +31,8 @@ async function boot(): Promise<void> {
   const renderer = new THREE.WebGLRenderer({ antialias: true })
   renderer.setSize(innerWidth, innerHeight)
   renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
+  renderer.shadowMap.enabled = true
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap
   app.appendChild(renderer.domElement)
 
   const scene = new THREE.Scene()
@@ -64,6 +67,10 @@ async function boot(): Promise<void> {
   await scatter.load()
   scene.add(scatter.group)
   if (save) scatter.restore(save.deadNodes as { id: number; respawnAt: number }[])
+
+  const ruins = new Ruins()
+  await ruins.build(physics)
+  scene.add(ruins.group)
 
   const building = new Building(physics)
   scene.add(building.group)
@@ -539,6 +546,7 @@ async function boot(): Promise<void> {
     for (const d of dinos) d.update(dt, pFeet, hurtPlayer)
     scatter.ensureCollidersAround(focus.x, focus.z, physics)
     water.update(dt)
+    daynight.setFocus(focus.x, focus.z)
     daynight.advance(dt)
     terrain.update(focus.x, focus.z)
 

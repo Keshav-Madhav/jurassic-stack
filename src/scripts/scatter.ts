@@ -243,6 +243,8 @@ class InstancedProp {
       const im = new THREE.InstancedMesh(geo, mat, capacity)
       im.count = 0
       im.frustumCulled = false
+      im.castShadow = true
+      im.receiveShadow = true
       this.meshes.push(im)
       group.add(im)
     })

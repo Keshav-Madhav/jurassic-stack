@@ -118,3 +118,8 @@ Bugs the gate caught: reach measured from camera (all swings whiffed); camera-dr
 - [x] Habitat-driven scatter v2: forest-mask noise clusters woods with real clearings; palms on the beach band, willows on riverbanks, dead trees on dry fringes, ferns/mushrooms on forest floor, flowers in clearings; ~30K grass tufts; ~55K instances total at 58-60 fps
 - [x] Terrain vertex colors (sand/grass lush-dry mottling/rock-by-slope/basalt-by-altitude) + flat shading; darker richer grade (noon + golden)
 - [x] Gates green after 3 real bugs: grass soaking swings aimed at trunks (solid-over-groundcover raycast priority); bbox-center prop pivot shifting trunks off node origins (base-band pivot); gate aim-pitch computed in the wrong frame (head-pivot, not camera)
+
+### M6b — shadows, ruins, lake shores ("improvements and betterments" round)
+- [x] Real-time shadows: one 2048px directional map following the player (±85 m, texel-snapped) — terrain receives; props/dinos/ruins/buildings/player cast. Two classic bugs fixed: shadow camera bounds set without `updateProjectionMatrix` (stayed ±5 m), and `normalBias: 1.6` — world METERS — erasing every caster thinner than 1.6 m (now 0.18 ≈ 2× texel). CSM upgrade remains for M6 proper.
+- [x] First ruins: prefab layouts at all six baked sites (columns/arches/toppled pieces + the stag statue on the beach facing the volcano — the arc's tutorial beacon; the caldera-gate arch is the future keystone door). Colliders on standing pieces. The pristine castle-barracks model was cut (read as a fort, not ruins).
+- [x] Lake shore rings enforced in the bake (with river inlet/outlet gaps) + shore validator — the edge-on floating-rim artifact is gone at the source.

@@ -314,6 +314,35 @@ console.time('thermal')
 }
 console.timeEnd('thermal')
 
+// lake shore ring: terrain just outside each basin must sit ABOVE the fill
+// level, or the water disc edge hangs over lower ground ("infinity pool" rim
+// seen edge-on — caught on the M5b screenshots)
+for (let iz = 0; iz < SIDE; iz++) {
+  for (let ix = 0; ix < SIDE; ix++) {
+    const x = worldX(ix), z = worldZ(iz)
+    for (const lake of LAKES) {
+      const d = Math.hypot(x - lake.x, z - lake.z)
+      if (d < lake.r * 0.92 || d > lake.r * 1.5) continue
+      // rivers cut through the shore — leave their corridors as inlets/outlets
+      let riverGap = false
+      for (const path of RIVERS) {
+        if (distToPath(x, z, path).d < 26) {
+          riverGap = true
+          break
+        }
+      }
+      if (riverGap) continue
+      const i0 = idx(ix, iz)
+      const need = lake.level + 0.7
+      if (H[i0] < need) {
+        // raise with a soft profile peaking at the rim
+        const t = 1 - Math.abs(d - lake.r * 1.1) / (lake.r * 0.45)
+        H[i0] = Math.max(H[i0], need - 0.4 + Math.max(0, t) * 0.9)
+      }
+    }
+  }
+}
+
 // re-assert the spawn beach after erosion (droplets gully everything)
 for (let iz = 0; iz < SIDE; iz++) {
   for (let ix = 0; ix < SIDE; ix++) {
@@ -417,9 +446,18 @@ for (const [ri, path] of RIVERS.entries()) {
     prev = Math.max(prev, h)
   }
 }
-// lakes hold water: basin floor below fill level
+// lakes hold water: basin floor below fill level, shore ring above it
 for (const lake of LAKES) {
   if (hAt(lake.x, lake.z) > lake.level - 1) fail(`lake at (${lake.x},${lake.z}) floor above fill level`)
+  for (let a = 0; a < Math.PI * 2; a += 0.3) {
+    const sx = lake.x + Math.cos(a) * lake.r * 1.12
+    const sz = lake.z + Math.sin(a) * lake.r * 1.12
+    const nearRiver = RIVERS.some((p) => distToPath(sx, sz, p).d < 30)
+    if (!nearRiver && hAt(sx, sz) < lake.level + 0.2) {
+      fail(`lake at (${lake.x},${lake.z}) shore below fill level at angle ${a.toFixed(1)}`)
+      break
+    }
+  }
 }
 
 // ---------- outputs ----------

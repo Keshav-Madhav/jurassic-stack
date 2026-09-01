@@ -25,6 +25,7 @@ export class Player {
       mat,
     )
     body.position.y = this.mover.feetOffset
+    body.castShadow = true
     const nose = new THREE.Mesh(
       new THREE.BoxGeometry(0.14, 0.14, 0.26),
       new THREE.MeshStandardMaterial({ color: 0xa8752a }),

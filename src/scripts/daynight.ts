@@ -112,13 +112,33 @@ export class DayNight {
   private envTarget: THREE.WebGLRenderTarget | null = null
   private lastBakedElevation = Number.POSITIVE_INFINITY
 
+  /** Shadow follow-focus (the player/mount), set per frame from the game loop. */
+  private focus = new THREE.Vector3()
+
   constructor(
     private renderer: THREE.WebGLRenderer,
     private scene: THREE.Scene,
   ) {
     this.sky.scale.setScalar(45000)
-    scene.add(this.sky, this.sunLight, this.rimLight, this.hemi)
+    scene.add(this.sky, this.sunLight, this.sunLight.target, this.rimLight, this.hemi)
     this.rimLight.position.set(-300, 140, -260)
+
+    // one directional shadow map following the player (CSM comes at M6 proper)
+    this.sunLight.castShadow = true
+    const sc = this.sunLight.shadow
+    sc.mapSize.set(2048, 2048)
+    const EXTENT = 85
+    sc.camera.left = -EXTENT
+    sc.camera.right = EXTENT
+    sc.camera.top = EXTENT
+    sc.camera.bottom = -EXTENT
+    sc.camera.near = 1
+    sc.camera.far = 800
+    sc.camera.updateProjectionMatrix() // without this the default ±5 m box stays
+    sc.bias = -0.0003
+    // normalBias is in WORLD METERS — 1.6 erased every caster thinner than
+    // 1.6 m (trunks, the player). ~2× texel size (170 m / 2048 ≈ 8 cm) is right.
+    sc.normalBias = 0.18
     scene.fog = new THREE.Fog(0x87b5d9, 350, 2450)
     // the Sky PMREM is HDR-bright; at full strength it washes every material
     // to pastel. IBL is a subtle fill here, the direct lights carry the look.
@@ -130,6 +150,11 @@ export class DayNight {
   advance(dt: number): void {
     this.time = (this.time + dt / DAY_LENGTH_S) % 1
     this.apply()
+  }
+
+  /** Keep the shadow frustum centered on the action (snapped to reduce shimmer). */
+  setFocus(x: number, z: number): void {
+    this.focus.set(Math.round(x / 2) * 2, 0, Math.round(z / 2) * 2)
   }
 
   setTime(t: number): void {
@@ -176,7 +201,8 @@ export class DayNight {
     this.hemi.intensity = grade.hemiIntensity
     this.sunLight.color.copy(grade.sun)
     this.sunLight.intensity = grade.sunIntensity
-    this.sunLight.position.copy(this.sunDir).multiplyScalar(600)
+    this.sunLight.position.copy(this.focus).addScaledVector(this.sunDir, 420)
+    this.sunLight.target.position.copy(this.focus)
     this.rimLight.intensity = grade.rimIntensity
 
     // sky shader follows the real sun even when the lights have switched to moon
