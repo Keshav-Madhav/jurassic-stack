@@ -105,7 +105,7 @@ const SPECS: Record<NodeKind, PlaceSpec> = {
   willow: { cell: 30, chance: 0.55, sMin: 5, sMax: 8.5, cap: 350, seed: 909, habitat: (h, _ny, _f, riverD) => riverD < 34 && riverD > 13 && h > 2 },
   rock: { cell: 40, chance: 0.4, sMin: 0.8, sMax: 2.4, cap: 1600, seed: 303, habitat: () => true },
   log: { cell: 44, chance: 0.4, sMin: 1.2, sMax: 2.2, cap: 800, seed: 606, habitat: (h, _ny, f) => f > 0.1 && h > 3 },
-  bush: { cell: 20, chance: 0.55, sMin: 1.2, sMax: 2.8, cap: 3600, seed: 404, habitat: (h) => h > 2.2 },
+  bush: { cell: 16, chance: 0.62, sMin: 1.1, sMax: 2.9, cap: 5600, seed: 404, habitat: (h) => h > 2.2 },
   fern: { cell: 10, chance: 0.7, sMin: 0.8, sMax: 1.9, cap: 10000, seed: 505, habitat: (h, _ny, f) => f > 0.1 && h > 3 },
   flower: { cell: 18, chance: 0.5, sMin: 0.6, sMax: 1.2, cap: 2600, seed: 111, habitat: (h, _ny, f) => f < 0.05 && h > 2.4 },
   grass: { cell: 7, chance: 0.72, sMin: 0.45, sMax: 1.2, cap: 30000, seed: 555, habitat: (h) => h > 1.6 },
@@ -234,8 +234,10 @@ class InstancedProp {
       mat.metalness = 0
       // real-leaf greens: Quaternius foliage ships bright — pull green-dominant
       // materials toward deep leaf green (user art direction: darker world)
-      if (mat.color.g > mat.color.r * 1.15 && mat.color.g > mat.color.b * 1.15) {
-        mat.color.lerp(new THREE.Color(0x14300f), 0.45)
+      // green AND yellow-green foliage (the willow's leaves have high red and
+      // slipped the strict test — the neon bush on the riverbank)
+      if (mat.color.g > mat.color.r * 0.9 && mat.color.g > mat.color.b * 1.1 && mat.color.g > 0.25) {
+        mat.color.lerp(new THREE.Color(0x14300f), 0.55)
       }
       if (this.recolor) this.recolor(mat)
       const im = new THREE.InstancedMesh(geo, mat, capacity)
@@ -363,12 +365,22 @@ export class Scatter {
         const variant = Math.floor(rand() * KIND_MODELS[kind].length)
         const scale = spec.sMin + rand() * (spec.sMax - spec.sMin)
         const rotY = rand() * Math.PI * 2
-        const tint = 0.72 + rand() * 0.42
+        // cover reads too bright (backlog #9) — darker, tighter tint band
+        const tint = GROUND_COVER.has(kind) ? 0.55 + rand() * 0.3 : 0.72 + rand() * 0.42
         if (roll > spec.chance) continue
         const x = gx + jx
         const z = gz + jz
         const h = heightAt(x, z)
         if (h < SEA_LEVEL + 1.1) continue
+        // never under lake water (backlog #10: trees inside lakes)
+        let drowned = false
+        for (const lake of worldMeta?.lakes ?? []) {
+          if (Math.hypot(x - lake.x, z - lake.z) < lake.r * 1.2 && h < lake.level + 0.6) {
+            drowned = true
+            break
+          }
+        }
+        if (drowned) continue
         const ny = normalAt(x, z, this.tmpN).y
         if (ny < (kind === 'rock' ? 0.55 : 0.72)) continue
         const dv = Math.hypot(x - VOLCANO.x, z - VOLCANO.z)

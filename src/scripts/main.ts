@@ -117,15 +117,25 @@ async function boot(): Promise<void> {
     // raptors: spawn-adjacent (also keeps the E2E gate deterministic — nearest)
     spawnDino('raptor', SPAWN.x + 26, SPAWN.z - 30)
     spawnDino('raptor', SPAWN.x - 40, SPAWN.z - 55)
+    // raptor packs roaming the interior (backlog #7: too few dinos)
     spawnDino('raptor', 60, 80)
+    spawnDino('raptor', 75, 95)
     spawnDino('raptor', -320, -60)
-    // herbivores: meadows and clearings, farther out
+    spawnDino('raptor', -338, -48)
+    spawnDino('raptor', 420, -180)
+    spawnDino('raptor', -150, 520)
+    // herbivore herds: meadows and clearings
     spawnDino('trike', 150, 430)
     spawnDino('trike', 190, 460)
+    spawnDino('trike', 170, 405)
+    spawnDino('trike', -480, 330)
     spawnDino('stego', -220, 280)
+    spawnDino('stego', -195, 255)
     spawnDino('stego', 330, 170)
-    // the highlands apex — the danger gradient made flesh
+    spawnDino('stego', 520, 420)
+    // the highlands: two apexes patrol the north
     spawnDino('trex', 40, -280)
+    spawnDino('trex', -260, -380)
   }
 
   const hud = new Hud(document.getElementById('hud')!, inventory, (id) => {

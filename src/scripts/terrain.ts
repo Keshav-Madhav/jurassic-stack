@@ -6,14 +6,16 @@
 // through heightmap.ts. LOD0 vertex data doubles as the physics collider mesh
 // (physics.ts asks for it via chunkGridData).
 import * as THREE from 'three'
-import { heightAt, normalAt, forestMaskAt, HALF_SIZE, SEA_LEVEL } from './heightmap'
+import { heightAt, normalAt, forestMaskAt, worldMeta, HALF_SIZE, SEA_LEVEL } from './heightmap'
 
 export const CHUNK_SIZE = 128
 export const CHUNKS_PER_SIDE = (HALF_SIZE * 2) / CHUNK_SIZE // 16
 const LOD_QUADS = [64, 32, 16, 8]
 /** Camera distance (m) beyond which each LOD level kicks in. */
 const LOD_DISTANCE = [0, 260, 520, 1000]
-const SKIRT_DEPTH = 4
+/** Skirt depth grows with LOD coarseness — 4m skirts couldn't cover mesa
+ *  walls where a coarse chunk borders a fine one (backlog #8: LOD holes). */
+const skirtDepthFor = (quads: number) => 5 + (64 / quads) * 3 // LOD0 8m … LOD3 29m
 
 interface Chunk {
   cx: number
@@ -183,6 +185,29 @@ const C_ROCK = new THREE.Color(0x5e5c58) // weathered gray
 const C_ROCK_STEEP = new THREE.Color(0x44423f)
 const C_FLOOR = new THREE.Color(0x3a2e1f) // forest floor: dirt + leaf litter
 const C_FLOOR_LIT = new THREE.Color(0x51402a)
+const C_MUD = new THREE.Color(0x453827) // wet banks
+const C_SHORE_SAND = new THREE.Color(0x8f7a52)
+
+/** Distance to the nearest river centerline or lake ring (for wet banks). */
+function waterEdgeDist(x: number, z: number): number {
+  const meta = worldMeta
+  if (!meta) return Infinity
+  let best = Infinity
+  for (const path of meta.rivers) {
+    for (let i = 0; i < path.length - 1; i++) {
+      const ax = path[i].x
+      const az = path[i].z
+      const dx = path[i + 1].x - ax
+      const dz = path[i + 1].z - az
+      const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz)))
+      best = Math.min(best, Math.hypot(x - (ax + dx * t), z - (az + dz * t)) - 12)
+    }
+  }
+  for (const lake of meta.lakes) {
+    best = Math.min(best, Math.abs(Math.hypot(x - lake.x, z - lake.z) - lake.r * 0.95))
+  }
+  return best
+}
 const C_BASALT = new THREE.Color(0x453d36) // volcano flanks
 const C_CINDER = new THREE.Color(0x332c27) // summit
 
@@ -208,6 +233,14 @@ function splatAt(x: number, z: number, h: number, ny: number, out: THREE.Vector4
       dirt = Math.min(1, ((forest - 0.05) / 0.25)) * 0.85
       grass *= 1 - dirt
     }
+    const wd = waterEdgeDist(x, z)
+    if (wd < 14) {
+      const t = Math.min(1, Math.max(0, 1 - wd / 14)) * 0.8
+      const sandy = Math.min(1, Math.max(0, 1 - wd / 5)) * 0.6
+      dirt = dirt * (1 - t) + t * (1 - sandy)
+      sand = sand * (1 - t) + t * sandy
+      grass *= 1 - t
+    }
     if (h > 55) {
       const t = Math.min(1, (h - 55) / 55)
       rock += t
@@ -232,6 +265,12 @@ function groundColorAt(x: number, z: number, h: number, ny: number, out: THREE.C
   const n2 = Math.sin(x * 0.11 + z * 0.09) * Math.cos(x * 0.07 - z * 0.13)
   const varT = n1 * 0.5 + n2 * 0.28 // ~[-0.78, 0.78]
 
+  // under a lake's fill level → bed color, never lawn
+  for (const lake of worldMeta?.lakes ?? []) {
+    if (Math.hypot(x - lake.x, z - lake.z) < lake.r * 1.05 && h < lake.level - 0.2) {
+      return out.copy(C_DEEP).lerp(C_MUD, THREE.MathUtils.clamp((h - (lake.level - 5)) / 5, 0, 1) * 0.6)
+    }
+  }
   if (h < SEA_LEVEL - 0.4) {
     out.copy(C_DEEP).lerp(C_SAND, THREE.MathUtils.clamp((h + 8) / 8, 0, 1) * 0.5)
   } else if (h < 2.4) {
@@ -246,6 +285,16 @@ function groundColorAt(x: number, z: number, h: number, ny: number, out: THREE.C
     if (forest > 0.05) {
       const t = THREE.MathUtils.clamp((forest - 0.05) / 0.25, 0, 1) * 0.85
       out.lerp(_c.copy(C_FLOOR).lerp(C_FLOOR_LIT, 0.5 + varT * 0.5), t)
+    }
+    // wet banks: mud then a sand lip against rivers and lakes (backlog #1)
+    const wd = waterEdgeDist(x, z)
+    if (wd < 14) {
+      const t = THREE.MathUtils.clamp(1 - wd / 14, 0, 1)
+      out.lerp(_c.copy(C_MUD).lerp(C_SHORE_SAND, THREE.MathUtils.clamp(1 - wd / 5, 0, 1) * 0.6), t * 0.8)
+    }
+    // gray rocky patches where the low-frequency noise bottoms out
+    if (n1 < -0.45) {
+      out.lerp(C_ROCK, THREE.MathUtils.clamp((-0.45 - n1) * 2.2, 0, 0.7))
     }
     // beach→grass blend band
     if (h < 3.6) out.lerp(_c2.copy(C_SAND), (3.6 - h) / 1.2 * 0.6)
@@ -311,7 +360,7 @@ function buildChunkGeometry(originX: number, originZ: number, quads: number): TH
       const src = edgeIndex(edge, i) * 3
       const dst = (gridCount + edge * side + i) * 3
       pos[dst] = pos[src]
-      pos[dst + 1] = pos[src + 1] - SKIRT_DEPTH
+      pos[dst + 1] = pos[src + 1] - skirtDepthFor(quads)
       pos[dst + 2] = pos[src + 2]
       nor[dst] = nor[src]; nor[dst + 1] = nor[src + 1]; nor[dst + 2] = nor[src + 2]
       col[dst] = col[src]; col[dst + 1] = col[src + 1]; col[dst + 2] = col[src + 2]

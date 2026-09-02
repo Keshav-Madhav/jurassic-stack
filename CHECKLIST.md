@@ -203,3 +203,13 @@ User's 10 + mandate, to be burned down across M7d+ and the MAP OVERHAUL mileston
 - [x] Fix 2: load-time sanitizer heals ANY bad saved position (non-finite, out of bounds, below ground, >250m up) — existing corrupted saves self-repair on next load, no wipe needed
 - [x] Gate hardened: creative gate now saves while MOUNTED, reloads, asserts on-ground spawn + not falling (12 checks); healer verified against a byte-exact replica of the corrupted save (y=-519.6 → spawns at ground)
 - [x] Process: this escaped because no gate covered save-state × riding interactions — mounted-save-reload is now permanent coverage
+
+### M7d — backlog burn-down round 1 (items 1, 3, 7, 8, 9, 10)
+- [x] #10 props in lakes: placement now rejects anything under a lake's fill level
+- [x] #3 floating lake: basins baked uniformly DEEP inside the waterline (the soft blend left a walkable 1-3m shelf — you could stand on the bed with the water sheet overhead); lakebeds color as dark underwater, never lawn
+- [x] #8 LOD holes: skirt depth scales with LOD coarseness (8m at LOD0 → 29m at LOD3; fixed 4m couldn't cover mesa walls)
+- [x] #9 bright bushes: foliage darkening widened to catch yellow-greens (the willow slipped the strict green test); ground-cover tint band lowered to 0.55-0.85; bushes denser (cap 5600, tighter cells)
+- [x] #1 ground variation: mud→sand wet banks along rivers/lake rings, gray rocky patches where low-freq noise bottoms out (color + splat)
+- [x] #7 dino density: 18 spawns — raptor packs across the interior, trike/stego herds, a second highlands rex
+- Known remainders for next rounds: willow still brighter than ideal; a floating log/mushroom artifact near the mesa (asset-floater hunt continues); canyon readability + the full MAP OVERHAUL
+- Gates 9/9, 29/29, 12/12, creative 12/12; island + navmesh rebaked, validators pass

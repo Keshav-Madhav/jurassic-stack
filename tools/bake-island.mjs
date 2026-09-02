@@ -153,11 +153,13 @@ for (let iz = 0; iz < SIDE; iz++) {
     const beach = Math.exp(-(ds * ds) / (2 * 210 * 210)) * 0.92
     h = h * (1 - beach) + 3.0 * beach
 
-    // lake basins: flatten below their fill level
+    // lake basins: uniformly DEEP inside the waterline (a soft-blended basin
+    // left a walkable shelf 1-3m under the surface — you could stand on the
+    // bed with the water sheet overhead; backlog #3 "lake is floating")
     for (const lake of LAKES) {
       const d = Math.hypot(x - lake.x, z - lake.z)
-      const w = smoothstep(lake.r, lake.r * 0.45, d)
-      h = h * (1 - w) + (lake.level - 3.5) * w
+      const w = smoothstep(lake.r * 1.02, lake.r * 0.8, d)
+      h = h * (1 - w) + (lake.level - 4.5) * w
     }
 
     H[idx(ix, iz)] = h
