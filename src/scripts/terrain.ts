@@ -33,14 +33,70 @@ export class Terrain {
   private material: THREE.MeshStandardMaterial
 
   constructor() {
-    // vertex-colored ground (see groundColorAt) — the material stays white
+    // Splat-textured ground: four CC0 tiling albedos (grass/dirt/rock/sand)
+    // blended by a per-vertex weight attribute, tinted by the vertex color
+    // (which carries the biome/variation palette). World-space UVs, two
+    // scales per sample to break tiling.
+    const texLoader = new THREE.TextureLoader()
+    const tile = (url: string): THREE.Texture => {
+      const t = texLoader.load(url)
+      t.wrapS = THREE.RepeatWrapping
+      t.wrapT = THREE.RepeatWrapping
+      t.colorSpace = THREE.SRGBColorSpace
+      return t
+    }
+    const texGrass = tile('textures/grass.jpg')
+    const texDirt = tile('textures/dirt.jpg')
+    const texRock = tile('textures/rock.jpg')
+    const texSand = tile('textures/sand.jpg')
+
     this.material = new THREE.MeshStandardMaterial({
       color: 0xffffff,
       vertexColors: true,
       roughness: 1,
       metalness: 0,
-      flatShading: true,
     })
+    this.material.onBeforeCompile = (shader) => {
+      shader.uniforms.uGrass = { value: texGrass }
+      shader.uniforms.uDirt = { value: texDirt }
+      shader.uniforms.uRock = { value: texRock }
+      shader.uniforms.uSand = { value: texSand }
+      shader.vertexShader = shader.vertexShader
+        .replace(
+          '#include <common>',
+          '#include <common>\nattribute vec4 splat;\nvarying vec4 vSplat;\nvarying vec3 vWorldPos;',
+        )
+        .replace(
+          '#include <begin_vertex>',
+          '#include <begin_vertex>\nvSplat = splat;\nvWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;',
+        )
+      shader.fragmentShader = shader.fragmentShader
+        .replace(
+          '#include <common>',
+          `#include <common>
+          uniform sampler2D uGrass; uniform sampler2D uDirt; uniform sampler2D uRock; uniform sampler2D uSand;
+          varying vec4 vSplat; varying vec3 vWorldPos;
+          vec3 tiled(sampler2D t, vec2 uv) {
+            // two scales, hash-blended: breaks visible tiling at distance
+            vec3 a = texture2D(t, uv * 0.14).rgb;
+            vec3 b = texture2D(t, uv * 0.031).rgb;
+            return mix(a, b, 0.42);
+          }`,
+        )
+        .replace(
+          '#include <color_fragment>',
+          `{
+            vec2 uv = vWorldPos.xz;
+            vec4 w = vSplat;
+            float sum = max(w.r + w.g + w.b + w.a, 1e-4);
+            w /= sum;
+            vec3 tex = tiled(uGrass, uv) * w.r + tiled(uDirt, uv) * w.g + tiled(uRock, uv) * w.b + tiled(uSand, uv) * w.a;
+            // vertex color carries the palette; texture supplies detail.
+            // 2.2 ≈ recenter the albedo around 1 so the palette's value holds.
+            diffuseColor.rgb = vec3(vColor) * tex * 2.2;
+          }`,
+        )
+    }
     for (let cz = 0; cz < CHUNKS_PER_SIDE; cz++) {
       for (let cx = 0; cx < CHUNKS_PER_SIDE; cx++) {
         const originX = -HALF_SIZE + cx * CHUNK_SIZE
@@ -133,6 +189,42 @@ const C_CINDER = new THREE.Color(0x332c27) // summit
 const _c = new THREE.Color()
 const _c2 = new THREE.Color()
 
+/** Splat weights (grass, dirt, rock, sand) matching groundColorAt's zones. */
+function splatAt(x: number, z: number, h: number, ny: number, out: THREE.Vector4): THREE.Vector4 {
+  let grass = 0
+  let dirt = 0
+  let rock = 0
+  let sand = 0
+  if (h < 2.4) {
+    sand = 1
+  } else {
+    grass = 1
+    if (h < 3.6) {
+      sand = ((3.6 - h) / 1.2) * 0.6
+      grass = 1 - sand
+    }
+    const forest = forestMaskAt(x, z)
+    if (forest > 0.05) {
+      dirt = Math.min(1, ((forest - 0.05) / 0.25)) * 0.85
+      grass *= 1 - dirt
+    }
+    if (h > 55) {
+      const t = Math.min(1, (h - 55) / 55)
+      rock += t
+      grass *= 1 - t
+      dirt *= 1 - t
+    }
+  }
+  if (ny < 0.82) {
+    const t = Math.min(1, (0.82 - ny) / 0.2)
+    rock = rock * (1 - t) + t
+    grass *= 1 - t
+    dirt *= 1 - t
+    sand *= 1 - t
+  }
+  return out.set(grass, dirt, rock, sand)
+}
+
 /** Ground color by height/slope + two-frequency variation noise. */
 function groundColorAt(x: number, z: number, h: number, ny: number, out: THREE.Color): THREE.Color {
   // cheap deterministic variation (hash-free trig noise is fine for color)
@@ -179,8 +271,10 @@ function buildChunkGeometry(originX: number, originZ: number, quads: number): TH
   const pos = new Float32Array(total * 3)
   const nor = new Float32Array(total * 3)
   const col = new Float32Array(total * 3)
+  const spl = new Float32Array(total * 4)
   const n = new THREE.Vector3()
   const c = new THREE.Color()
+  const s4 = new THREE.Vector4()
 
   for (let iz = 0; iz < side; iz++) {
     for (let ix = 0; ix < side; ix++) {
@@ -195,6 +289,9 @@ function buildChunkGeometry(originX: number, originZ: number, quads: number): TH
       nor[o] = n.x; nor[o + 1] = n.y; nor[o + 2] = n.z
       groundColorAt(x, z, h, n.y, c)
       col[o] = c.r; col[o + 1] = c.g; col[o + 2] = c.b
+      splatAt(x, z, h, n.y, s4)
+      const o4 = (iz * side + ix) * 4
+      spl[o4] = s4.x; spl[o4 + 1] = s4.y; spl[o4 + 2] = s4.z; spl[o4 + 3] = s4.w
     }
   }
 
@@ -218,6 +315,9 @@ function buildChunkGeometry(originX: number, originZ: number, quads: number): TH
       pos[dst + 2] = pos[src + 2]
       nor[dst] = nor[src]; nor[dst + 1] = nor[src + 1]; nor[dst + 2] = nor[src + 2]
       col[dst] = col[src]; col[dst + 1] = col[src + 1]; col[dst + 2] = col[src + 2]
+      const s4src = edgeIndex(edge, i) * 4
+      const s4dst = (gridCount + edge * side + i) * 4
+      spl[s4dst] = spl[s4src]; spl[s4dst + 1] = spl[s4src + 1]; spl[s4dst + 2] = spl[s4src + 2]; spl[s4dst + 3] = spl[s4src + 3]
     }
   }
 
@@ -256,6 +356,7 @@ function buildChunkGeometry(originX: number, originZ: number, quads: number): TH
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3))
   geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3))
   geo.setAttribute('color', new THREE.BufferAttribute(col, 3))
+  geo.setAttribute('splat', new THREE.BufferAttribute(spl, 4))
   geo.setIndex(new THREE.BufferAttribute(indices, 1))
   geo.computeBoundingSphere()
   return geo

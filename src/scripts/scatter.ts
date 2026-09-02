@@ -14,6 +14,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import { heightAt, normalAt, forestMaskAt, SEA_LEVEL, HALF_SIZE, SPAWN, VOLCANO, worldMeta } from './heightmap'
 import { CHUNK_SIZE, CHUNKS_PER_SIDE } from './terrain'
+import { addObstacle } from './obstacles'
 import type { Physics } from './physics'
 import type { ItemId } from './items'
 
@@ -51,8 +52,8 @@ const NODE_DEFS: Record<NodeKind, { hp: number; yields: Partial<Record<ItemId, [
   mushroom: { hp: 1, yields: { berry: [1, 1] } },
 }
 
-/** Kinds whose trunks get physics cylinders. */
-const TRUNK_KINDS = new Set<NodeKind>(['tree', 'pine', 'palm', 'deadtree', 'willow'])
+/** Kinds whose trunks get physics cylinders (rocks: squat cylinders too). */
+const TRUNK_KINDS = new Set<NodeKind>(['tree', 'pine', 'palm', 'deadtree', 'willow', 'rock'])
 
 interface ModelRef {
   file: string
@@ -341,6 +342,7 @@ export class Scatter {
         const key = `${kind}#${variant}`
         if (!this.order.has(key)) this.order.set(key, [])
         this.order.get(key)!.push(id)
+        if (TRUNK_KINDS.has(kind)) addObstacle(x, z, kind === 'rock' ? scale * 0.42 : 0.4)
         count++
       }
     }
@@ -441,9 +443,11 @@ export class Scatter {
     for (const n of this.nodes) {
       if (!TRUNK_KINDS.has(n.kind) || !n.alive) continue
       if (!this.activeChunks.has(this.chunkKeyOf(n)) || this.treeColliders.has(n.id)) continue
-      const half = n.scale * 0.5
+      const rock = n.kind === 'rock'
+      const half = rock ? n.scale * 0.32 : n.scale * 0.5
+      const radius = rock ? n.scale * 0.42 : 0.35
       const col = physics.world.createCollider(
-        RAPIER.ColliderDesc.cylinder(half, 0.35).setTranslation(n.x, n.y + half, n.z),
+        RAPIER.ColliderDesc.cylinder(half, radius).setTranslation(n.x, n.y + half, n.z),
       )
       this.treeColliders.set(n.id, col)
     }

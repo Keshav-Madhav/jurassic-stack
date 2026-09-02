@@ -145,3 +145,10 @@ Bugs the gate caught: reach measured from camera (all swings whiffed); camera-dr
 - [x] Runtime navmesh (`navmesh.ts`): aggro-chase and tamed-follow now path-follow waypoints (repath ~1 s, steering between waypoints, direct-seek fallback); ambient wander stays on cheap steering. Full DetourCrowd deferred to M7 herds.
 - [x] Water ribbons auto-fit their channel (edges probe the banks) — canyon walls no longer poke through / no hovering water
 - [x] Gates 9/9, 29/29, 12/12. **M5 complete.**
+
+### M5d — "proper everything" consolidation (user: better AI, better terrain, real textures, collisions)
+- [x] Real ground textures: 4 CC0 albedos (ambientCG grass/dirt/rock/sand, 512px, ~380KB) splat-blended in-shader by a per-vertex weight attribute matching the palette zones; world-space UVs at two scales (anti-tiling); vertex color = palette tint, texture = detail. Caught: terrain mesh vanished entirely on a vColor vec4/vec3 shader compile error — visible as "ocean everywhere" (physics kept working, player stood on invisible ground)
+- [x] Terrain micro-detail inside the shared heightAt (0.35m two-octave ripple, faded on beaches, below navmesh walkableClimb) — render/physics/AI stay exactly consistent
+- [x] AI: territorial aggro (raptors charge within 11m unprovoked), pack aggro (same-species within 28m join the fight), flavor idle one-shots (sniff/call/roar), obstacle-avoid steering vs a spatial hash of all trunks+rocks (colliders only exist near the player; AI everywhere needed geometry knowledge)
+- [x] Collisions: rocks get streamed squat-cylinder colliders; dino-dino separation push; player-dino body push (soft, gameplay-level)
+- [x] Gates 9/9, 29/29, 12/12

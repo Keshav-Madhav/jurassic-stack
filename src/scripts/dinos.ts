@@ -8,6 +8,7 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import { heightAt, normalAt, SEA_LEVEL } from './heightmap'
+import { nearestObstacle } from './obstacles'
 import { findPath, type PathPoint } from './navmesh'
 import { Mover, type MoverConfig } from './mover'
 import type { Physics } from './physics'
@@ -38,6 +39,8 @@ export class Dino {
 
   private mixer: THREE.AnimationMixer | null = null
   private actions: Partial<Record<'idle' | 'walk' | 'run' | 'attack' | 'ko', THREE.AnimationAction>> = {}
+  private flavorActions: THREE.AnimationAction[] = []
+  private flavorT = 4 + Math.random() * 8
   private stateT = 2 + Math.random() * 3
   private target = new THREE.Vector3()
   private home = new THREE.Vector3()
@@ -83,6 +86,14 @@ export class Dino {
     for (const slot of ['idle', 'walk', 'run', 'attack', 'ko'] as const) {
       const clip = animations.find((a) => this.species.clips[slot].test(a.name))
       if (clip) this.actions[slot] = this.mixer.clipAction(clip)
+    }
+    for (const re of this.species.flavorClips ?? []) {
+      const clip = animations.find((a) => re.test(a.name))
+      if (clip) {
+        const a = this.mixer.clipAction(clip)
+        a.setLoop(THREE.LoopOnce, 1)
+        this.flavorActions.push(a)
+      }
     }
     this.actions.idle?.play()
     this.actions.walk?.play()
@@ -230,6 +241,12 @@ export class Dino {
       case 'idle': {
         this.stateT -= dt
         this.speed = Math.max(0, this.speed - 6 * dt)
+        if (this.maybeAggro(playerPos)) break
+        this.flavorT -= dt
+        if (this.flavorT <= 0 && this.flavorActions.length) {
+          this.flavorT = 5 + Math.random() * 10
+          this.flavorActions[Math.floor(Math.random() * this.flavorActions.length)].reset().play()
+        }
         if (this.stateT <= 0) {
           this.pickWanderTarget()
           this.state = 'wander'
@@ -237,6 +254,7 @@ export class Dino {
         break
       }
       case 'wander': {
+        if (this.maybeAggro(playerPos)) break
         const dx = this.target.x - pos.x
         const dz = this.target.z - pos.z
         if (Math.hypot(dx, dz) < 1.6) {
@@ -263,6 +281,25 @@ export class Dino {
     this.animate(dt, this.speed / (running ? this.species.runSpeed : this.species.walkSpeed), running)
   }
 
+  /** Wild aggressive dinos attack on proximity (territorial). */
+  private maybeAggro(playerPos: THREE.Vector3): boolean {
+    if (this.species.temperament !== 'aggressive' || this.species.aggroRange <= 0) return false
+    if (this.object.position.distanceTo(playerPos) > this.species.aggroRange) return false
+    this.state = 'aggro'
+    this.stateT = 12
+    this.actions.attack // (roar happens via flavor clip on entry when present)
+    this.flavorActions[1]?.reset().play() // call_alert if loaded
+    return true
+  }
+
+  /** Packmates join a fight: called by the herd manager when one aggros. */
+  joinPack(): void {
+    if (this.state === 'idle' || this.state === 'wander') {
+      this.state = 'aggro'
+      this.stateT = 10
+    }
+  }
+
   /** Seek toward a target via the navmesh: repath periodically, steer along
    *  waypoints, fall back to direct seek when no route exists. */
   private seekVia(target: THREE.Vector3, dt: number, speed: number): void {
@@ -287,7 +324,17 @@ export class Dino {
 
   private seek(tx: number, tz: number, dt: number, speed: number): void {
     const pos = this.object.position
-    const want = Math.atan2(tx - pos.x, tz - pos.z)
+    let want = Math.atan2(tx - pos.x, tz - pos.z)
+    // steer around tree trunks/rocks: blend an away-vector for obstacles ahead
+    const ob = nearestObstacle(pos.x, pos.z, 3.2)
+    if (ob) {
+      const away = Math.atan2(pos.x - ob.x, pos.z - ob.z)
+      let rel = away - want
+      while (rel > Math.PI) rel -= Math.PI * 2
+      while (rel < -Math.PI) rel += Math.PI * 2
+      const closeness = 1 - Math.min(1, ob.d / 3.2)
+      want += rel * 0.6 * closeness
+    }
     let d = want - this.heading
     while (d > Math.PI) d -= Math.PI * 2
     while (d < -Math.PI) d += Math.PI * 2

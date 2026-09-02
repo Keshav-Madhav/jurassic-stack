@@ -560,6 +560,46 @@ async function boot(): Promise<void> {
     player.setHeldItem(inventory.held)
     const pFeet = feetPos()
     for (const d of dinos) d.update(dt, pFeet, hurtPlayer)
+    // pack aggro: a wild raptor entering aggro pulls packmates in range
+    for (const d of dinos) {
+      if (d.state !== 'aggro' || !d.object.visible) continue
+      for (const o of dinos) {
+        if (o === d || o.state === 'tamed' || o.state === 'ko' || !o.object.visible) continue
+        if (o.species.id === d.species.id && o.object.position.distanceTo(d.object.position) < d.species.packRange) {
+          o.joinPack()
+        }
+      }
+    }
+    // dino-dino separation + player-dino body push (soft, gameplay-level)
+    for (let i = 0; i < dinos.length; i++) {
+      const a = dinos[i]
+      if (!a.object.visible || a === riding) continue
+      for (let j = i + 1; j < dinos.length; j++) {
+        const b = dinos[j]
+        if (!b.object.visible || b === riding) continue
+        const dx = b.object.position.x - a.object.position.x
+        const dz = b.object.position.z - a.object.position.z
+        const d2 = Math.hypot(dx, dz)
+        const min = 1.6
+        if (d2 > 0.01 && d2 < min) {
+          const push = ((min - d2) / d2) * 0.5
+          a.object.position.x -= dx * push
+          a.object.position.z -= dz * push
+          b.object.position.x += dx * push
+          b.object.position.z += dz * push
+        }
+      }
+      if (!riding && a.state !== 'ko') {
+        const dx = player.mover.position.x - a.object.position.x
+        const dz = player.mover.position.z - a.object.position.z
+        const d2 = Math.hypot(dx, dz)
+        const min = 1.3
+        if (d2 > 0.01 && d2 < min) {
+          const px = player.mover.position
+          player.mover.teleport(a.object.position.x + (dx / d2) * min, px.y, a.object.position.z + (dz / d2) * min)
+        }
+      }
+    }
     scatter.ensureCollidersAround(focus.x, focus.z, physics)
     water.update(dt)
     daynight.setFocus(focus.x, focus.z)

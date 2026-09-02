@@ -20,6 +20,10 @@ export interface SpeciesDef {
   tamePerFeed: number
   /** aggro: flees / fights back when hit */
   temperament: 'skittish' | 'aggressive'
+  /** unprovoked aggro when the player comes this close (0 = only when hit) */
+  aggroRange: number
+  /** packmates within this radius join a fight */
+  packRange: number
   attackDamage: number
   attackRange: number
   rideable: boolean
@@ -27,6 +31,8 @@ export interface SpeciesDef {
   seat: { x: number; y: number; z: number }
   /** regex per animation slot, matched against clip names */
   clips: { idle: RegExp; walk: RegExp; run: RegExp; attack: RegExp; ko: RegExp }
+  /** optional flavor one-shots played randomly while idle */
+  flavorClips?: RegExp[]
 }
 
 export const SPECIES: Record<string, SpeciesDef> = {
@@ -44,6 +50,8 @@ export const SPECIES: Record<string, SpeciesDef> = {
     tameFood: 'berry',
     tamePerFeed: 25,
     temperament: 'aggressive',
+    aggroRange: 11,
+    packRange: 28,
     attackDamage: 8,
     attackRange: 2.2,
     rideable: true,
@@ -55,5 +63,6 @@ export const SPECIES: Record<string, SpeciesDef> = {
       attack: /^bite_?0?1$/i,
       ko: /^knocked down$/i,
     },
+    flavorClips: [/^sniff$/i, /^call_alert$/i, /^idle_?0?2$/i, /^roar_?0?1$/i],
   },
 }
