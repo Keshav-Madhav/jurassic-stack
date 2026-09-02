@@ -98,8 +98,8 @@ interface PlaceSpec {
 const SPECS: Record<NodeKind, PlaceSpec> = {
   // woods: dense inside the forest mask, gone in clearings. Tall — the ARK
   // reference forest is trunk-dominant with canopy far overhead.
-  tree: { cell: 15, chance: 0.62, sMin: 7, sMax: 16, cap: 6500, seed: 101, habitat: (h, _ny, f) => f > 0.12 && h > 3.2 },
-  pine: { cell: 16, chance: 0.6, sMin: 8, sMax: 19, cap: 5200, seed: 202, habitat: (h, _ny, f) => f > 0.05 && h > 6 },
+  tree: { cell: 14, chance: 0.66, sMin: 7, sMax: 16, cap: 7800, seed: 101, habitat: (h, _ny, f) => f > 0.1 && h > 3.2 },
+  pine: { cell: 15, chance: 0.64, sMin: 8, sMax: 19, cap: 6800, seed: 202, habitat: (h, _ny, f) => f > 0.03 && h > 6 },
   deadtree: { cell: 34, chance: 0.4, sMin: 4, sMax: 8, cap: 700, seed: 707, habitat: (h, _ny, f) => f > -0.34 && f < -0.13 && h > 4 },
   palm: { cell: 24, chance: 0.5, sMin: 5, sMax: 9, cap: 600, seed: 808, habitat: (h) => h > 1.1 && h < 4.2 },
   willow: { cell: 30, chance: 0.55, sMin: 5, sMax: 8.5, cap: 350, seed: 909, habitat: (h, _ny, _f, riverD) => riverD < 34 && riverD > 13 && h > 2 },
@@ -118,7 +118,7 @@ const SUPER = 256
 /** Ground-cover kinds: no shadow casting, distance-culled. */
 const GROUND_COVER = new Set<NodeKind>(['grass', 'fern', 'flower', 'mushroom', 'log', 'bush'])
 /** Cover cells beyond this range from the player are hidden entirely. */
-const COVER_DRAW_DIST = 420
+const COVER_DRAW_DIST = 340
 
 function mulberry32(seed: number): () => number {
   let a = seed >>> 0

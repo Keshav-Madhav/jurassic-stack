@@ -235,3 +235,11 @@ User's 10 + mandate, to be burned down across M7d+ and the MAP OVERHAUL mileston
 - [x] Also this round: reverted the max-bias LOD sampling (it cracked the volcano silhouette — white gashes); props instead embed by their exact per-spot LOD error (lodFloorAt); discovered the M5e sink offsets had been silently LOST in the M6a scatter rewrite (props had zero embed since — the real reason floaters persisted)
 - [x] QA probes now permanent: floaters(threshold), whatIsThere(screenXY) raycast identify
 - Gates: 9/9, 29/29, 12/12, 6/6, 12/12
+
+### M8c — the freeze, the lag, the dark woods, the door
+- [x] 5-10s keystone-pickup freeze (user-hit): hiding the keystone's PointLight changed the scene light count → EVERY material recompiled its shader. Halos now dim to intensity 0 (stable program signature). Campfires got a pre-allocated 8-light pool for the same reason (adding a light mid-game = same freeze)
+- [x] General lag: root-caused via renderer.info — 9.5M tris/frame, mostly the new single pine (3,370 tris × 6,800 instances); decimated to 616 tris + 256px webp textures → 5.7M tris, 60fps × 3 stable samples. Plus: shadow map at 1/3 frame rate (autoUpdate off), 1536px map, PCF instead of PCFSoft, dinos cast shadows only within 110m, distance-throttled dino mixers (every 3rd frame >120m, every 8th >260m), cover draw 340m
+- [x] ARK-dark woods: hemi 0.3 + denser canopy (trees 7800, pines 6800) — forest floors go properly dark under trees
+- [x] "Still no dinos" root cause: SAVES preserved their old dino list — wild roster now spawns FRESH every load (25 wild: raptor packs, trike/stego herds, 2 rexes) while tamed dinos persist from the save
+- [x] **THE CALDERA DOOR**: stone slab seals the gate arch (collider included); E with all 5 keystones → the slab grinds down over 4s and the crater opens; state persists. gate-m8 grew to 11 checks (sealed initially, refuses when missing, opens with 5, survives reload)
+- Gates: 9/9, 29/29, 12/12, 11/11, 12/12 (73 total)

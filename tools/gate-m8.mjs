@@ -39,5 +39,24 @@ check((await g('window.__g.game.keystoneCount()')) === 1, 'keystone survived rel
 const after = await g('window.__g.game.keystoneSites()')
 check(after.find((s) => s.tag === 'beach-statue').collected === true, 'correct site marked collected')
 
+// --- the caldera door ---
+check(!(await g('window.__g.game.doorOpen()')), 'door sealed initially')
+const gate = { x: 396, z: -549 }
+await page.evaluate((gt) => window.__g.teleport(gt.x, gt.z), gate)
+await page.waitForTimeout(400)
+await g('window.__g.game.interact()')
+check(!(await g('window.__g.game.doorOpen()')), 'door refuses with missing keystones')
+await g('window.__g.game.grantAllKeystones()')
+check((await g('window.__g.game.keystoneCount()')) === 5, 'all keystones granted (debug)')
+await g('window.__g.game.interact()')
+await page.waitForTimeout(300)
+check(await g('window.__g.game.doorOpen()'), 'door opens with all five')
+await g('window.__g.game.save()')
+await page.waitForTimeout(200)
+await page.reload({ waitUntil: 'domcontentloaded' })
+await page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 60000 })
+await page.waitForTimeout(800)
+check(await g('window.__g.game.doorOpen()'), 'open door survives reload')
+
 await browser.close()
 process.exit(failed ? 1 : 0)

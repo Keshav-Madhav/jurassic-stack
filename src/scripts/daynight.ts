@@ -34,7 +34,7 @@ const NOON: Grade = {
   fogNear: 260, fogFar: 2450,
   hemiSky: new THREE.Color(0x8fb6dc),
   hemiGround: new THREE.Color(0x1d2719),
-  hemiIntensity: 0.42, // shadow pools stay dark; the sun carries the frame
+  hemiIntensity: 0.3, // ARK reference: canopy shadow pools go properly dark
   sun: new THREE.Color(0xffefcf),
   sunIntensity: 2.9,
   rimIntensity: 0,
@@ -126,7 +126,7 @@ export class DayNight {
     // one directional shadow map following the player (CSM comes at M6 proper)
     this.sunLight.castShadow = true
     const sc = this.sunLight.shadow
-    sc.mapSize.set(2048, 2048)
+    sc.mapSize.set(1536, 1536)
     const EXTENT = 85
     sc.camera.left = -EXTENT
     sc.camera.right = EXTENT

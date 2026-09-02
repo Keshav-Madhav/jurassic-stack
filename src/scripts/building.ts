@@ -38,8 +38,18 @@ export class Building {
   private colliders: RAPIER.Collider[] = []
   private woodMat = new THREE.MeshStandardMaterial({ color: 0x8a6a45, roughness: 0.9 })
   private fireMat = new THREE.MeshStandardMaterial({ color: 0x4a3b2c, roughness: 1 })
+  /** Pre-allocated light pool: adding a light mid-game recompiles every
+   *  shader in the scene (multi-second freeze). 8 dormant lights cover the
+   *  first 8 campfires; later fires burn lightless. */
+  private firePool: THREE.PointLight[] = []
+  private firesLit = 0
 
   constructor(private physics: Physics) {
+    for (let i = 0; i < 8; i++) {
+      const l = new THREE.PointLight(0xff8a3c, 0, 18)
+      this.firePool.push(l)
+      this.group.add(l)
+    }
     this.ghostMat = new THREE.MeshStandardMaterial({
       color: GHOST_OK, transparent: true, opacity: 0.45, depthWrite: false,
     })
@@ -135,10 +145,10 @@ export class Building {
     mesh.castShadow = true
     mesh.receiveShadow = true
     this.group.add(mesh)
-    if (p.kind === 'campfire') {
-      const flame = new THREE.PointLight(0xff8a3c, 60, 18)
+    if (p.kind === 'campfire' && this.firesLit < this.firePool.length) {
+      const flame = this.firePool[this.firesLit++]
       flame.position.set(p.gx * CELL, p.baseY + 0.9, p.gz * CELL)
-      this.group.add(flame)
+      flame.intensity = 60
     }
     // static collider matching the mesh
     const { pos, size } = this.box(p)

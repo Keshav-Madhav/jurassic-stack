@@ -22,6 +22,7 @@ export interface SaveFile {
   player: { x: number; y: number; z: number; hp: number }
   creative?: boolean
   keystones?: string[]
+  doorOpen?: boolean
   inventory: unknown
   pieces: unknown
   deadNodes: unknown

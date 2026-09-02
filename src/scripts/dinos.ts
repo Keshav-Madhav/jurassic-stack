@@ -199,6 +199,15 @@ export class Dino {
   update(dt: number, playerPos: THREE.Vector3, attackPlayer: (damage: number) => void): void {
     this.attackCooldown -= dt
     const pos = this.object.position
+    this.distToPlayer = pos.distanceTo(playerPos)
+    // skinned casters are expensive in the shadow pass — only nearby dinos cast
+    const wantShadow = this.distToPlayer < 110
+    if (wantShadow !== this.castingShadow) {
+      this.castingShadow = wantShadow
+      this.object.traverse((o) => {
+        if (o instanceof THREE.Mesh) o.castShadow = wantShadow
+      })
+    }
 
     if (this.ridden && this.mover) {
       // position comes from the mover; visuals + anim only. Small embed: the
@@ -374,6 +383,8 @@ export class Dino {
     pos.z += Math.cos(this.heading) * this.speed * dt
   }
 
+  private mixerSkip = 0
+
   private animate(dt: number, moveT: number, running: boolean): void {
     const target = THREE.MathUtils.clamp(moveT, 0, 1)
     this.moveWeight = THREE.MathUtils.lerp(this.moveWeight, target, 1 - Math.exp(-dt * 8))
@@ -385,8 +396,22 @@ export class Dino {
       walk.timeScale = 0.6 + target * 0.7
     }
     if (run) run.weight = this.moveWeight * this.runBlend
-    this.mixer?.update(dt)
+    // distance-throttled animation (the classic skinned-crowd win): far dinos
+    // tick their mixers every Nth frame with accumulated dt
+    const d = this.distToPlayer
+    const every = d > 260 ? 8 : d > 120 ? 3 : 1
+    this.mixerSkip += 1
+    this.mixerAccum += dt
+    if (this.mixerSkip >= every) {
+      this.mixer?.update(this.mixerAccum)
+      this.mixerSkip = 0
+      this.mixerAccum = 0
+    }
   }
+
+  private mixerAccum = 0
+  private distToPlayer = 0
+  private castingShadow = true
 
   private playKo(): void {
     const ko = this.actions.ko

@@ -3,6 +3,7 @@
 // rate AI/animation, DOM HUD, and a __g.game debug API that the E2E gate
 // drives through the same functions the input handlers call.
 import * as THREE from 'three'
+import RAPIER from '@dimforge/rapier3d-compat'
 import { Terrain } from './terrain'
 import { Physics, FIXED_DT } from './physics'
 import { Input } from './input'
@@ -35,7 +36,10 @@ async function boot(): Promise<void> {
   renderer.setSize(innerWidth, innerHeight)
   renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)) // 2x retina fill cost was a top lag source
   renderer.shadowMap.enabled = true
-  renderer.shadowMap.type = THREE.PCFSoftShadowMap
+  renderer.shadowMap.type = THREE.PCFShadowMap // Soft variant cost ~10fps; radius softens enough
+  // shadows redraw at half frame rate — the sun crawls, and re-rendering
+  // ~17K tree casters into the 2048 map every frame was the top GPU cost
+  renderer.shadowMap.autoUpdate = false
   app.appendChild(renderer.domElement)
 
   const scene = new THREE.Scene()
@@ -95,6 +99,28 @@ async function boot(): Promise<void> {
   scene.add(keystones.group)
   if (save?.keystones) keystones.restore(save.keystones as string[])
 
+  // the caldera door: a stone slab sealing the gate arch until all five
+  // keystones are set (the arc's lock)
+  const gateSite = worldMeta!.ruinSites.find((r) => r.tag === 'caldera-gate')!
+  const doorMesh = new THREE.Mesh(
+    new THREE.BoxGeometry(7.5, 9.5, 1.4),
+    new THREE.MeshStandardMaterial({ color: 0x3c3a38, roughness: 0.95 }),
+  )
+  const doorGroundY = heightAt(gateSite.x, gateSite.z)
+  doorMesh.position.set(gateSite.x, doorGroundY + 4.4, gateSite.z)
+  doorMesh.castShadow = true
+  doorMesh.receiveShadow = true
+  scene.add(doorMesh)
+  let doorOpen = save?.doorOpen ?? false
+  let doorAnim = 0
+  const doorCollider = physics.world.createCollider(
+    RAPIER.ColliderDesc.cuboid(3.75, 4.75, 0.7).setTranslation(gateSite.x, doorGroundY + 4.4, gateSite.z),
+  )
+  if (doorOpen) {
+    doorMesh.position.y = doorGroundY - 5.5
+    physics.world.removeCollider(doorCollider, false)
+  }
+
   const building = new Building(physics)
   scene.add(building.group)
   if (save) building.restore(save.pieces as ReturnType<Building['serialize']>)
@@ -110,38 +136,34 @@ async function boot(): Promise<void> {
     void d.load()
     return d
   }
+  // TAMED dinos persist from the save; the WILD roster always spawns fresh —
+  // otherwise old saves keep their old (smaller) populations forever and
+  // roster growth never reaches returning players (user: "still no dinos")
   if (save) {
     for (const row of save.dinos as ReturnType<Dino['serialize']>[]) {
-      if (!row.alive) continue
+      if (!row.alive || row.state !== 'tamed') continue
       const d = spawnDino(row.species, row.x, row.z)
       d.hp = row.hp
       d.saddled = row.saddled
       d.tameProgress = row.tame
-      if (row.state === 'tamed') d.state = 'tamed'
+      d.state = 'tamed'
     }
-  } else {
-    // raptors: spawn-adjacent (also keeps the E2E gate deterministic — nearest)
-    spawnDino('raptor', SPAWN.x + 26, SPAWN.z - 30)
-    spawnDino('raptor', SPAWN.x - 40, SPAWN.z - 55)
-    // raptor packs roaming the interior (backlog #7: too few dinos)
-    spawnDino('raptor', 60, 80)
-    spawnDino('raptor', 75, 95)
-    spawnDino('raptor', -320, -60)
-    spawnDino('raptor', -338, -48)
-    spawnDino('raptor', 420, -180)
-    spawnDino('raptor', -150, 520)
-    // herbivore herds: meadows and clearings
-    spawnDino('trike', 150, 430)
-    spawnDino('trike', 190, 460)
-    spawnDino('trike', 170, 405)
-    spawnDino('trike', -480, 330)
-    spawnDino('stego', -220, 280)
-    spawnDino('stego', -195, 255)
-    spawnDino('stego', 330, 170)
-    spawnDino('stego', 520, 420)
-    // the highlands: two apexes patrol the north
-    spawnDino('trex', 40, -280)
-    spawnDino('trex', -260, -380)
+  }
+  {
+    // wild roster (fresh every load): packs + herds across the south half,
+    // apexes in the north
+    const WILD: [string, number, number][] = [
+      ['raptor', SPAWN.x + 26, SPAWN.z - 30], ['raptor', SPAWN.x - 40, SPAWN.z - 55],
+      ['raptor', SPAWN.x + 90, SPAWN.z - 120], ['raptor', SPAWN.x - 120, SPAWN.z - 160],
+      ['raptor', 60, 80], ['raptor', 75, 95], ['raptor', -320, -60], ['raptor', -338, -48],
+      ['raptor', 420, -180], ['raptor', -150, 520], ['raptor', 250, 550], ['raptor', -60, 300],
+      ['trike', 150, 430], ['trike', 190, 460], ['trike', 170, 405], ['trike', -480, 330],
+      ['trike', -80, 620], ['trike', -110, 650],
+      ['stego', -220, 280], ['stego', -195, 255], ['stego', 330, 170], ['stego', 520, 420],
+      ['stego', 100, 200],
+      ['trex', 40, -280], ['trex', -260, -380],
+    ]
+    for (const [sp, x, z] of WILD) spawnDino(sp, x, z)
   }
 
   const hud = new Hud(document.getElementById('hud')!, inventory, (id) => {
@@ -293,8 +315,20 @@ async function boot(): Promise<void> {
       dismount()
       return true
     }
-    // keystones (the arc's thread)
+    // the caldera door
     const f0 = feetPos()
+    if (!doorOpen && Math.hypot(f0.x - gateSite.x, f0.z - gateSite.z) < 8) {
+      if (keystones.collectedCount >= keystones.total) {
+        doorOpen = true
+        doorAnim = 4
+        physics.world.removeCollider(doorCollider, false)
+        hud.toast('The keystones flare — the caldera gate grinds open.')
+        return true
+      }
+      hud.toast(`The gate is sealed. ${keystones.total - keystones.collectedCount} keystones missing (N to seek).`)
+      return true
+    }
+    // keystones (the arc's thread)
     const got = keystones.collectNear(f0.x, f0.z)
     if (got) {
       const n = keystones.collectedCount
@@ -431,6 +465,7 @@ async function boot(): Promise<void> {
     deadNodes: scatter.serialize(),
     dinos: dinos.map((d) => d.serialize()),
     keystones: keystones.serialize(),
+    doorOpen,
     }
   }
   setInterval(() => void saveGame(collectSave()), 30_000)
@@ -456,6 +491,12 @@ async function boot(): Promise<void> {
     player: () => ({ ...(riding?.mover ? riding.mover.position : player.mover.position) }),
     groundAt: (x: number, z: number) => heightAt(x, z),
     fps: () => hud.fps,
+    renderInfo: () => ({
+      calls: renderer.info.render.calls,
+      tris: renderer.info.render.triangles,
+      geoms: renderer.info.memory.geometries,
+      progs: renderer.info.programs?.length ?? 0,
+    }),
     ready: false,
     game: {
       swimming: () => player.swimming,
@@ -637,6 +678,13 @@ async function boot(): Promise<void> {
       },
       setCreative: (on: boolean) => setCreative(on),
       keystoneCount: () => keystones.collectedCount,
+      doorOpen: () => doorOpen,
+      grantAllKeystones: () => {
+        for (const k of keystones.sites) {
+          if (!k.collected) keystones.collectNear(k.x, k.z, 5)
+        }
+        return keystones.collectedCount
+      },
       keystoneSites: () => keystones.sites.map((k) => ({ tag: k.tag, x: k.x, z: k.z, collected: k.collected })),
       flying: () => player.flying,
       poseInfo: () => player.poseInfo(),
@@ -657,6 +705,7 @@ async function boot(): Promise<void> {
   // --- main loop ---
   let accumulator = 0
   let last = performance.now()
+  let frameCount = 0
 
   function frame(now: number): void {
     requestAnimationFrame(frame)
@@ -788,10 +837,16 @@ async function boot(): Promise<void> {
     building.updateGhost(held && ITEMS[held].placeable ? (held as PieceKind) : null, held && ITEMS[held].placeable ? updateAim() : null)
 
     keystones.update(dt)
+    if (doorAnim > 0) {
+      doorAnim -= dt
+      doorMesh.position.y = Math.max(doorGroundY - 5.5, doorMesh.position.y - dt * 2.6)
+    }
     // context prompt
     const fk = feetPos()
     const nearKey = keystones.sites.find((k) => !k.collected && Math.hypot(k.x - fk.x, k.z - fk.z) < 5)
+    const nearGate = !doorOpen && Math.hypot(fk.x - gateSite.x, fk.z - gateSite.z) < 8
     if (riding) hud.prompt('E — dismount')
+    else if (nearGate) hud.prompt(keystones.collectedCount >= keystones.total ? 'E — set the keystones' : `sealed — ${keystones.total - keystones.collectedCount} keystones missing`)
     else if (nearKey) hud.prompt('E — take the keystone')
     else {
       const ko = nearestDino(INTERACT_RANGE, (d) => d.state === 'ko')
@@ -807,6 +862,8 @@ async function boot(): Promise<void> {
     }
 
     hud.tick(dt, focus.x, focus.y, focus.z, daynight.time, playerHp, (-cam.yaw * 180) / Math.PI)
+    frameCount++
+    if (frameCount % 3 === 0) renderer.shadowMap.needsUpdate = true
     renderer.render(scene, cam.camera)
     dbg.ready = true
   }

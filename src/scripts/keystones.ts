@@ -72,7 +72,11 @@ export class Keystones {
       if (Math.hypot(s.x - x, s.z - z) <= reach) {
         s.collected = true
         s.mesh.visible = false
-        s.halo.visible = false
+        // NEVER halo.visible = false: removing a light from the render list
+        // changes the scene light count and forces EVERY material to
+        // recompile — a 5-10s freeze on pickup (user-hit). Intensity 0 keeps
+        // the program signature stable.
+        s.halo.intensity = 0
         return s
       }
     }
@@ -98,7 +102,7 @@ export class Keystones {
       if (tags.includes(s.tag)) {
         s.collected = true
         s.mesh.visible = false
-        s.halo.visible = false
+        s.halo.intensity = 0
       }
     }
   }
