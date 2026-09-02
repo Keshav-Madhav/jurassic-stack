@@ -196,3 +196,10 @@ User's 10 + mandate, to be burned down across M7d+ and the MAP OVERHAUL mileston
 ### M7c.1 — the pose that actually poses (user: "its just lower down")
 - [x] Root cause found: GLTFLoader strips '.' from node names (reserved PropertyBinding char) — "UpperLeg.L" loads as "UpperLegL", so the pose matched ZERO bones and failed silently. Matcher normalizes both forms; load warns if no bones match; `poseInfo()` debug proves flex live (−0.04 rad standing → −1.29 riding)
 - [x] Process note: previous "verified" screenshot was dark-on-dark ambiguity — pose verification now shoots against bright sky. Gates 29/29, creative 9/9
+
+### HOTFIX — save-while-riding stranded reloads underground (user-hit: "everything gone, falling forever")
+- [x] Root cause: mounting parks the player body at y=-520; any autosave/pagehide save while mounted recorded the PARKED position → reload spawned under the world, falling forever with nothing visible
+- [x] Fix 1: collectSave saves the actual play position (mount feet) while riding
+- [x] Fix 2: load-time sanitizer heals ANY bad saved position (non-finite, out of bounds, below ground, >250m up) — existing corrupted saves self-repair on next load, no wipe needed
+- [x] Gate hardened: creative gate now saves while MOUNTED, reloads, asserts on-ground spawn + not falling (12 checks); healer verified against a byte-exact replica of the corrupted save (y=-519.6 → spawns at ground)
+- [x] Process: this escaped because no gate covered save-state × riding interactions — mounted-save-reload is now permanent coverage

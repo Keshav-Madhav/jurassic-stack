@@ -60,6 +60,28 @@ await g('window.__g.game.interact()')
 await page.waitForTimeout(300)
 check(await g('window.__g.game.dinoStates().some(d => d.state === "tamed")'), 'creative feed = instant tame')
 
+// THE REGRESSION THAT SHIPPED: save while MOUNTED, reload, must spawn sane
+// (the parked player body at y=-520 used to get saved → eternal falling)
+await g('window.__g.game.gotoDino("tamed")')
+await g('window.__g.game.interact()') // saddle (already saddled → mounts)
+await page.waitForTimeout(300)
+if (!(await g('window.__g.game.riding()'))) {
+  await g('window.__g.game.interact()') // mount
+  await page.waitForTimeout(300)
+}
+check(await g('window.__g.game.riding()'), 'mounted for save-while-riding test')
+await g('window.__g.game.save()')
+await page.waitForTimeout(200)
+await page.reload({ waitUntil: 'domcontentloaded' })
+await page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 60000 })
+await page.waitForTimeout(800)
+const pr = await g('window.__g.player()')
+const ground = await page.evaluate((p) => window.__g.groundAt(p.x, p.z), pr)
+check(Number.isFinite(pr.y) && pr.y > ground - 2 && pr.y < ground + 30, `reload-after-mounted-save spawns on ground (y=${pr.y.toFixed(1)} vs ground ${ground.toFixed(1)})`)
+await page.waitForTimeout(1500)
+const pr2 = await g('window.__g.player()')
+check(pr2.y > ground - 3, `not falling after reload (y=${pr2.y.toFixed(1)})`)
+
 // back to survival: damage applies again
 await g('window.__g.game.setCreative(false)')
 check(!(await g('window.__g.game.flying()')), 'flight off when leaving creative')

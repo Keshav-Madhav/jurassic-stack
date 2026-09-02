@@ -51,6 +51,19 @@ async function boot(): Promise<void> {
 
   const save = await loadGame()
 
+  // sanitize saved position: heal saves already corrupted by the park bug,
+  // out-of-bounds coords, or anything non-finite
+  if (save) {
+    const p = save.player
+    if (!Number.isFinite(p.x) || !Number.isFinite(p.z) || Math.abs(p.x) > 1000 || Math.abs(p.z) > 1000) {
+      p.x = SPAWN.x
+      p.z = SPAWN.z
+    }
+    const ground = heightAt(p.x, p.z)
+    if (!Number.isFinite(p.y) || p.y < ground - 0.5 || p.y > ground + 250) {
+      p.y = ground + 1.2
+    }
+  }
   const spawnPos = save
     ? new THREE.Vector3(save.player.x, save.player.y + 0.5, save.player.z)
     : new THREE.Vector3(SPAWN.x, heightAt(SPAWN.x, SPAWN.z) + 1.2, SPAWN.z)
@@ -364,17 +377,23 @@ async function boot(): Promise<void> {
   })
 
   // --- save loop ---
-  const collectSave = (): SaveFile => ({
+  const collectSave = (): SaveFile => {
+    // While riding, the player's own body is PARKED at y=-520 — saving that
+    // position stranded reloads under the world, falling forever (user-hit).
+    // Save the actual play position (mount feet) instead.
+    const f = feetPos()
+    return {
     version: SAVE_VERSION,
     savedAt: Date.now(),
     time: daynight.time,
-    player: { x: player.mover.position.x, y: player.mover.position.y, z: player.mover.position.z, hp: playerHp },
+    player: { x: f.x, y: f.y + 1.0, z: f.z, hp: playerHp },
     creative,
     inventory: inventory.serialize(),
     pieces: building.serialize(),
     deadNodes: scatter.serialize(),
     dinos: dinos.map((d) => d.serialize()),
-  })
+    }
+  }
   setInterval(() => void saveGame(collectSave()), 30_000)
   addEventListener('pagehide', () => void saveGame(collectSave()))
 
