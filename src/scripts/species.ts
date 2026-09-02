@@ -58,7 +58,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     attackDamage: 14,
     attackRange: 2.0,
     rideable: true,
-    seat: { x: 0, y: 1.0, z: -0.15 },
+    seat: { x: 0, y: 0.48, z: -0.05 },
     clips: {
       idle: /^idle_?0?1$/i,
       walk: /^walk$/i,
@@ -87,7 +87,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     attackDamage: 22,
     attackRange: 2.8,
     rideable: true,
-    seat: { x: 0, y: 2.0, z: -0.3 },
+    seat: { x: 0, y: 1.55, z: -0.25 },
     clips: {
       idle: /\|Idle$/,
       walk: /\|Walk$/,
@@ -116,7 +116,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     attackDamage: 26,
     attackRange: 3.2,
     rideable: true,
-    seat: { x: 0, y: 2.3, z: -0.4 },
+    seat: { x: 0, y: 1.8, z: -0.35 },
     clips: {
       idle: /^IdleA$/,
       walk: /^Walk$/,
@@ -147,7 +147,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     attackDamage: 55,
     attackRange: 4.2,
     rideable: true,
-    seat: { x: 0, y: 3.4, z: -0.6 },
+    seat: { x: 0, y: 2.7, z: -0.5 },
     clips: {
       idle: /^idle$/i,
       walk: /^run$/i, // rig ships run/bite/roar/tail/idle only

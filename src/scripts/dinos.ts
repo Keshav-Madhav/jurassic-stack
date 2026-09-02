@@ -201,9 +201,10 @@ export class Dino {
     const pos = this.object.position
 
     if (this.ridden && this.mover) {
-      // position comes from the mover; visuals + anim only
+      // position comes from the mover; visuals + anim only. Small embed: the
+      // KCC's contact offset + capsule hemisphere read as hovering otherwise.
       pos.copy(this.mover.position)
-      pos.y -= this.mover.feetOffset
+      pos.y -= this.mover.feetOffset + 0.12
       this.object.rotation.y = this.heading
       const planar = Math.hypot(this.mover.intent.vx, this.mover.intent.vz)
       this.speed = planar
@@ -419,8 +420,10 @@ export class Dino {
    *  so the idle kinematic capsule can't ghost-block anything. */
   beginRide(physics: Physics): void {
     const cfg: MoverConfig = {
-      radius: Math.max(0.35, this.species.height * 0.32),
-      halfHeight: this.species.height * 0.32,
+      // wide capsule: the body is much longer than tall — a slim capsule slid
+      // around trunks so easily that riding read as "no collisions"
+      radius: Math.max(0.5, this.species.height * 0.42),
+      halfHeight: this.species.height * 0.3,
       jumpSpeed: 8.5,
       gravityScale: 1.8,
     }

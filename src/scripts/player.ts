@@ -52,6 +52,11 @@ export class Player {
   private airBlend = 0
   private sitBlend = 0
   private oneShotT = 0
+  /** leg bones for the procedural riding pose (rig has no sit clip).
+   *  Casual2 ships FOUR duplicate armatures (one per body-part mesh) with
+   *  identical bone names — every match must be posed, not just the first. */
+  private thighs: { bone: THREE.Bone; side: 1 | -1 }[] = []
+  private shins: THREE.Bone[] = []
 
   constructor(physics: Physics, spawn: THREE.Vector3) {
     this.mover = new Mover(physics, PLAYER_MOVER, spawn)
@@ -94,6 +99,13 @@ export class Player {
       }
     })
     this.object.add(model)
+
+    model.traverse((o) => {
+      if (!(o instanceof THREE.Bone)) return
+      if (o.name === 'UpperLeg.L') this.thighs.push({ bone: o, side: -1 })
+      if (o.name === 'UpperLeg.R') this.thighs.push({ bone: o, side: 1 })
+      if (o.name === 'LowerLeg.L' || o.name === 'LowerLeg.R') this.shins.push(o)
+    })
 
     this.mixer = new THREE.AnimationMixer(model)
     for (const slot of Object.keys(CLIP_MATCH) as ClipSlot[]) {
@@ -287,8 +299,19 @@ export class Player {
       if (this.sitBlend > 0.01 && !sit.isRunning()) sit.play()
       sit.weight = this.sitBlend
     } else if (idle) {
-      idle.weight += this.sitBlend * oneShot // no sit clip: idle astride
+      idle.weight += this.sitBlend * oneShot // no sit clip — procedural pose below
     }
     this.mixer.update(dt)
+
+    // procedural riding pose: after the mixer writes bones, flex the legs into
+    // a straddle (thighs forward+out, knees bent) proportional to sitBlend
+    if (this.sitBlend > 0.02) {
+      const t = this.sitBlend
+      for (const { bone, side } of this.thighs) {
+        bone.rotation.x -= 1.25 * t
+        bone.rotation.z += 0.42 * t * side
+      }
+      for (const bone of this.shins) bone.rotation.x += 1.4 * t
+    }
   }
 }

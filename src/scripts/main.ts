@@ -388,7 +388,11 @@ async function boot(): Promise<void> {
   let debugIntent: { vx: number; vz: number } | null = null
   const dbg = {
     setTime: (t: number) => daynight.setTime(t),
-    teleport: (x: number, z: number) => { player.mover.teleport(x, heightAt(x, z) + 1.2, z); cam.snap() },
+    teleport: (x: number, z: number) => {
+      if (riding?.mover) riding.mover.teleport(x, heightAt(x, z) + 1.4, z)
+      else player.mover.teleport(x, heightAt(x, z) + 1.2, z)
+      cam.snap()
+    },
     setCam: (yaw: number, pitch: number) => { cam.yaw = yaw; cam.pitch = pitch },
     setIntent: (vx: number, vz: number) => { debugIntent = vx || vz ? { vx, vz } : null },
     player: () => ({ ...(riding?.mover ? riding.mover.position : player.mover.position) }),
@@ -425,6 +429,17 @@ async function boot(): Promise<void> {
         return found
       },
       scatterDebug: () => scatter.debugSummary(),
+      nearestNodeInfo: (kind: string) => {
+        const from = feetPos()
+        let best: { x: number; z: number; scale: number; d: number } | null = null
+        for (const n of scatter.nodes) {
+          if (!n.alive || n.kind !== kind) continue
+          const d = Math.hypot(n.x - from.x, n.z - from.z)
+          if (!best || d < best.d) best = { x: n.x, z: n.z, scale: n.scale, d }
+        }
+        return best
+      },
+      colliderInfo: () => ({ world: physics.world.colliders.len(), trunks: scatter.trunkColliderCount() }),
       pathTo: (x: number, z: number) => {
         const from = feetPos()
         const p = findPath(from.x, from.y, from.z, x, heightAt(x, z), z)
@@ -636,20 +651,29 @@ async function boot(): Promise<void> {
     // dino-dino separation + player-dino body push (soft, gameplay-level)
     for (let i = 0; i < dinos.length; i++) {
       const a = dinos[i]
-      if (!a.object.visible || a === riding) continue
+      if (!a.object.visible) continue
       for (let j = i + 1; j < dinos.length; j++) {
         const b = dinos[j]
-        if (!b.object.visible || b === riding) continue
+        if (!b.object.visible) continue
         const dx = b.object.position.x - a.object.position.x
         const dz = b.object.position.z - a.object.position.z
         const d2 = Math.hypot(dx, dz)
         const min = (a.species.height + b.species.height) * 0.55
         if (d2 > 0.01 && d2 < min) {
+          // the ridden mount is kinematic — its whole push goes to the other dino
           const push = ((min - d2) / d2) * 0.5
-          a.object.position.x -= dx * push
-          a.object.position.z -= dz * push
-          b.object.position.x += dx * push
-          b.object.position.z += dz * push
+          const aRidden = a === riding
+          const bRidden = b === riding
+          if (!aRidden) {
+            const k = bRidden ? 2 : 1
+            a.object.position.x -= dx * push * k
+            a.object.position.z -= dz * push * k
+          }
+          if (!bRidden) {
+            const k = aRidden ? 2 : 1
+            b.object.position.x += dx * push * k
+            b.object.position.z += dz * push * k
+          }
         }
       }
       if (!riding && a.state !== 'ko') {

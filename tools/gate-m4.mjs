@@ -75,7 +75,7 @@ for (const item of ['foundation', 'wall', 'ceiling', 'campfire']) {
 // ---------- tame: punch to KO, feed to tame ----------
 check(await g('window.__g.game.gotoDino("idle")') || await g('window.__g.game.gotoDino("wander")'), 'found a wild raptor')
 await g('window.__g.game.select(8)') // empty slot = fists (torpor route)
-for (let i = 0; i < 28; i++) {
+for (let i = 0; i < 45; i++) { // 160 torpor / 8 per punch + 2.2/s drain over the loop needs headroom
   await g('window.__g.game.swing()')
   await page.waitForTimeout(520)
   const ko = await g('window.__g.game.dinoStates().some(d => d.state === "ko")')

@@ -504,6 +504,10 @@ export class Scatter {
     return cz * CHUNKS_PER_SIDE + cx
   }
 
+  trunkColliderCount(): number {
+    return this.treeColliders.size
+  }
+
   debugSummary(): { key: string; nodes: number; submeshes: number; drawn: number }[] {
     const out: { key: string; nodes: number; submeshes: number; drawn: number }[] = []
     for (const [key, prop] of this.props) {

@@ -173,3 +173,22 @@ Bugs the gate caught: reach measured from camera (all swings whiffed); camera-dr
 - [x] Flight: double-tap SPACE in creative — WASD at 20 m/s, space up / shift down, auto-lands on ground contact while descending; CREATIVE badge in HUD
 - [x] QoL: F eats a berry (+15♥), compass heading in HUD (N/NE/…°), nearby-wild-dino readout in the prompt (name · ♥hp · 😴torpor/max — taming progress finally visible), help line teaches C/F
 - [x] New gate `tools/gate-creative.mjs` (9 checks) — caught 3 real integration bugs: flight ignored the harness override; the creative kit auto-slotted foundations into slot 0 so every "swing" built a base instead of harvesting; and swing prioritizes dinos so a wandering raptor intercepted the tree test. All gates green: 9/9, 29/29, 12/12, creative 9/9
+
+### M7c — riding fixed + the player's world-quality backlog
+- [x] Riding pose: procedural straddle (thighs flexed/spread, knees bent) applied to ALL FOUR duplicate armatures the Casual2 rig ships (posing one did nothing — classic multi-armature trap); seat dropped to 0.48 on the raptor; mount embeds -0.12 (KCC hover)
+- [x] Collision investigation with penetration-math probes: trunk colliders exist (261 near player) and the KCC never penetrates on foot OR mounted — the "no collisions" feel was (a) the ridden mount being excluded from dino-dino separation (now included; others get double-pushed since the mount is kinematic) and (b) a slim capsule sliding around trunks (mount capsule widened to height*0.42)
+- [x] m4 tame check was marginal by math (28 punches × 8 torpor vs 160 max + 2.2/s drain) — attempts raised to 45. All gates green: 9/9, 29/29, 12/12, creative 9/9
+
+### THE WORLD-QUALITY BACKLOG (player review, 2026-09-02 — fix through upcoming rounds)
+User's 10 + mandate, to be burned down across M7d+ and the MAP OVERHAUL milestone:
+1. Ground color too uniformly green — needs grays (rocky), sand near rivers/lakes, dry patches, mud
+2. River clips through ground / floats in places; too plain (needs foam edges, depth tint)
+3. Lake reads as floating
+4. "Canyon" doesn't read as a canyon at all
+5. Terrain variation too low overall
+6. Rocks too sparse — needs real rocky structures: cliffs, outcrops, mountains
+7. Too few dinos visible
+8. Terrain mesh shows LOD holes/cracks
+9. Bushes weirdly bright green; need more bush variety + density; denser grass/foliage overall
+10. Trees and props spawning inside lakes
+**MAP OVERHAUL milestone (commitment):** the island gets genuinely hand-sculpted — composition authored feature-by-feature (every lake, mountain, cliff, the volcano silhouette, forest placement), iterated through the screenshot loop with per-vantage visual verification until each landmark is *approved-looking*, not just validator-passing. The volcano specifically called out as looking bad.
