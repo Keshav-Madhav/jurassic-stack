@@ -19,6 +19,7 @@ import { ITEMS, type ItemId } from './items'
 import { Hud } from './hud'
 import { saveGame, loadGame, SAVE_VERSION, type SaveFile } from './save'
 import { heightAt, loadHeightmap, SPAWN } from './heightmap'
+import { loadNavmesh, findPath } from './navmesh'
 import { WaterSystem } from './water'
 
 const SWING_COOLDOWN = 0.45
@@ -27,6 +28,7 @@ const INTERACT_RANGE = 3.8
 
 async function boot(): Promise<void> {
   await loadHeightmap() // everything below samples heightAt
+  await loadNavmesh()
   const app = document.getElementById('app')!
   const renderer = new THREE.WebGLRenderer({ antialias: true })
   renderer.setSize(innerWidth, innerHeight)
@@ -368,6 +370,11 @@ async function boot(): Promise<void> {
         return found
       },
       scatterDebug: () => scatter.debugSummary(),
+      pathTo: (x: number, z: number) => {
+        const from = feetPos()
+        const p = findPath(from.x, from.y, from.z, x, heightAt(x, z), z)
+        return p ? p.length : -1
+      },
       probeSwing: () => {
         raycaster.setFromCamera(new THREE.Vector2(0, 0), cam.camera)
         const node = scatter.raycast(raycaster, feetPos(), REACH + 1.2)

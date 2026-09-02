@@ -81,10 +81,17 @@ export class WaterSystem {
         const s = samples[i]
         const nx = -s.tz
         const nz = s.tx
-        const w = RIVER_HALF_WIDTH * (0.7 + 0.5 * t) // widens toward the mouth
+        // fit the ribbon to the channel: shrink each side until its edge sits
+        // below the water surface (canyon walls would otherwise poke through
+        // and the ribbon would hover over dry banks)
+        const maxW = RIVER_HALF_WIDTH * (0.7 + 0.5 * t)
+        let wL = maxW
+        while (wL > 3 && heightAt(s.x + nx * wL, s.z + nz * wL) > s.y - 0.1) wL -= 1.5
+        let wR = maxW
+        while (wR > 3 && heightAt(s.x - nx * wR, s.z - nz * wR) > s.y - 0.1) wR -= 1.5
         const o = i * 6
-        pos[o] = s.x + nx * w; pos[o + 1] = s.y; pos[o + 2] = s.z + nz * w
-        pos[o + 3] = s.x - nx * w; pos[o + 4] = s.y; pos[o + 5] = s.z - nz * w
+        pos[o] = s.x + nx * wL; pos[o + 1] = s.y; pos[o + 2] = s.z + nz * wL
+        pos[o + 3] = s.x - nx * wR; pos[o + 4] = s.y; pos[o + 5] = s.z - nz * wR
         uv[i * 4] = 0; uv[i * 4 + 1] = t * 40
         uv[i * 4 + 2] = 1; uv[i * 4 + 3] = t * 40
       }

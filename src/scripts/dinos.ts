@@ -8,6 +8,7 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import { heightAt, normalAt, SEA_LEVEL } from './heightmap'
+import { findPath, type PathPoint } from './navmesh'
 import { Mover, type MoverConfig } from './mover'
 import type { Physics } from './physics'
 import type { SpeciesDef } from './species'
@@ -46,6 +47,9 @@ export class Dino {
   private runBlend = 0
   private attackCooldown = 0
   private tmpN = new THREE.Vector3()
+  /** navmesh path-following (chase/follow): waypoints toward the target */
+  private waypoints: PathPoint[] = []
+  private repathT = 0
 
   constructor(
     readonly species: SpeciesDef,
@@ -186,8 +190,11 @@ export class Dino {
       }
       case 'tamed': {
         const d = pos.distanceTo(playerPos)
-        if (d > 6) this.seek(playerPos.x, playerPos.z, dt, d > 14 ? this.species.runSpeed : this.species.walkSpeed)
-        else this.speed = Math.max(0, this.speed - 8 * dt)
+        if (d > 6) this.seekVia(playerPos, dt, d > 14 ? this.species.runSpeed : this.species.walkSpeed)
+        else {
+          this.speed = Math.max(0, this.speed - 8 * dt)
+          this.waypoints.length = 0
+        }
         break
       }
       case 'aggro': {
@@ -196,15 +203,17 @@ export class Dino {
         if (this.stateT <= 0 || d > 40) {
           this.state = 'idle'
           this.stateT = 2
+          this.waypoints.length = 0
         } else if (d <= this.species.attackRange) {
           this.speed = Math.max(0, this.speed - 10 * dt)
+          this.waypoints.length = 0
           if (this.attackCooldown <= 0) {
             this.attackCooldown = 1.4
             this.actions.attack?.reset().setLoop(THREE.LoopOnce, 1).play()
             attackPlayer(this.species.attackDamage)
           }
         } else {
-          this.seek(playerPos.x, playerPos.z, dt, this.species.runSpeed)
+          this.seekVia(playerPos, dt, this.species.runSpeed)
         }
         break
       }
@@ -252,6 +261,28 @@ export class Dino {
     this.object.rotation.x = THREE.MathUtils.clamp(Math.atan2(hBack - hFront, 1.6), -0.3, 0.3)
     const running = this.speed > this.species.walkSpeed * 1.4
     this.animate(dt, this.speed / (running ? this.species.runSpeed : this.species.walkSpeed), running)
+  }
+
+  /** Seek toward a target via the navmesh: repath periodically, steer along
+   *  waypoints, fall back to direct seek when no route exists. */
+  private seekVia(target: THREE.Vector3, dt: number, speed: number): void {
+    const pos = this.object.position
+    this.repathT -= dt
+    if (this.repathT <= 0) {
+      this.repathT = 0.9 + Math.random() * 0.4
+      const path = findPath(pos.x, pos.y, pos.z, target.x, target.y, target.z)
+      this.waypoints = path ?? []
+      // drop the first waypoint if it's basically our own feet
+      if (this.waypoints.length && Math.hypot(this.waypoints[0].x - pos.x, this.waypoints[0].z - pos.z) < 1.2) {
+        this.waypoints.shift()
+      }
+    }
+    while (this.waypoints.length && Math.hypot(this.waypoints[0].x - pos.x, this.waypoints[0].z - pos.z) < 2.2) {
+      this.waypoints.shift()
+    }
+    const wp = this.waypoints[0]
+    if (wp) this.seek(wp.x, wp.z, dt, speed)
+    else this.seek(target.x, target.z, dt, speed)
   }
 
   private seek(tx: number, tz: number, dt: number, speed: number): void {

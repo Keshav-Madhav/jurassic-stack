@@ -138,3 +138,10 @@ Bugs the gate caught: reach measured from camera (all swings whiffed); camera-dr
 - [x] Pulled actual ARK Survival Evolved screenshots from Steam as reference; extracted the look: brown dirt/leaf-litter forest floors, trunk-dominant tall forests, low-bush understory carpet, very low ambient with sunlit breaks, gray weathered stone
 - [x] Forest floors now turn to dirt/leaf-litter under the (now shared) forest mask; rocks recolor to weathered gray by luminance; trees 7-16 m and pines 8-19 m (trunk-dominant); ferns 10K/bushes 3.6K bigger + denser; noon ambient down again (hemi 0.34, env 0.13) with sun up (2.7) — shadow pools with bright breaks
 - [x] Gates 9/9, 29/29, 12/12
+
+### M5c — terrain sculpting + navmesh (the "M5 — Real island" closer)
+- [x] Sculpt pass in the bake: terraced escarpments on the northern highlands, three flat-topped mesas with ragged rims, the east river's mid-course deepened into a canyon (tight channel, raised rims); lake banks noise-wobbled (crop-circle artifact fixed)
+- [x] recast/detour navmesh baked in Node from the same heightmap (741 KB committed) with **reachability validation: a walkable path must exist spawn → every ruin site** — and the volcano summit is verified UNREACHABLE on foot, geometric enforcement of the arc's sealed finale (enter via the caldera door at M8)
+- [x] Runtime navmesh (`navmesh.ts`): aggro-chase and tamed-follow now path-follow waypoints (repath ~1 s, steering between waypoints, direct-seek fallback); ambient wander stays on cheap steering. Full DetourCrowd deferred to M7 herds.
+- [x] Water ribbons auto-fit their channel (edges probe the banks) — canyon walls no longer poke through / no hovering water
+- [x] Gates 9/9, 29/29, 12/12. **M5 complete.**

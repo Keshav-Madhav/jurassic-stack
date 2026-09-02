@@ -201,16 +201,72 @@ for (let iz = 0; iz < SIDE; iz++) {
       if (d > 120) continue
       const beds = RIVER_BEDS[ri]
       const bed = beds[seg] * (1 - t) + beds[seg + 1] * t
-      // blend toward the bed inside the channel, with soft valley shoulders
-      const wBed = Math.exp(-(d * d) / (2 * 22 * 22))
-      const wValley = 0.35 * Math.exp(-(d * d) / (2 * 65 * 65))
+      // the east river's mid-course is a canyon: tight channel, steep walls,
+      // raised rims; elsewhere a soft valley
+      const canyon = ri === 0 && seg >= 1 && seg <= 3
+      const sigma = canyon ? 14 : 22
+      const wBed = Math.exp(-(d * d) / (2 * sigma * sigma))
+      const wValley = (canyon ? 0.15 : 0.35) * Math.exp(-(d * d) / (2 * 65 * 65))
       const i0 = idx(ix, iz)
       const target = Math.min(H[i0], bed)
       H[i0] = H[i0] * (1 - wBed) + target * wBed - wValley * 2.0
+      if (canyon) {
+        // rim lift: shoulders rise above the surrounding ground
+        H[i0] += 3.2 * Math.exp(-((d - 30) * (d - 30)) / (2 * 9 * 9))
+      }
     }
   }
 }
 console.timeEnd('rivers')
+
+// ---------- sculpt pass: escarpments, mesas, canyon (the ARK terrain drama) ----------
+console.time('sculpt')
+{
+  // terrace operator: quantize height into steps with steep risers
+  const terrace = (h, step, sharp) => {
+    const t = h / step
+    const f = t - Math.floor(t)
+    const shaped = Math.pow(f, sharp) / (Math.pow(f, sharp) + Math.pow(1 - f, sharp))
+    return (Math.floor(t) + shaped) * step
+  }
+  // mesas: flat-topped buttes in the dry east and west interior
+  const MESAS = [
+    { x: 560, z: -120, r: 70, top: 46 },
+    { x: -560, z: -260, r: 60, top: 58 },
+    { x: 620, z: 140, r: 45, top: 34 },
+  ]
+  for (let iz = 0; iz < SIDE; iz++) {
+    for (let ix = 0; ix < SIDE; ix++) {
+      const x = worldX(ix), z = worldZ(iz)
+      const i0 = idx(ix, iz)
+      let h = H[i0]
+
+      // highland escarpments: the northern rise (between the forest belt and
+      // the volcano foothills) breaks into terraced cliff bands
+      if (z < -60 && z > -460 && h > 16 && h < 90) {
+        const dv = Math.hypot(x - VOLCANO.x, z - VOLCANO.z)
+        if (dv > 330) {
+          const mask = smoothstep(16, 30, h) * (1 - smoothstep(70, 90, h)) *
+            smoothstep(-60, -140, z) * (1 - smoothstep(-380, -460, z)) *
+            (0.55 + 0.45 * fbm(x * 0.004 + 9, z * 0.004 - 4, 3))
+          h = h * (1 - mask) + terrace(h, 14, 3.2) * mask
+        }
+      }
+
+      // mesas: raise to a flat top inside r, sheer sides via smoothstep
+      for (const m of MESAS) {
+        const d = Math.hypot(x - m.x, z - m.z)
+        if (d > m.r * 1.5) continue
+        const w = 1 - smoothstep(m.r * 0.82, m.r * 1.12, d)
+        const rim = 1 + 0.04 * Math.sin(Math.atan2(z - m.z, x - m.x) * 7) // ragged edge
+        if (h < m.top && h > SEA + 1) h = h * (1 - w) + (m.top * rim + fbm(x * 0.05, z * 0.05, 2) * 1.5) * w
+      }
+
+      H[i0] = h
+    }
+  }
+}
+console.timeEnd('sculpt')
 
 // ---------- hydraulic erosion (droplet method, SebLague-style) ----------
 console.time('erosion')
@@ -333,11 +389,15 @@ for (let iz = 0; iz < SIDE; iz++) {
       }
       if (riverGap) continue
       const i0 = idx(ix, iz)
-      const need = lake.level + 0.7
+      // natural bank: wobble the ring radius and height with noise so the
+      // shore doesn't read as a stamped circle (v1 looked like a crop circle)
+      const wob = fbm(x * 0.022 + 3, z * 0.022 - 7, 3)
+      const dw = d + wob * 14
+      if (dw < lake.r * 0.92 || dw > lake.r * 1.5) continue
+      const need = lake.level + 0.55 + wob * 0.5
       if (H[i0] < need) {
-        // raise with a soft profile peaking at the rim
-        const t = 1 - Math.abs(d - lake.r * 1.1) / (lake.r * 0.45)
-        H[i0] = Math.max(H[i0], need - 0.4 + Math.max(0, t) * 0.9)
+        const t = 1 - Math.abs(dw - lake.r * 1.1) / (lake.r * 0.45)
+        H[i0] = Math.max(H[i0], need - 0.4 + Math.max(0, t) * (0.7 + wob * 0.5))
       }
     }
   }
