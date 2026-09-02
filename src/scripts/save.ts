@@ -20,6 +20,7 @@ export interface SaveFile {
   savedAt: number
   time: number
   player: { x: number; y: number; z: number; hp: number }
+  creative?: boolean
   inventory: unknown
   pieces: unknown
   deadNodes: unknown

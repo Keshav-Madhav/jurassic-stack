@@ -58,6 +58,7 @@ async function boot(): Promise<void> {
   void player.load() // async; capsule-less until the Barbarian arrives
   scene.add(player.object)
   let playerHp = save?.player.hp ?? 100
+  let creative = save?.creative ?? false
 
   const input = new Input(renderer.domElement)
   const cam = new ThirdPersonCamera(innerWidth / innerHeight)
@@ -180,6 +181,7 @@ async function boot(): Promise<void> {
   }
 
   const hurtPlayer = (damage: number): void => {
+    if (creative) return
     playerHp -= damage
     vignette.classList.add('hurt')
     setTimeout(() => vignette.classList.remove('hurt'), 220)
@@ -193,7 +195,7 @@ async function boot(): Promise<void> {
 
   // --- core verbs (used by both input handlers and the E2E gate) ---
   const swing = (): boolean => {
-    if (swingT > 0 || riding) return false
+    if ((swingT > 0 && !creative) || riding) return false
     swingT = SWING_COOLDOWN
     camKick = 0.05
     const held = inventory.held
@@ -213,7 +215,8 @@ async function boot(): Promise<void> {
     const target = nearestDino(REACH, (d) => d.state !== 'ko' && d.state !== 'tamed')
     if (target) {
       const from = feetPos()
-      if (held === 'spear') target.takeHit(12, 5, from.x, from.z)
+      if (creative) target.takeHit(0, 999, from.x, from.z) // creative: instant KO
+      else if (held === 'spear') target.takeHit(12, 5, from.x, from.z)
       else if (held === 'hatchet') target.takeHit(7, 4, from.x, from.z)
       else target.takeHit(2, 8, from.x, from.z) // fists: ~20 punches to KO
       hud.toast(target.state === 'ko' ? `${target.species.name} knocked out!` : `Hit ${target.species.name} (torpor ${Math.round(target.torpor)}/${target.species.torporMax})`)
@@ -225,7 +228,7 @@ async function boot(): Promise<void> {
     const node = scatter.raycast(raycaster, feetPos(), REACH + 1.2)
     if (node) {
       const isWood = node.kind === 'tree' || node.kind === 'pine'
-      const hits = held === 'hatchet' && isWood ? 2 : 1
+      const hits = creative ? 99 : held === 'hatchet' && isWood ? 2 : 1
       let yielded: Partial<Record<ItemId, number>> | null = null
       for (let i = 0; i < hits && node.alive; i++) yielded = scatter.hit(node) ?? yielded
       if (yielded && Object.keys(yielded).length) {
@@ -268,7 +271,8 @@ async function boot(): Promise<void> {
         hud.toast(`Need ${ITEMS[ko.species.tameFood].name}s to tame`)
         return false
       }
-      const tamed = ko.feed()
+      let tamed = ko.feed()
+      if (creative) while (!tamed && ko.state === 'ko') tamed = ko.feed()
       hud.toast(tamed ? `${ko.species.name} tamed!` : `Feeding… ${Math.min(100, Math.round(ko.tameProgress))}%`)
       return true
     }
@@ -301,8 +305,53 @@ async function boot(): Promise<void> {
   }
 
   // --- input events ---
+  const grantCreativeKit = (): void => {
+    for (const id of ['wood', 'stone', 'fiber', 'flint', 'berry'] as ItemId[]) {
+      const missing = 999 - inventory.count(id)
+      if (missing > 0) inventory.add(id, missing)
+    }
+    for (const id of ['foundation', 'wall', 'ceiling', 'campfire'] as ItemId[]) {
+      const missing = 99 - inventory.count(id)
+      if (missing > 0) inventory.add(id, missing)
+    }
+    if (inventory.count('hatchet') === 0) inventory.add('hatchet', 1)
+    if (inventory.count('spear') === 0) inventory.add('spear', 1)
+    if (inventory.count('saddle') < 5) inventory.add('saddle', 5 - inventory.count('saddle'))
+  }
+  const setCreative = (on: boolean): void => {
+    creative = on
+    hud.setCreative(on)
+    if (on) {
+      grantCreativeKit()
+      hud.toast('Creative mode — double-tap SPACE to fly (space up · shift down)')
+    } else {
+      player.flying = false
+      hud.toast('Survival mode')
+    }
+  }
+  if (creative) {
+    hud.setCreative(true)
+  }
+  let lastSpaceAt = 0
   addEventListener('keydown', (e) => {
     if (e.code === 'KeyT') daynight.setTime(daynight.time + 1 / 24)
+    if (e.code === 'KeyC') setCreative(!creative)
+    if (e.code === 'KeyF' && !riding) {
+      if (inventory.remove('berry', 1)) {
+        playerHp = Math.min(100, playerHp + 15)
+        hud.toast(`Ate a berry (+15 ♥ → ${Math.ceil(playerHp)})`)
+      } else {
+        hud.toast('No berries — punch a bush')
+      }
+    }
+    if (e.code === 'Space' && !e.repeat) {
+      const now = performance.now()
+      if (creative && !riding && now - lastSpaceAt < 300) {
+        player.flying = !player.flying
+        hud.toast(player.flying ? 'Flight ON' : 'Flight off')
+      }
+      lastSpaceAt = now
+    }
     if (e.code === 'KeyE') interact()
     if (e.code === 'Tab') {
       e.preventDefault()
@@ -320,6 +369,7 @@ async function boot(): Promise<void> {
     savedAt: Date.now(),
     time: daynight.time,
     player: { x: player.mover.position.x, y: player.mover.position.y, z: player.mover.position.z, hp: playerHp },
+    creative,
     inventory: inventory.serialize(),
     pieces: building.serialize(),
     deadNodes: scatter.serialize(),
@@ -490,6 +540,9 @@ async function boot(): Promise<void> {
         cam.pitch = Math.atan2(best.y + 1 - head.y, Math.hypot(best.x - head.x, best.z - head.z)) * 0.8
         return bd
       },
+      setCreative: (on: boolean) => setCreative(on),
+      flying: () => player.flying,
+      setFlying: (on: boolean) => { player.flying = on },
       save: async () => {
         await saveGame(collectSave())
         return true
@@ -635,10 +688,14 @@ async function boot(): Promise<void> {
       if (ko) hud.prompt(`E — feed ${ITEMS[ko.species.tameFood].icon} (${Math.min(100, Math.round(ko.tameProgress))}%)`)
       else if (tame && !tame.saddled) hud.prompt(inventory.count('saddle') > 0 ? 'E — saddle' : 'tamed — craft a saddle to ride')
       else if (tame) hud.prompt('E — ride')
-      else hud.prompt(null)
+      else {
+        const wild = nearestDino(14, (d) => d.state !== 'tamed' && d.state !== 'ko')
+        if (wild) hud.prompt(`${wild.species.name} · ♥${Math.max(0, Math.ceil(wild.hp))} · 😴${Math.round(wild.torpor)}/${wild.species.torporMax}`)
+        else hud.prompt(null)
+      }
     }
 
-    hud.tick(dt, focus.x, focus.y, focus.z, daynight.time, playerHp)
+    hud.tick(dt, focus.x, focus.y, focus.z, daynight.time, playerHp, (-cam.yaw * 180) / Math.PI)
     renderer.render(scene, cam.camera)
     dbg.ready = true
   }

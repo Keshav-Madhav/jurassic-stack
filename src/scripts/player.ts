@@ -42,6 +42,8 @@ export class Player {
   readonly object = new THREE.Group()
   swimming = false
   riding = false
+  /** Creative flight (double-tap space in creative mode). Auto-lands on ground contact. */
+  flying = false
   private facing = 0
   private mixer: THREE.AnimationMixer | null = null
   private actions = new Map<ClipSlot, THREE.AnimationAction>()
@@ -131,7 +133,48 @@ export class Player {
     override?: { vx: number; vz: number },
   ): void {
     const depth = waterLevel !== null ? waterLevel - (this.mover.position.y - this.mover.feetOffset) : -1
-    this.swimming = depth > 1.05
+    this.swimming = !this.flying && depth > 1.05
+
+    if (this.flying) {
+      // creative flight: WASD fast horizontal, space up, shift down; landing
+      // (ground contact while descending) disengages. Debug override steers too.
+      if (override) {
+        this.mover.intent.vx = override.vx
+        this.mover.intent.vz = override.vz
+        if (override.vx || override.vz) this.facing = Math.atan2(override.vx, override.vz)
+        this.mover.velocityY = input.down('Space') ? 9 : input.down('ShiftLeft') ? -9 : 0
+        this.mover.intent.jump = false
+        this.mover.update(dt, 0)
+        if (this.mover.grounded && this.mover.velocityY <= 0) this.flying = false
+        return
+      }
+      let fwd = 0
+      let strafe = 0
+      if (input.down('KeyW')) fwd -= 1
+      if (input.down('KeyS')) fwd += 1
+      if (input.down('KeyA')) strafe -= 1
+      if (input.down('KeyD')) strafe += 1
+      const len = Math.hypot(fwd, strafe)
+      const FLY_SPEED = 20
+      if (len > 0) {
+        const sin = Math.sin(cameraYaw)
+        const cos = Math.cos(cameraYaw)
+        const nx = (strafe * cos + fwd * sin) / len
+        const nz = (fwd * cos - strafe * sin) / len
+        this.mover.intent.vx = nx * FLY_SPEED
+        this.mover.intent.vz = nz * FLY_SPEED
+        this.facing = Math.atan2(nx, nz)
+      } else {
+        this.mover.intent.vx = 0
+        this.mover.intent.vz = 0
+      }
+      const vert = (input.down('Space') ? 9 : 0) + (input.down('ShiftLeft') || input.down('ShiftRight') ? -9 : 0)
+      this.mover.velocityY = vert
+      this.mover.intent.jump = false
+      this.mover.update(dt, 0)
+      if (this.mover.grounded && vert <= 0) this.flying = false
+      return
+    }
 
     if (override) {
       this.mover.intent.vx = override.vx

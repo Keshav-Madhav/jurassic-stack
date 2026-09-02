@@ -9,6 +9,8 @@ export class Hud {
   private posEl: HTMLElement
   private timeEl: HTMLElement
   private hpEl: HTMLElement
+  private compassEl!: HTMLElement
+  private modeEl!: HTMLElement
   private hotbarEl: HTMLElement
   private promptEl: HTMLElement
   private panelEl: HTMLElement
@@ -26,18 +28,22 @@ export class Hud {
         <span id="hud-pos"></span>
         <span id="hud-time"></span>
         <span id="hud-hp"></span>
+        <span id="hud-compass"></span>
+        <span id="hud-mode" hidden>CREATIVE</span>
       </div>
       <div id="hud-crosshair">·</div>
       <div id="hud-prompt"></div>
       <div id="hud-toast"></div>
       <div id="hud-hotbar"></div>
       <div id="hud-panel" hidden></div>
-      <div id="hud-help">WASD · shift sprint · LMB punch/use · E interact · TAB inventory · trees→🪵 rocks→🪨 bushes→🫐 (tame food)</div>
+      <div id="hud-help">WASD · LMB use · E interact · F eat 🫐 · TAB inventory · C creative · trees→🪵 rocks→🪨 bushes→🫐</div>
     `
     this.fpsEl = root.querySelector('#hud-fps')!
     this.posEl = root.querySelector('#hud-pos')!
     this.timeEl = root.querySelector('#hud-time')!
     this.hpEl = root.querySelector('#hud-hp')!
+    this.compassEl = root.querySelector('#hud-compass')!
+    this.modeEl = root.querySelector('#hud-mode')!
     this.hotbarEl = root.querySelector('#hud-hotbar')!
     this.promptEl = root.querySelector('#hud-prompt')!
     this.panelEl = root.querySelector('#hud-panel')!
@@ -49,7 +55,11 @@ export class Hud {
     this.renderHotbar()
   }
 
-  tick(dt: number, x: number, y: number, z: number, timeOfDay: number, hp: number): void {
+  setCreative(on: boolean): void {
+    this.modeEl.hidden = !on
+  }
+
+  tick(dt: number, x: number, y: number, z: number, timeOfDay: number, hp: number, yawDeg?: number): void {
     this.frames++
     this.accum += dt
     if (this.accum >= 0.5) {
@@ -59,6 +69,11 @@ export class Hud {
       const hours = (timeOfDay * 24 + 24) % 24
       this.timeEl.textContent = `${String(Math.floor(hours)).padStart(2, '0')}:${String(Math.floor((hours % 1) * 60)).padStart(2, '0')}`
       this.hpEl.textContent = `♥ ${Math.max(0, Math.ceil(hp))}`
+      if (yawDeg !== undefined) {
+        const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
+        const d = ((yawDeg % 360) + 360) % 360
+        this.compassEl.textContent = `${dirs[Math.round(d / 45) % 8]} ${Math.round(d)}°`
+      }
       this.frames = 0
       this.accum = 0
     }

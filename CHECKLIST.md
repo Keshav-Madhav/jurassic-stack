@@ -167,3 +167,9 @@ Bugs the gate caught: reach measured from camera (all swings whiffed); camera-dr
 - [x] Two load-order bugs caught by screenshots: animation root-scale tracks made bind-pose normalization spawn kaiju-scale trikes/rex (fix: normalize from ANIMATED skinned bounds); the T-Rex GLB ships a giant static ground plane (fix: hide non-skinned meshes in skinned rigs)
 - [x] HUD help now teaches gathering: trees→wood, rocks→stone, bushes→berries (tame food)
 - [x] Dino separation scales with species size. Gates 9/9, 29/29, 12/12
+
+### M7b — creative mode + QoL (user request: creative for now — max resources, flight with landing, and more)
+- [x] Creative mode (C toggles, persisted in save): 999 of every resource + 99 placeables + tools/saddles granted; god mode; no swing cooldown; one-hit harvest; punch = instant KO; feed = instant tame
+- [x] Flight: double-tap SPACE in creative — WASD at 20 m/s, space up / shift down, auto-lands on ground contact while descending; CREATIVE badge in HUD
+- [x] QoL: F eats a berry (+15♥), compass heading in HUD (N/NE/…°), nearby-wild-dino readout in the prompt (name · ♥hp · 😴torpor/max — taming progress finally visible), help line teaches C/F
+- [x] New gate `tools/gate-creative.mjs` (9 checks) — caught 3 real integration bugs: flight ignored the harness override; the creative kit auto-slotted foundations into slot 0 so every "swing" built a base instead of harvesting; and swing prioritizes dinos so a wandering raptor intercepted the tree test. All gates green: 9/9, 29/29, 12/12, creative 9/9
