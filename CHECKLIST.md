@@ -244,12 +244,12 @@ User's 10 + mandate, to be burned down across M7d+ and the MAP OVERHAUL mileston
 - [x] **THE CALDERA DOOR**: stone slab seals the gate arch (collider included); E with all 5 keystones → the slab grinds down over 4s and the crater opens; state persists. gate-m8 grew to 11 checks (sealed initially, refuses when missing, opens with 5, survives reload)
 - Gates: 9/9, 29/29, 12/12, 11/11, 12/12 (73 total)
 
-### BACKLOG v2 (player review 2026-09-02, second pass — queued before further arc work)
-1. Transparency/render-order bug: things behind draw over things in front (suspect: transparent foliage materials from GLTF sorting per-supercell-mesh, or water-vs-water blending) — DIAGNOSE FIRST, it's a correctness bug
-2. Map refinements continued (the standing MAP OVERHAUL): per-landmark hand-sculpt + screenshot approval
-3. Shadows: quality pass (current: 1536px PCF at 1/3 rate — revisit cascade/CSM at M6-proper)
-4. Terrain: more variation still (cliff bands, outcrops — backlog #6 remains open)
-5. Foliage & rocks: more varieties, denser where it matters
-6. River/water: further improvements (waterfalls at canyon drops, better shorelines)
-7. Wildlife mass: small critters + herd herbivores (dodo/compy-likes) so the island feels ALIVE — intake pass on Quaternius animated animals pack
-8. Sky: clouds + an actual sun disc (currently: Sky shader only, no clouds, no visible sun)
+### BACKLOG v2 (player review 2026-09-02, second pass) — priority order agreed: backlog before new phases
+1. Render-order bug: "stuff behind renders over stuff in front" (transparency/depth suspect — water depthWrite:false, ghost, halos; needs repro hunt or player screenshot)
+2. Wildlife mass: small critters + passive herbivores in numbers — dodo-likes (TerrorBird scaled small), compys (raptor model scaled tiny), grazing herds; world should feel inhabited
+3. Sky: real sun disc (visible, glare), drifting clouds; night sky stars(?)
+4. Map refinements (continue MAP OVERHAUL): per-landmark screenshot approval, cliffs/outcrops (backlog v1 #6 still open), forest composition
+5. Shadows: quality pass (current: 1536px PCF at 1/3 rate — revisit cascade/softness balance)
+6. Terrain: more variation continues; rock formations
+7. Foliage/rocks: more varieties, densities
+8. River/water: further improvements (visual depth, rapids, waterfall at canyon?)
