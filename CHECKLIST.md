@@ -227,3 +227,11 @@ User's 10 + mandate, to be burned down across M7d+ and the MAP OVERHAUL mileston
 - [x] River visuals: churning foam bands along both banks (uv-driven, animated), per-vertex depth tint (deep = darker), faster flow perturbation
 - [x] **M8 OPENS — the arc's thread:** 5 glowing keystones at the pre-caldera ruin sites (bobbing, spinning, point-lit), E to collect, count toasts, save-persisted; **N = the Wayfinder** — points to the nearest missing keystone (or the caldera gate once all 5 are held) with direction + distance. New gate-m8 (6 checks) green first run.
 - Gates: 9/9, 29/29, 12/12, m8 6/6, creative 12/12; island + navmesh rebaked
+
+### M8b — the sky-trunk mystery solved (floating trees, root-caused via raycast forensics)
+- [x] Diagnosis chain: floaters() probe proved no instance base renders above ground → raycast identified the giant floating trunk as pine#0 instance 3.9m from camera → footprint analysis revealed Pine1 was a MERGED GROVE (aspect 1.03 — as wide as tall): on slopes, far grove members hung in the air
+- [x] Fix 1: Pine1 replaced with a true single pine (Pine_4, aspect 0.57 — same variant count, saves survive; prettier tree too)
+- [x] Fix 2: footprint-flatness guard — any prop with aspect > 0.8 only places where ground varies < 2.2m across its footprint (auto-guards future cluster imports)
+- [x] Also this round: reverted the max-bias LOD sampling (it cracked the volcano silhouette — white gashes); props instead embed by their exact per-spot LOD error (lodFloorAt); discovered the M5e sink offsets had been silently LOST in the M6a scatter rewrite (props had zero embed since — the real reason floaters persisted)
+- [x] QA probes now permanent: floaters(threshold), whatIsThere(screenXY) raycast identify
+- Gates: 9/9, 29/29, 12/12, 6/6, 12/12

@@ -487,6 +487,28 @@ async function boot(): Promise<void> {
         return found
       },
       scatterDebug: () => scatter.debugSummary(),
+      floaters: (t: number) => scatter.floaters(t),
+      whatIsThere: (nx: number, ny: number) => {
+        raycaster.setFromCamera(new THREE.Vector2(nx, ny), cam.camera)
+        const hits = raycaster.intersectObjects(scene.children, true)
+        return hits.slice(0, 3).map((h) => {
+          const chain: string[] = []
+          let o: THREE.Object3D | null = h.object
+          while (o && chain.length < 5) {
+            chain.push(`${o.type}:${o.name || '?'}`)
+            o = o.parent
+          }
+          const ident = h.instanceId != null ? scatter.identify(h.object, h.instanceId) : null
+          return {
+            d: +h.distance.toFixed(1),
+            y: +h.point.y.toFixed(1),
+            inst: h.instanceId ?? null,
+            key: ident?.key ?? null,
+            node: ident ? { y: +ident.node.y.toFixed(1), scale: +ident.node.scale.toFixed(1), ground: +heightAt(ident.node.x, ident.node.z).toFixed(1) } : null,
+            chain: chain.join(' < '),
+          }
+        })
+      },
       nearestNodeInfo: (kind: string) => {
         const from = feetPos()
         let best: { x: number; z: number; scale: number; d: number } | null = null

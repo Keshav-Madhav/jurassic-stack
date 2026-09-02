@@ -12,7 +12,7 @@ import * as THREE from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
-import { heightAt, normalAt, forestMaskAt, SEA_LEVEL, HALF_SIZE, SPAWN, VOLCANO, worldMeta } from './heightmap'
+import { heightAt, lodFloorAt, normalAt, forestMaskAt, SEA_LEVEL, HALF_SIZE, SPAWN, VOLCANO, worldMeta } from './heightmap'
 import { CHUNK_SIZE, CHUNKS_PER_SIDE } from './terrain'
 import { addObstacle } from './obstacles'
 import type { Physics } from './physics'
@@ -222,13 +222,30 @@ class InstancedProp {
     const cx = baseN ? baseX / baseN : (box.min.x + box.max.x) / 2
     const cz = baseN ? baseZ / baseN : (box.min.z + box.max.z) / 2
 
+    // Ground on the CENTRAL COLUMN's lowest point (the trunk), not the global
+    // min: canopies that droop below the trunk base otherwise become the
+    // "feet", hoisting the trunk meters into the air at large scales — the
+    // giant sky-trunk bug. Drooping leaves may kiss the ground instead; right.
+    const colR = Math.max(0.5, Math.max(box.max.x - box.min.x, box.max.z - box.min.z) * 0.18)
+    let centralMinY = Infinity
+    root.traverse((o) => {
+      if (!(o instanceof THREE.Mesh)) return
+      const posA = (o.geometry as THREE.BufferGeometry).getAttribute('position')
+      const vv = new THREE.Vector3()
+      for (let i = 0; i < posA.count; i++) {
+        vv.set(posA.getX(i), posA.getY(i), posA.getZ(i)).applyMatrix4(o.matrixWorld)
+        if (Math.hypot(vv.x - cx, vv.z - cz) < colR && vv.y < centralMinY) centralMinY = vv.y
+      }
+    })
+    const groundY = Number.isFinite(centralMinY) ? centralMinY : box.min.y
+
     root.traverse((o) => {
       if (!(o instanceof THREE.Mesh)) return
       const geo = toFloatGeometry(o.geometry as THREE.BufferGeometry)
       geo.applyMatrix4(o.matrixWorld)
       geo.translate(-cx, 0, -cz)
       geo.scale(s, s, s)
-      geo.translate(0, -box.min.y * s, 0) // feet at y=0
+      geo.translate(0, -groundY * s, 0) // trunk base at y=0
       const mat = (o.material as THREE.MeshStandardMaterial).clone()
       mat.roughness = 1
       mat.metalness = 0
@@ -307,8 +324,26 @@ export class Scatter {
       }),
     )
 
+    // footprint aspect per kind (max over variants): wide props (merged
+    // clusters, broad canopies) only place on ground that's flat across
+    // their footprint — a merged pine GROVE placed on a slope hung its far
+    // members in the air (the giant sky-trunk bug)
+    const aspect = new Map<NodeKind, number>()
+    const bb = new THREE.Box3()
+    const sz = new THREE.Vector3()
+    for (const kind of Object.keys(KIND_MODELS) as NodeKind[]) {
+      let worst = 0
+      for (const ref of KIND_MODELS[kind]) {
+        const src = loaded.get(ref.file)!
+        const root = ref.node ? (src.getObjectByName(ref.node) ?? src) : src
+        bb.setFromObject(root)
+        bb.getSize(sz)
+        worst = Math.max(worst, Math.max(sz.x, sz.z) / Math.max(0.01, sz.y))
+      }
+      aspect.set(kind, worst)
+    }
     for (const kind of Object.keys(SPECS) as NodeKind[]) {
-      this.place(kind, SPECS[kind])
+      this.place(kind, SPECS[kind], aspect.get(kind) ?? 0.5)
     }
 
     for (const [key, ids] of this.order) {
@@ -353,7 +388,7 @@ export class Scatter {
     }
   }
 
-  private place(kind: NodeKind, spec: PlaceSpec): void {
+  private place(kind: NodeKind, spec: PlaceSpec, footprintAspect = 0.5): void {
     const rand = mulberry32(spec.seed)
     let count = 0
     for (let gz = -HALF_SIZE + spec.cell; gz < HALF_SIZE - spec.cell && count < spec.cap; gz += spec.cell) {
@@ -389,9 +424,22 @@ export class Scatter {
         const riverD = riverDistAt(x, z)
         if (riverD < 13 && kind !== 'willow') continue // keep channels clear
         if (!spec.habitat(h, ny, forestMaskAt(x, z), riverD, Math.hypot(x, z))) continue
+        if (footprintAspect > 0.8) {
+          // wide prop: its footprint must sit on near-level ground
+          const r = scale * footprintAspect * 0.35
+          const hs = [heightAt(x + r, z), heightAt(x - r, z), heightAt(x, z + r), heightAt(x, z - r)]
+          if (Math.max(...hs) - Math.min(...hs) > 2.2) continue
+        }
         const id = this.nodes.length
         this.nodes.push({
-          id, kind, variant, x, y: h, z, scale, rotY, tint,
+          id, kind, variant, x,
+          // embed = micro-ground allowance + this spot's worst-case LOD error
+          // (coarse chunks render below truth on convex ground; sink past it
+          // so no draw distance can float a prop). NOTE: the original fixed
+          // sink was lost in the M6a rewrite — props had ZERO embed since.
+          y: h - (kind === 'rock' ? 0.05 * scale + 0.04 : GROUND_COVER.has(kind) ? 0.06 : 0.14)
+            - Math.min(2.5, Math.max(0, h - lodFloorAt(x, z))),
+          z, scale, rotY, tint,
           hp: NODE_DEFS[kind].hp,
           alive: true,
           respawnAt: 0,
@@ -514,6 +562,41 @@ export class Scatter {
     const cx = Math.floor((n.x + HALF_SIZE) / CHUNK_SIZE)
     const cz = Math.floor((n.z + HALF_SIZE) / CHUNK_SIZE)
     return cz * CHUNKS_PER_SIDE + cx
+  }
+
+  /** Identify which prop group a raycast-hit mesh belongs to. */
+  identify(mesh: THREE.Object3D, instanceId: number): { key: string; node: ScatterNode } | null {
+    for (const [key, prop] of this.props) {
+      if (prop.meshes.includes(mesh as THREE.InstancedMesh)) {
+        const ids = this.order.get(key)!
+        return { key, node: this.nodes[ids[instanceId]] }
+      }
+    }
+    return null
+  }
+
+  /** QA: instances whose rendered base sits far off the exact ground. */
+  floaters(threshold = 1.2): { key: string; x: number; z: number; baseY: number; ground: number }[] {
+    const out: { key: string; x: number; z: number; baseY: number; ground: number }[] = []
+    const m = new THREE.Matrix4()
+    const pos = new THREE.Vector3()
+    const q = new THREE.Quaternion()
+    const sc = new THREE.Vector3()
+    for (const [key, prop] of this.props) {
+      const mesh = prop.meshes[0]
+      if (!mesh) continue
+      const ids = this.order.get(key)!
+      for (let i = 0; i < ids.length; i++) {
+        mesh.getMatrixAt(i, m)
+        m.decompose(pos, q, sc)
+        if (sc.x < 0.01) continue // hidden
+        const ground = heightAt(pos.x, pos.z)
+        if (Math.abs(pos.y - ground) > threshold && out.length < 20) {
+          out.push({ key, x: +pos.x.toFixed(0), z: +pos.z.toFixed(0), baseY: +pos.y.toFixed(1), ground: +ground.toFixed(1) })
+        }
+      }
+    }
+    return out
   }
 
   trunkColliderCount(): number {

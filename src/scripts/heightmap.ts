@@ -74,19 +74,20 @@ export function heightAt(x: number, z: number): number {
   return (h00 * (1 - u) * (1 - v) + h10 * u * (1 - v) + h01 * (1 - u) * v + h11 * u * v) * scale
 }
 
-/** MAX height within ±halfWin of (x,z) — used by coarse terrain LODs so
- *  distant ground renders at-or-above the true surface. Props are embedded
- *  into the exact surface, so "at or above" means buried-at-worst, never
- *  floating (undersampled LODs rendering BELOW truth was the floater bug). */
-export function heightMaxAt(x: number, z: number, halfWin: number): number {
-  let best = -Infinity
-  for (let dz = -halfWin; dz <= halfWin; dz += res) {
-    for (let dx = -halfWin; dx <= halfWin; dx += res) {
-      const h = heightAt(x + dx, z + dz)
-      if (h > best) best = h
-    }
-  }
-  return best
+/** The height the COARSEST terrain LOD renders at (x,z): bilinear over the
+ *  16m LOD3 vertex grid (chunk-aligned). Props embed by their positive error
+ *  vs this floor, so even the farthest render can't leave them floating. */
+export function lodFloorAt(x: number, z: number): number {
+  const STEP = 16 // LOD3 vertex spacing (128m chunk / 8 quads)
+  const gx = Math.floor((x + HALF_SIZE) / STEP) * STEP - HALF_SIZE
+  const gz = Math.floor((z + HALF_SIZE) / STEP) * STEP - HALF_SIZE
+  const u = (x - gx) / STEP
+  const v = (z - gz) / STEP
+  const h00 = heightAt(gx, gz)
+  const h10 = heightAt(gx + STEP, gz)
+  const h01 = heightAt(gx, gz + STEP)
+  const h11 = heightAt(gx + STEP, gz + STEP)
+  return h00 * (1 - u) * (1 - v) + h10 * u * (1 - v) + h01 * (1 - u) * v + h11 * u * v
 }
 
 /** Normal via central differences on the sampled grid. `out` avoids allocation. */
