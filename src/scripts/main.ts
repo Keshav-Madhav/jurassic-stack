@@ -53,6 +53,7 @@ async function boot(): Promise<void> {
     ? new THREE.Vector3(save.player.x, save.player.y + 0.5, save.player.z)
     : new THREE.Vector3(SPAWN.x, heightAt(SPAWN.x, SPAWN.z) + 1.2, SPAWN.z)
   const player = new Player(physics, spawnPos)
+  void player.load() // async; capsule-less until the Barbarian arrives
   scene.add(player.object)
   let playerHp = save?.player.hp ?? 100
 
@@ -200,6 +201,7 @@ async function boot(): Promise<void> {
       return false
     }
 
+    player.playSwing(held)
     // dino in reach and roughly ahead? spear damages, fists build torpor
     const target = nearestDino(REACH, (d) => d.state !== 'ko' && d.state !== 'tamed')
     if (target) {
@@ -238,11 +240,12 @@ async function boot(): Promise<void> {
     const d = riding
     riding = null
     d.endRide()
+    scene.add(player.object) // detach from the seat
+    player.riding = false
     const side = new THREE.Vector3(Math.cos(d.object.rotation.y), 0, -Math.sin(d.object.rotation.y))
     const px = d.object.position.x + side.x * 2.2
     const pz = d.object.position.z + side.z * 2.2
     player.mover.teleport(px, heightAt(px, pz) + 1.2, pz)
-    player.object.visible = true
     hud.toast('Dismounted')
   }
 
@@ -277,8 +280,13 @@ async function boot(): Promise<void> {
       if (!tame.species.rideable) return false
       riding = tame
       tame.beginRide(physics)
-      player.object.visible = false
-      player.mover.teleport(tame.object.position.x, -520, tame.object.position.z) // park the player body
+      // park the player body, seat the character on the mount
+      player.mover.teleport(tame.object.position.x, -520, tame.object.position.z)
+      player.riding = true
+      tame.object.add(player.object)
+      const seat = tame.species.seat
+      player.object.position.set(seat.x, seat.y, seat.z)
+      player.object.rotation.set(0, 0, 0)
       hud.toast(`Riding the ${tame.species.name} — E to dismount`)
       return true
     }
@@ -541,7 +549,8 @@ async function boot(): Promise<void> {
     }
     const alpha = accumulator / FIXED_DT
 
-    if (!riding) player.render(alpha)
+    player.render(alpha, dt) // runs while riding too (seat pose + mixer)
+    player.setHeldItem(inventory.held)
     const pFeet = feetPos()
     for (const d of dinos) d.update(dt, pFeet, hurtPlayer)
     scatter.ensureCollidersAround(focus.x, focus.z, physics)

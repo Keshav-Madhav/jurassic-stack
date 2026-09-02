@@ -123,3 +123,8 @@ Bugs the gate caught: reach measured from camera (all swings whiffed); camera-dr
 - [x] Real-time shadows: one 2048px directional map following the player (±85 m, texel-snapped) — terrain receives; props/dinos/ruins/buildings/player cast. Two classic bugs fixed: shadow camera bounds set without `updateProjectionMatrix` (stayed ±5 m), and `normalBias: 1.6` — world METERS — erasing every caster thinner than 1.6 m (now 0.18 ≈ 2× texel). CSM upgrade remains for M6 proper.
 - [x] First ruins: prefab layouts at all six baked sites (columns/arches/toppled pieces + the stag statue on the beach facing the volcano — the arc's tutorial beacon; the caldera-gate arch is the future keystone door). Colliders on standing pieces. The pristine castle-barracks model was cut (read as a fort, not ruins).
 - [x] Lake shore rings enforced in the bake (with river inlet/outlet gaps) + shore validator — the edge-on floating-rim artifact is gone at the source.
+
+### M6c — the player character
+- [x] KayKit Barbarian (CC0, GitHub) replaces the capsule: 76 embedded clips — idle/walk/run blends with speed-matched strides, Jump_Idle airborne + swim treadwater, one-shot swings flavored by tool (punch / 1H chop / throw), Sit_Chair_Idle as the riding pose (player parents to the dino's seat bone offset)
+- [x] Contextual attachment: the 1H axe shows only while the hatchet is held; mug/shield/offhand axe hidden
+- [x] All gates green (9/9, 29/29, 12/12); intake pipeline used (meshopt 3.4→2.3 MB, clips verified)
