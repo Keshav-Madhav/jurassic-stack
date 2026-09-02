@@ -44,6 +44,16 @@ export class WaterSystem {
     ocean.position.y = SEA_LEVEL
     this.group.add(ocean)
 
+    // --- swamp: one broad sheet at the marsh water table; carved pool
+    // depressions below it read as scattered ponds ---
+    if (meta.swamp) {
+      const sw = meta.swamp
+      const geo = new THREE.CircleGeometry(sw.r * 1.02, 48).rotateX(-Math.PI / 2)
+      const mesh = new THREE.Mesh(geo, this.makeWaterMat(0x39493a, 0.9, new THREE.Vector2(0.03, 0.02), 0))
+      mesh.position.set(sw.x, sw.level, sw.z)
+      this.group.add(mesh)
+    }
+
     // --- lakes ---
     for (const lake of meta.lakes) {
       // slightly inside the carved basin so the rim never overhangs lower
@@ -226,6 +236,9 @@ export class WaterSystem {
       if (Math.hypot(x - lake.x, z - lake.z) < lake.r * 1.1 && heightAt(x, z) < lake.level - 0.2) {
         level = Math.max(level ?? -Infinity, lake.level)
       }
+    }
+    if (meta.swamp && Math.hypot(x - meta.swamp.x, z - meta.swamp.z) < meta.swamp.r * 1.02 && heightAt(x, z) < meta.swamp.level - 0.15) {
+      level = Math.max(level ?? -Infinity, meta.swamp.level)
     }
     for (const r of this.rivers) {
       const hit = nearestSample(x, z, r.samples)

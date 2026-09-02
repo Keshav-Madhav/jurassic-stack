@@ -34,7 +34,7 @@ async function boot(): Promise<void> {
   const app = document.getElementById('app')!
   const renderer = new THREE.WebGLRenderer({ antialias: true })
   renderer.setSize(innerWidth, innerHeight)
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)) // 2x retina fill cost was a top lag source
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.3)) // small resolution trade for fps (user-approved)
   renderer.shadowMap.enabled = true
   renderer.shadowMap.type = THREE.PCFShadowMap // Soft variant cost ~10fps; radius softens enough
   // shadows redraw at half frame rate — the sun crawls, and re-rendering

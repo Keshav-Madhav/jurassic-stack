@@ -126,6 +126,16 @@ function meander(path, seed) {
 }
 const RIVERS_DENSE = RIVERS.map((p, i) => meander(p, i * 3.7 + 1.2))
 
+// ---- biome regions (the depth mandate: distinct traversable lands) ----
+const SWAMP = { x: 560, z: 330, r: 170, level: 4.2 } // east-coast marsh, the canyon river deltas through it
+const DESERT = { x: -520, z: 300, r: 220 } // west rain-shadow flats, the west river oasis crosses it
+const PLAINS = { x: -240, z: 520, r: 200 } // rolling bush plains southwest of spawn
+const RIDGES = [
+  // NE range and NW range: terraced cliff walls with two passes each
+  [{ x: 600, z: -380 }, { x: 690, z: -160 }, { x: 745, z: 60 }],
+  [{ x: -600, z: -430 }, { x: -690, z: -180 }, { x: -740, z: 30 }],
+]
+
 /** distance from point to a polyline; also returns segment index + local t */
 function distToPath(px, pz, path) {
   let best = Infinity
@@ -174,6 +184,16 @@ for (let iz = 0; iz < SIDE; iz++) {
       h += 14 * Math.exp(-(d * d) / (2 * 90 * 90)) * smoothstep(900, 300, Math.hypot(x - VOLCANO.x, z - VOLCANO.z))
     }
 
+    // mountain ranges: two coastal ridges with pass dips (traversable)
+    for (const ridge of RIDGES) {
+      const rr = distToPath(x, z, ridge)
+      const frac = (rr.seg + rr.t) / (ridge.length - 1)
+      // continuous wall with two gentle pass dips (v1's deep fast modulation
+      // beaded the range into separate bumps — hillshade iteration 2)
+      const passes = 0.8 + 0.2 * Math.sin(frac * Math.PI * 2 + 0.9)
+      h += 64 * passes * Math.exp(-(rr.d * rr.d) / (2 * 58 * 58))
+    }
+
     // the volcano, resculpted (MAP OVERHAUL: "looks weirdly bad" — too smooth):
     // angular radius modulation breaks the perfect-cone silhouette, radial
     // ridges give the flanks gullies, and a raised crater rim reads from afar
@@ -198,6 +218,28 @@ for (let iz = 0; iz < SIDE; iz++) {
     const ds = Math.hypot(x - SPAWN.x, z - SPAWN.z)
     const beach = Math.exp(-(ds * ds) / (2 * 210 * 210)) * 0.92
     h = h * (1 - beach) + 3.0 * beach
+
+    // swamp: flatten low with pool depressions carved below the water table
+    {
+      const d = Math.hypot(x - SWAMP.x, z - SWAMP.z)
+      const w = smoothstep(SWAMP.r, SWAMP.r * 0.55, d)
+      if (w > 0.01) {
+        const pool = Math.max(0, fbm(x * 0.02 + 11, z * 0.02 - 5, 3)) * 2.6
+        h = h * (1 - w) + (5.5 - pool) * w
+      }
+    }
+    // desert: gentle dune flats
+    {
+      const d = Math.hypot(x - DESERT.x, z - DESERT.z)
+      const w = smoothstep(DESERT.r, DESERT.r * 0.5, d)
+      if (w > 0.01) h = h * (1 - w) + (7.5 + 2.2 * fbm(x * 0.012 + 3, z * 0.012 + 9, 3) + 0.7 * Math.sin(x * 0.045 + z * 0.02)) * w
+    }
+    // plains: soft rolling open ground
+    {
+      const d = Math.hypot(x - PLAINS.x, z - PLAINS.z)
+      const w = smoothstep(PLAINS.r, PLAINS.r * 0.5, d)
+      if (w > 0.01) h = h * (1 - w) + (7 + 1.4 * fbm(x * 0.01 - 7, z * 0.01 + 2, 3)) * w
+    }
 
     // lake basins: uniformly DEEP inside the waterline (a soft-blended basin
     // left a walkable shelf 1-3m under the surface — you could stand on the
@@ -279,10 +321,10 @@ console.time('sculpt')
     return (Math.floor(t) + shaped) * step
   }
   // mesas: flat-topped buttes in the dry east and west interior
+  // relocated inland — the coastal ridges now own the old mesa ground
   const MESAS = [
-    { x: 560, z: -120, r: 70, top: 46 },
-    { x: -560, z: -260, r: 60, top: 58 },
-    { x: 620, z: 140, r: 45, top: 34 },
+    { x: 250, z: -60, r: 65, top: 42 },
+    { x: -350, z: 190, r: 55, top: 38 },
   ]
   for (let iz = 0; iz < SIDE; iz++) {
     for (let ix = 0; ix < SIDE; ix++) {
@@ -310,6 +352,15 @@ console.time('sculpt')
         if (frac > 0.18 && frac < 0.62 && d > 16 && d < 64 && h > 6) {
           const w = smoothstep(64, 34, d) * 0.75
           h = h * (1 - w) + terrace(h, 7, 3.4) * w
+        }
+      }
+
+      // mountain ridge cliffs: terrace the range flanks into rock bands
+      for (const ridge of RIDGES) {
+        const rr = distToPath(x, z, ridge)
+        if (rr.d < 130 && h > 18) {
+          const w = smoothstep(130, 55, rr.d) * 0.8
+          h = h * (1 - w) + terrace(h, 11, 3.2) * w
         }
       }
 
@@ -622,9 +673,29 @@ const meta = {
   side: SIDE, res: RES, scale: SCALE, half: HALF, sea: SEA,
   spawn: SPAWN, volcano: VOLCANO,
   rivers: RIVERS_DENSE, lakes: LAKES, ruinSites: RUIN_SITES,
+  swamp: SWAMP,
   bakedAt: new Date().toISOString(),
 }
 writeFileSync('public/world/world-meta.json', JSON.stringify(meta, null, 2))
+
+// biome map: one byte per grid cell (0 default, 1 swamp, 2 desert, 3 plains,
+// 4 alpine) — runtime scatter/colors/water read the SAME data as the bake
+{
+  const biomes = new Uint8Array(SIDE * SIDE)
+  for (let iz = 0; iz < SIDE; iz++) {
+    for (let ix = 0; ix < SIDE; ix++) {
+      const x = worldX(ix), z = worldZ(iz)
+      const h = H[idx(ix, iz)]
+      let b = 0
+      if (Math.hypot(x - SWAMP.x, z - SWAMP.z) < SWAMP.r) b = 1
+      else if (Math.hypot(x - DESERT.x, z - DESERT.z) < DESERT.r) b = 2
+      else if (Math.hypot(x - PLAINS.x, z - PLAINS.z) < PLAINS.r) b = 3
+      else if (h > 52) b = 4
+      biomes[idx(ix, iz)] = b
+    }
+  }
+  writeFileSync('public/world/biomes.bin', Buffer.from(biomes.buffer))
+}
 
 // hillshade BMP for eyeball QA (24-bit, no deps)
 {

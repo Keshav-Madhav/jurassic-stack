@@ -6,7 +6,7 @@
 // through heightmap.ts. LOD0 vertex data doubles as the physics collider mesh
 // (physics.ts asks for it via chunkGridData).
 import * as THREE from 'three'
-import { heightAt, normalAt, forestMaskAt, worldMeta, HALF_SIZE, SEA_LEVEL } from './heightmap'
+import { heightAt, normalAt, forestMaskAt, biomeAt, BIOME, worldMeta, HALF_SIZE, SEA_LEVEL } from './heightmap'
 
 export const CHUNK_SIZE = 128
 export const CHUNKS_PER_SIDE = (HALF_SIZE * 2) / CHUNK_SIZE // 16
@@ -187,6 +187,11 @@ const C_FLOOR = new THREE.Color(0x3a2e1f) // forest floor: dirt + leaf litter
 const C_FLOOR_LIT = new THREE.Color(0x51402a)
 const C_MUD = new THREE.Color(0x453827) // wet banks
 const C_SHORE_SAND = new THREE.Color(0x8f7a52)
+const C_SWAMP = new THREE.Color(0x2e3320) // murky marsh ground
+const C_SWAMP_WET = new THREE.Color(0x252b1e)
+const C_DESERT = new THREE.Color(0x9a8054) // dry flats
+const C_DESERT_DARK = new THREE.Color(0x7a6543)
+const C_PLAINS = new THREE.Color(0x4a6a28) // open grassland, lighter
 
 /** Distance to the nearest river centerline or lake ring (for wet banks). */
 function waterEdgeDist(x: number, z: number): number {
@@ -220,6 +225,12 @@ function splatAt(x: number, z: number, h: number, ny: number, out: THREE.Vector4
   let dirt = 0
   let rock = 0
   let sand = 0
+  const biome = biomeAt(x, z)
+  if (biome === BIOME.SWAMP) return out.set(0.15, 0.85, 0, 0)
+  if (biome === BIOME.DESERT) {
+    const rocky = ny < 0.82 ? Math.min(1, (0.82 - ny) / 0.2) : 0
+    return out.set(0, 0.1, rocky, 0.9 - rocky)
+  }
   if (h < 2.4) {
     sand = 1
   } else {
@@ -258,6 +269,12 @@ function splatAt(x: number, z: number, h: number, ny: number, out: THREE.Vector4
   return out.set(grass, dirt, rock, sand)
 }
 
+function varTFor(x: number, z: number): number {
+  const n1 = Math.sin(x * 0.021 + Math.sin(z * 0.017) * 2.1) * Math.cos(z * 0.019 - Math.sin(x * 0.023))
+  const n2 = Math.sin(x * 0.11 + z * 0.09) * Math.cos(x * 0.07 - z * 0.13)
+  return n1 * 0.5 + n2 * 0.28
+}
+
 /** Ground color by height/slope + two-frequency variation noise. */
 function groundColorAt(x: number, z: number, h: number, ny: number, out: THREE.Color): THREE.Color {
   // cheap deterministic variation (hash-free trig noise is fine for color)
@@ -265,6 +282,18 @@ function groundColorAt(x: number, z: number, h: number, ny: number, out: THREE.C
   const n2 = Math.sin(x * 0.11 + z * 0.09) * Math.cos(x * 0.07 - z * 0.13)
   const varT = n1 * 0.5 + n2 * 0.28 // ~[-0.78, 0.78]
 
+  // biome overrides first
+  const biome = biomeAt(x, z)
+  if (biome === BIOME.SWAMP) {
+    const wet = worldMeta?.swamp && h < worldMeta.swamp.level + 0.4
+    out.copy(wet ? C_SWAMP_WET : C_SWAMP).offsetHSL(0, 0, varTFor(x, z) * 0.03)
+    return out
+  }
+  if (biome === BIOME.DESERT) {
+    out.copy(C_DESERT).lerp(C_DESERT_DARK, THREE.MathUtils.clamp(0.5 + varTFor(x, z) * 0.9, 0, 1))
+    if (ny < 0.82) out.lerp(C_ROCK, THREE.MathUtils.clamp((0.82 - ny) / 0.2, 0, 1))
+    return out
+  }
   // under a lake's fill level → bed color, never lawn
   for (const lake of worldMeta?.lakes ?? []) {
     if (Math.hypot(x - lake.x, z - lake.z) < lake.r * 1.05 && h < lake.level - 0.2) {
@@ -278,6 +307,7 @@ function groundColorAt(x: number, z: number, h: number, ny: number, out: THREE.C
   } else {
     // grass field: lush ↔ light by variation, dry olive patches where n1 peaks
     out.copy(C_GRASS_LUSH).lerp(C_GRASS_LIGHT, THREE.MathUtils.clamp(0.5 + varT * 0.9, 0, 1))
+    if (biome === BIOME.PLAINS) out.lerp(C_PLAINS, 0.55)
     if (n1 > 0.22) out.lerp(C_GRASS_DRY, THREE.MathUtils.clamp((n1 - 0.22) * 2.0, 0, 0.9))
     // under the woods the ground is dirt and leaf litter, not lawn (the ARK
     // reference: forest floors are brown, greens live in the understory)

@@ -253,3 +253,21 @@ User's 10 + mandate, to be burned down across M7d+ and the MAP OVERHAUL mileston
 6. Terrain: more variation continues; rock formations
 7. Foliage/rocks: more varieties, densities
 8. River/water: further improvements (visual depth, rapids, waterfall at canyon?)
+
+### THE DEPTH MANDATE (player, 2026-09-02) — multi-round program
+- Fidelity: reduce low-polyness perception (bigger/better models, detail layers); small resolution cut for FPS headroom
+- TERRAIN, MASSIVELY (multiple iterations, hand-made): swamp biome, better lakes/rivers, cliffs + mountain ranges (traversable, realistic), caverns (own round — needs interiors), huge trees, bush-filled plains, desert-ish flats
+- Weather system + moonlight; sun disc + clouds (from backlog v2)
+- Systems: better inventory UI, survival stats (hunger/thirst/stamina), more craftables, real icons (not emoji)
+- Order: terrain first (this round = biome system + 4 new biomes + ridges), then sky/weather, then UI/systems
+
+### M9a — BIOME FOUNDATIONS (terrain mandate, iteration 1+2)
+- [x] Biome system: bake writes biomes.bin (1 byte/cell: default/swamp/desert/plains/alpine); runtime biomeAt() drives ground colors, splat weights, vegetation rules, water
+- [x] SWAMP (east coast, 170m): flattened marsh with noise-carved pools below a 4.2m water table, murky sheet water (swimmable), willow/deadtree/fern/mushroom flora, peaty ground — the canyon river deltas through it. Screenshot: genuinely ARK-marsh
+- [x] DESERT (west, 220m): dune flats, sand splat, near-barren (rocks/deadwood/sparse grass); west river floods its center into an oasis lake (accepted as composition for now — noted)
+- [x] PLAINS (southwest of spawn, 200m): open rolling bushland, lighter grass, mega-bushes (1.3x), lone trees only
+- [x] MOUNTAIN RANGES: two coastal ridges (NE/NW) — continuous terraced rock walls, 64m, two pass dips each (traversable); iteration 1 beaded into bumps, fixed in iteration 2; mesas relocated inland out of their way
+- [x] Deep-forest GIANTS: trees/pines 1.45x (up to ~23/27m) where forest mask > 0.42
+- [x] Perf: pixelRatio 1.3 (user-approved resolution trade)
+- Gates: 9/9, 29/29, 12/12, 11/11, 12/12 (73). Caverns deferred to a dedicated round (needs interiors). Weather/moon/inventory/icons/stats: next rounds.
+- **WORKING AGREEMENT (user): small focused picks per round, deeper work per pick**

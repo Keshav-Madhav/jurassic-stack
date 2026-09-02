@@ -19,6 +19,7 @@ export const SPAWN = { x: 0, z: 780 }
 export interface RiverPoint { x: number; z: number }
 export interface LakeDef { x: number; z: number; r: number; level: number }
 export interface RuinSite { tag: string; x: number; z: number; y: number }
+export interface SwampDef { x: number; z: number; r: number; level: number }
 export interface WorldMeta {
   side: number
   res: number
@@ -30,20 +31,24 @@ export interface WorldMeta {
   rivers: RiverPoint[][]
   lakes: LakeDef[]
   ruinSites: RuinSite[]
+  swamp?: SwampDef
 }
 
 let grid: Int16Array | null = null
+let biomes: Uint8Array | null = null
 let side = 0
 let res = 2
 let scale = 0.01
 export let worldMeta: WorldMeta | null = null
 
 export async function loadHeightmap(base = ''): Promise<void> {
-  const [metaRes, binRes] = await Promise.all([
+  const [metaRes, binRes, bioRes] = await Promise.all([
     fetch(`${base}world/world-meta.json`),
     fetch(`${base}world/heightmap.bin`),
+    fetch(`${base}world/biomes.bin`),
   ])
   if (!metaRes.ok || !binRes.ok) throw new Error('world data missing — run tools/bake-island.mjs')
+  if (bioRes.ok) biomes = new Uint8Array(await bioRes.arrayBuffer())
   worldMeta = (await metaRes.json()) as WorldMeta
   side = worldMeta.side
   res = worldMeta.res
@@ -133,6 +138,16 @@ function _noise2(x: number, y: number): number {
   const l = (a2: number, b: number, t: number) => a2 + t * (b - a2)
   return l(l(_grad(aa, x, y), _grad(ba, x - 1, y), u), l(_grad(ab, x, y - 1), _grad(bb, x - 1, y - 1), u), v)
 }
+/** Biome id at (x,z): 0 default · 1 swamp · 2 desert · 3 plains · 4 alpine. */
+export const BIOME = { DEFAULT: 0, SWAMP: 1, DESERT: 2, PLAINS: 3, ALPINE: 4 } as const
+export function biomeAt(x: number, z: number): number {
+  if (!biomes) return 0
+  const ix = Math.round((x + HALF_SIZE) / res)
+  const iz = Math.round((z + HALF_SIZE) / res)
+  if (ix < 0 || iz < 0 || ix >= side || iz >= side) return 0
+  return biomes[iz * side + ix]
+}
+
 /** Forest mask in ~[-1, 1]: >0.1 woods, <0 open. */
 export function forestMaskAt(x: number, z: number): number {
   return _noise2(x * 0.0045, z * 0.0045) * 0.72 + _noise2(x * 0.013, z * 0.013) * 0.28

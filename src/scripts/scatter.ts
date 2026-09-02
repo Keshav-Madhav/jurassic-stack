@@ -12,7 +12,7 @@ import * as THREE from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
-import { heightAt, lodFloorAt, normalAt, forestMaskAt, SEA_LEVEL, HALF_SIZE, SPAWN, VOLCANO, worldMeta } from './heightmap'
+import { heightAt, lodFloorAt, normalAt, forestMaskAt, biomeAt, BIOME, SEA_LEVEL, HALF_SIZE, SPAWN, VOLCANO, worldMeta } from './heightmap'
 import { CHUNK_SIZE, CHUNKS_PER_SIDE } from './terrain'
 import { addObstacle } from './obstacles'
 import type { Physics } from './physics'
@@ -423,7 +423,28 @@ export class Scatter {
         if (Math.hypot(x - SPAWN.x, z - SPAWN.z) < 14) continue
         const riverD = riverDistAt(x, z)
         if (riverD < 13 && kind !== 'willow') continue // keep channels clear
-        if (!spec.habitat(h, ny, forestMaskAt(x, z), riverD, Math.hypot(x, z))) continue
+        const forestHere = forestMaskAt(x, z)
+        const biome = biomeAt(x, z)
+        // biome vegetation rules (the depth mandate): swamps are willow/dead-
+        // tree/fern marsh; deserts are near-barren rock+deadwood; plains are
+        // open bush-and-grass seas with the odd lone tree
+        if (biome === BIOME.SWAMP) {
+          if (kind === 'tree' || kind === 'pine' || kind === 'palm' || kind === 'flower') continue
+          if (kind === 'willow' && rand() > 0.9) { /* willows thrive: bypass river rule below */ }
+        } else if (biome === BIOME.DESERT) {
+          if (!(kind === 'rock' || kind === 'deadtree' || (kind === 'grass' && rand() < 0.15) || (kind === 'bush' && rand() < 0.08))) continue
+        } else if (biome === BIOME.PLAINS) {
+          if (kind === 'tree' || kind === 'pine') { if (rand() > 0.06) continue }
+          if (kind === 'fern' || kind === 'mushroom') continue
+        }
+        // swamp fauna bypass their usual habitat rules (willows off-river,
+        // ferns outside forest, dead trees anywhere wet)
+        const swampFlora = biome === BIOME.SWAMP && (kind === 'willow' || kind === 'deadtree' || kind === 'fern' || kind === 'grass' || kind === 'bush' || kind === 'mushroom')
+        if (!swampFlora && !spec.habitat(h, ny, forestHere, riverD, Math.hypot(x, z))) continue
+        // deep-forest giants + plains mega-bushes (the depth mandate)
+        let scaleMul = 1
+        if ((kind === 'tree' || kind === 'pine') && forestHere > 0.42) scaleMul = 1.45
+        if (kind === 'bush' && biome === BIOME.PLAINS) scaleMul = 1.3
         if (footprintAspect > 0.8) {
           // wide prop: its footprint must sit on near-level ground
           const r = scale * footprintAspect * 0.35
@@ -439,7 +460,7 @@ export class Scatter {
           // sink was lost in the M6a rewrite — props had ZERO embed since.
           y: h - (kind === 'rock' ? 0.05 * scale + 0.04 : GROUND_COVER.has(kind) ? 0.06 : 0.14)
             - Math.min(2.5, Math.max(0, h - lodFloorAt(x, z))),
-          z, scale, rotY, tint,
+          z, scale: scale * scaleMul, rotY, tint,
           hp: NODE_DEFS[kind].hp,
           alive: true,
           respawnAt: 0,
