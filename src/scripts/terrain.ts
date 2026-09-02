@@ -118,13 +118,13 @@ export function chunkGridData(cx: number, cz: number): { vertices: Float32Array;
 }
 
 // ---------- ground palette (the "splat map" until M6's real shader) ----------
-const C_DEEP = new THREE.Color(0x2e3d33) // underwater
-const C_SAND = new THREE.Color(0xb9a06a)
-const C_GRASS_LUSH = new THREE.Color(0x2f5426) // dark rich green
-const C_GRASS_LIGHT = new THREE.Color(0x4a7336)
-const C_GRASS_DRY = new THREE.Color(0x6e7038) // olive dry patches
-const C_ROCK = new THREE.Color(0x6b6157)
-const C_ROCK_STEEP = new THREE.Color(0x524a42)
+const C_DEEP = new THREE.Color(0x24312a) // underwater
+const C_SAND = new THREE.Color(0xa08753)
+const C_GRASS_LUSH = new THREE.Color(0x1f3d18) // dark rich green
+const C_GRASS_LIGHT = new THREE.Color(0x35571f)
+const C_GRASS_DRY = new THREE.Color(0x555a28) // olive dry patches
+const C_ROCK = new THREE.Color(0x5c5349)
+const C_ROCK_STEEP = new THREE.Color(0x453e37)
 const C_BASALT = new THREE.Color(0x453d36) // volcano flanks
 const C_CINDER = new THREE.Color(0x332c27) // summit
 

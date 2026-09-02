@@ -29,21 +29,21 @@ interface Grade {
 }
 
 const NOON: Grade = {
-  exposure: 0.57, // darker, richer ground (M6a review: pale wash)
+  exposure: 0.52, // dark, contrasty (user: real-leaf greens, strong shadows)
   fog: new THREE.Color(0x87b5d9),
   fogNear: 350, fogFar: 2450,
-  hemiSky: new THREE.Color(0xaccce8),
-  hemiGround: new THREE.Color(0x2e3c28),
-  hemiIntensity: 0.65,
+  hemiSky: new THREE.Color(0x9cc0de),
+  hemiGround: new THREE.Color(0x24301f),
+  hemiIntensity: 0.5,
   sun: new THREE.Color(0xfff2d8),
-  sunIntensity: 2.25,
+  sunIntensity: 2.4,
   rimIntensity: 0,
   turbidity: 6,
   rayleigh: 1.8,
 }
 
 const GOLDEN: Grade = {
-  exposure: 0.66,
+  exposure: 0.6,
   fog: new THREE.Color(0xe8884e),
   fogNear: 240, fogFar: 1900,
   hemiSky: new THREE.Color(0xffa858),
@@ -142,7 +142,7 @@ export class DayNight {
     scene.fog = new THREE.Fog(0x87b5d9, 350, 2450)
     // the Sky PMREM is HDR-bright; at full strength it washes every material
     // to pastel. IBL is a subtle fill here, the direct lights carry the look.
-    scene.environmentIntensity = 0.35
+    scene.environmentIntensity = 0.22
     renderer.toneMapping = THREE.ACESFilmicToneMapping
     this.pmrem = new THREE.PMREMGenerator(renderer)
   }

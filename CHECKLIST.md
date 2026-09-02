@@ -128,3 +128,8 @@ Bugs the gate caught: reach measured from camera (all swings whiffed); camera-dr
 - [x] KayKit Barbarian (CC0, GitHub) replaces the capsule: 76 embedded clips — idle/walk/run blends with speed-matched strides, Jump_Idle airborne + swim treadwater, one-shot swings flavored by tool (punch / 1H chop / throw), Sit_Chair_Idle as the riding pose (player parents to the dino's seat bone offset)
 - [x] Contextual attachment: the 1H axe shows only while the hatchet is held; mug/shield/offhand axe hidden
 - [x] All gates green (9/9, 29/29, 12/12); intake pipeline used (meshopt 3.4→2.3 MB, clips verified)
+
+### M6d — castaway + the dark pass (user: "skinny natural human, bare; everything too bright, want real-leaf greens")
+- [x] Player is now a Quaternius "Casual2" slim natural-proportioned human (CC0, 24 clips), recolored at load into a bare castaway: shirt+shoes→skin (shirtless, barefoot), jeans→ragged brown shorts. Clip remap (Idle_Neutral/Walk/Run/Punch_R/Sword_Slash/Punch_L); no sit clip → idle astride. Barbarian retired.
+- [x] Global dark pass: foliage materials pulled toward deep leaf green at load (green-dominant detection), terrain palette darkened again (lush 0x1f3d18), noon exposure 0.52 + hemi 0.5 + env 0.22 with sun 2.4 — ambient down, sun up ⇒ shadows carry the frame
+- [x] Gates 9/9, 29/29, 12/12; golden-hour vista now frames the sun setting behind the volcano

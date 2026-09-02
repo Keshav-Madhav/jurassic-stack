@@ -240,6 +240,11 @@ class InstancedProp {
       const mat = (o.material as THREE.MeshStandardMaterial).clone()
       mat.roughness = 1
       mat.metalness = 0
+      // real-leaf greens: Quaternius foliage ships bright — pull green-dominant
+      // materials toward deep leaf green (user art direction: darker world)
+      if (mat.color.g > mat.color.r * 1.15 && mat.color.g > mat.color.b * 1.15) {
+        mat.color.lerp(new THREE.Color(0x14300f), 0.45)
+      }
       const im = new THREE.InstancedMesh(geo, mat, capacity)
       im.count = 0
       im.frustumCulled = false

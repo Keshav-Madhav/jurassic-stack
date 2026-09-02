@@ -1,9 +1,8 @@
 // Player: reads input, produces mover intent relative to the camera's yaw,
-// and owns the visible character — the KayKit Barbarian (CC0), whose GLB
-// ships 76 animation clips. States: idle/walk/run/air/swim, one-shot swings
-// (punch or chop by held tool), and a seated pose while riding. The axe
-// attachment shows only while the hatchet is held; all other accessories
-// (mug, shield, offhand axe) stay hidden.
+// and owns the visible character — a Quaternius "Casual2" human (CC0),
+// recolored at load into a bare castaway (shirtless, barefoot, ragged
+// shorts). States: idle/walk/run/air/swim, one-shot swings by held tool
+// (punch / chop / throw), idle-astride while riding.
 import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
@@ -19,17 +18,24 @@ const CURRENT_SPEED = 2.2
 const HEIGHT = 1.75
 
 type ClipSlot = 'idle' | 'walk' | 'run' | 'air' | 'sit' | 'punch' | 'chop' | 'throw'
-const CLIP_NAMES: Record<ClipSlot, string> = {
-  idle: 'Idle',
-  walk: 'Walking_A',
-  run: 'Running_A',
-  air: 'Jump_Idle',
-  sit: 'Sit_Chair_Idle',
-  punch: 'Unarmed_Melee_Attack_Punch_A',
-  chop: '1H_Melee_Attack_Chop',
-  throw: 'Throw',
+// Quaternius "Casual2" castaway — clip names carry an armature prefix, so match by suffix
+const CLIP_MATCH: Record<ClipSlot, RegExp> = {
+  idle: /(^|\|)Idle_Neutral$/,
+  walk: /(^|\|)Walk$/,
+  run: /(^|\|)Run$/,
+  air: /(^|\|)Idle$/, // no jump clip on this rig; alert-idle reads fine airborne
+  sit: /(^|\|)Sit/, // none on this rig — animate() falls back to idle astride
+  punch: /(^|\|)Punch_Right$/,
+  chop: /(^|\|)Sword_Slash$/,
+  throw: /(^|\|)Punch_Left$/,
 }
-const HIDDEN_ATTACHMENTS = ['1H_Axe_Offhand', 'Barbarian_Round_Shield', '2H_Axe', 'Mug']
+/** Castaway look: recolor the casual outfit to bare skin + ragged shorts. */
+const CASTAWAY_RECOLOR: Record<string, number> = {
+  LightBrown: -1, // shirt → skin (resolved from the Skin material at load)
+  White: -1, // shoes → skin
+  Red_Dark: -1, // shoe soles → skin
+  LightBlue: 0x4a3623, // jeans → ragged brown shorts
+}
 
 export class Player {
   readonly mover: Mover
@@ -39,7 +45,6 @@ export class Player {
   private facing = 0
   private mixer: THREE.AnimationMixer | null = null
   private actions = new Map<ClipSlot, THREE.AnimationAction>()
-  private axe: THREE.Object3D | null = null
   private moveWeight = 0
   private runBlend = 0
   private airBlend = 0
@@ -53,7 +58,7 @@ export class Player {
   async load(): Promise<void> {
     const loader = new GLTFLoader()
     loader.setMeshoptDecoder(MeshoptDecoder)
-    const gltf = await loader.loadAsync('models/player/Barbarian.glb')
+    const gltf = await loader.loadAsync('models/player/Castaway.glb')
     const model = gltf.scene
 
     const box = new THREE.Box3().setFromObject(model)
@@ -62,23 +67,35 @@ export class Player {
     const box2 = new THREE.Box3().setFromObject(model)
     model.position.y -= box2.min.y
 
+    // castaway recolor: find the Skin tone, repaint outfit materials
+    let skin: THREE.Color | null = null
+    model.traverse((o) => {
+      if (!(o instanceof THREE.Mesh)) return
+      const mats = Array.isArray(o.material) ? o.material : [o.material]
+      for (const m of mats) {
+        if ((m as THREE.MeshStandardMaterial).name === 'Skin') skin = (m as THREE.MeshStandardMaterial).color.clone()
+      }
+    })
     model.traverse((o) => {
       if (o instanceof THREE.Mesh) {
         o.castShadow = true
         o.receiveShadow = true
+        const mats = Array.isArray(o.material) ? o.material : [o.material]
+        for (const m of mats) {
+          const mat = m as THREE.MeshStandardMaterial
+          if (mat.name in CASTAWAY_RECOLOR) {
+            const v = CASTAWAY_RECOLOR[mat.name]
+            if (v === -1 && skin) mat.color.copy(skin)
+            else if (v >= 0) mat.color.setHex(v)
+          }
+        }
       }
     })
-    for (const name of HIDDEN_ATTACHMENTS) {
-      const n = model.getObjectByName(name)
-      if (n) n.visible = false
-    }
-    this.axe = model.getObjectByName('1H_Axe') ?? null
-    if (this.axe) this.axe.visible = false
     this.object.add(model)
 
     this.mixer = new THREE.AnimationMixer(model)
-    for (const slot of Object.keys(CLIP_NAMES) as ClipSlot[]) {
-      const clip = gltf.animations.find((a) => a.name === CLIP_NAMES[slot])
+    for (const slot of Object.keys(CLIP_MATCH) as ClipSlot[]) {
+      const clip = gltf.animations.find((a) => CLIP_MATCH[slot].test(a.name))
       if (!clip) continue
       const action = this.mixer.clipAction(clip)
       if (slot === 'punch' || slot === 'chop' || slot === 'throw') {
@@ -91,10 +108,8 @@ export class Player {
     }
   }
 
-  /** Show the axe attachment while a chopping tool is held. */
-  setHeldItem(id: ItemId | null): void {
-    if (this.axe) this.axe.visible = id === 'hatchet'
-  }
+  /** No attachment props on the castaway rig (tools are implied by animation). */
+  setHeldItem(_id: ItemId | null): void {}
 
   /** One-shot swing animation, flavored by the held tool. */
   playSwing(held: ItemId | null): void {
@@ -228,6 +243,8 @@ export class Player {
     if (sit) {
       if (this.sitBlend > 0.01 && !sit.isRunning()) sit.play()
       sit.weight = this.sitBlend
+    } else if (idle) {
+      idle.weight += this.sitBlend * oneShot // no sit clip: idle astride
     }
     this.mixer.update(dt)
   }
