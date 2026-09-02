@@ -81,3 +81,41 @@ export function normalAt(x: number, z: number, out = new THREE.Vector3()): THREE
   const hu = heightAt(x, z + e)
   return out.set(hl - hr, 2 * e, hd - hu).normalize()
 }
+
+// --- seeded forest-mask noise (shared by scatter placement + terrain color) ---
+const _perm = new Uint8Array(512)
+{
+  let a = 77 >>> 0
+  const rand = () => {
+    a |= 0; a = (a + 0x6d2b79f5) | 0
+    let t = Math.imul(a ^ (a >>> 15), 1 | a)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+  const p = [...Array(256).keys()]
+  for (let i = 255; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1))
+    ;[p[i], p[j]] = [p[j], p[i]]
+  }
+  for (let i = 0; i < 512; i++) _perm[i] = p[i & 255]
+}
+const _fade = (t: number) => t * t * t * (t * (t * 6 - 15) + 10)
+const _grad = (h2: number, x: number, y: number) => (h2 & 1 ? -x : x) + (h2 & 2 ? -y : y)
+function _noise2(x: number, y: number): number {
+  const X = Math.floor(x) & 255
+  const Y = Math.floor(y) & 255
+  x -= Math.floor(x)
+  y -= Math.floor(y)
+  const u = _fade(x)
+  const v = _fade(y)
+  const aa = _perm[_perm[X] + Y]
+  const ab = _perm[_perm[X] + Y + 1]
+  const ba = _perm[_perm[X + 1] + Y]
+  const bb = _perm[_perm[X + 1] + Y + 1]
+  const l = (a2: number, b: number, t: number) => a2 + t * (b - a2)
+  return l(l(_grad(aa, x, y), _grad(ba, x - 1, y), u), l(_grad(ab, x, y - 1), _grad(bb, x - 1, y - 1), u), v)
+}
+/** Forest mask in ~[-1, 1]: >0.1 woods, <0 open. */
+export function forestMaskAt(x: number, z: number): number {
+  return _noise2(x * 0.0045, z * 0.0045) * 0.72 + _noise2(x * 0.013, z * 0.013) * 0.28
+}

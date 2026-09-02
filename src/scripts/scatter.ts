@@ -12,7 +12,7 @@ import * as THREE from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
-import { heightAt, normalAt, SEA_LEVEL, HALF_SIZE, SPAWN, VOLCANO, worldMeta } from './heightmap'
+import { heightAt, normalAt, forestMaskAt, SEA_LEVEL, HALF_SIZE, SPAWN, VOLCANO, worldMeta } from './heightmap'
 import { CHUNK_SIZE, CHUNKS_PER_SIDE } from './terrain'
 import type { Physics } from './physics'
 import type { ItemId } from './items'
@@ -95,16 +95,17 @@ interface PlaceSpec {
 }
 
 const SPECS: Record<NodeKind, PlaceSpec> = {
-  // woods: dense inside the forest mask, gone in clearings
-  tree: { cell: 15, chance: 0.62, sMin: 4.5, sMax: 11, cap: 6500, seed: 101, habitat: (h, _ny, f) => f > 0.12 && h > 3.2 },
-  pine: { cell: 16, chance: 0.6, sMin: 5, sMax: 12.5, cap: 5200, seed: 202, habitat: (h, _ny, f) => f > 0.05 && h > 6 },
+  // woods: dense inside the forest mask, gone in clearings. Tall — the ARK
+  // reference forest is trunk-dominant with canopy far overhead.
+  tree: { cell: 15, chance: 0.62, sMin: 7, sMax: 16, cap: 6500, seed: 101, habitat: (h, _ny, f) => f > 0.12 && h > 3.2 },
+  pine: { cell: 16, chance: 0.6, sMin: 8, sMax: 19, cap: 5200, seed: 202, habitat: (h, _ny, f) => f > 0.05 && h > 6 },
   deadtree: { cell: 34, chance: 0.4, sMin: 4, sMax: 8, cap: 700, seed: 707, habitat: (h, _ny, f) => f > -0.34 && f < -0.13 && h > 4 },
   palm: { cell: 24, chance: 0.5, sMin: 5, sMax: 9, cap: 600, seed: 808, habitat: (h) => h > 1.1 && h < 4.2 },
   willow: { cell: 30, chance: 0.55, sMin: 5, sMax: 8.5, cap: 350, seed: 909, habitat: (h, _ny, _f, riverD) => riverD < 34 && riverD > 13 && h > 2 },
   rock: { cell: 40, chance: 0.4, sMin: 0.8, sMax: 2.4, cap: 1600, seed: 303, habitat: () => true },
   log: { cell: 44, chance: 0.4, sMin: 1.2, sMax: 2.2, cap: 800, seed: 606, habitat: (h, _ny, f) => f > 0.1 && h > 3 },
-  bush: { cell: 26, chance: 0.5, sMin: 0.9, sMax: 2.0, cap: 2400, seed: 404, habitat: (h, _ny, f) => f < 0.3 && h > 2.2 },
-  fern: { cell: 13, chance: 0.55, sMin: 0.6, sMax: 1.4, cap: 6000, seed: 505, habitat: (h, _ny, f) => f > 0.16 && h > 3 },
+  bush: { cell: 20, chance: 0.55, sMin: 1.2, sMax: 2.8, cap: 3600, seed: 404, habitat: (h) => h > 2.2 },
+  fern: { cell: 10, chance: 0.7, sMin: 0.8, sMax: 1.9, cap: 10000, seed: 505, habitat: (h, _ny, f) => f > 0.1 && h > 3 },
   flower: { cell: 18, chance: 0.5, sMin: 0.6, sMax: 1.2, cap: 2600, seed: 111, habitat: (h, _ny, f) => f < 0.05 && h > 2.4 },
   grass: { cell: 7, chance: 0.72, sMin: 0.45, sMax: 1.2, cap: 30000, seed: 555, habitat: (h) => h > 1.6 },
   mushroom: { cell: 30, chance: 0.45, sMin: 0.35, sMax: 0.8, cap: 650, seed: 222, habitat: (h, _ny, f) => f > 0.2 && h > 3 },
@@ -123,37 +124,6 @@ function mulberry32(seed: number): () => number {
   }
 }
 
-// --- tiny seeded gradient noise for the forest mask (independent of the bake) ---
-const perm = new Uint8Array(512)
-{
-  const r = mulberry32(77)
-  const p = [...Array(256).keys()]
-  for (let i = 255; i > 0; i--) {
-    const j = Math.floor(r() * (i + 1))
-    ;[p[i], p[j]] = [p[j], p[i]]
-  }
-  for (let i = 0; i < 512; i++) perm[i] = p[i & 255]
-}
-const fade = (t: number) => t * t * t * (t * (t * 6 - 15) + 10)
-const grad = (h: number, x: number, y: number) => (h & 1 ? -x : x) + (h & 2 ? -y : y)
-function noise2(x: number, y: number): number {
-  const X = Math.floor(x) & 255
-  const Y = Math.floor(y) & 255
-  x -= Math.floor(x)
-  y -= Math.floor(y)
-  const u = fade(x)
-  const v = fade(y)
-  const aa = perm[perm[X] + Y]
-  const ab = perm[perm[X] + Y + 1]
-  const ba = perm[perm[X + 1] + Y]
-  const bb = perm[perm[X + 1] + Y + 1]
-  const l = (a: number, b: number, t: number) => a + t * (b - a)
-  return l(l(grad(aa, x, y), grad(ba, x - 1, y), u), l(grad(ab, x, y - 1), grad(bb, x - 1, y - 1), u), v)
-}
-/** Forest mask in ~[-1, 1]: >0.1 woods, <0 open. */
-export function forestMaskAt(x: number, z: number): number {
-  return noise2(x * 0.0045, z * 0.0045) * 0.72 + noise2(x * 0.013, z * 0.013) * 0.28
-}
 
 function riverDistAt(x: number, z: number): number {
   const meta = worldMeta
@@ -201,7 +171,12 @@ class InstancedProp {
   meshes: THREE.InstancedMesh[] = []
   private dummy = new THREE.Object3D()
 
-  constructor(root: THREE.Object3D, capacity: number, group: THREE.Group) {
+  constructor(
+    root: THREE.Object3D,
+    capacity: number,
+    group: THREE.Group,
+    private recolor?: (mat: THREE.MeshStandardMaterial) => void,
+  ) {
     const box = new THREE.Box3().setFromObject(root)
     const size = box.getSize(new THREE.Vector3())
     const s = 1 / (size.y || 1) // normalize to 1 m tall; instance scale = world height
@@ -245,6 +220,7 @@ class InstancedProp {
       if (mat.color.g > mat.color.r * 1.15 && mat.color.g > mat.color.b * 1.15) {
         mat.color.lerp(new THREE.Color(0x14300f), 0.45)
       }
+      if (this.recolor) this.recolor(mat)
       const im = new THREE.InstancedMesh(geo, mat, capacity)
       im.count = 0
       im.frustumCulled = false
@@ -311,7 +287,15 @@ export class Scatter {
         const root = ref.node ? (src.getObjectByName(ref.node) ?? src) : src
         const key = `${kind}#${v}`
         const ids = this.order.get(key) ?? []
-        const prop = new InstancedProp(root, Math.max(ids.length, 1), this.group)
+        // rocks weather to gray (the ARK reference: stone is gray, not clay)
+        const recolor =
+          kind === 'rock'
+            ? (mat: THREE.MeshStandardMaterial) => {
+                const lum = mat.color.r * 0.3 + mat.color.g * 0.6 + mat.color.b * 0.1
+                mat.color.setScalar(THREE.MathUtils.clamp(lum * 0.85 + 0.12, 0.18, 0.5))
+              }
+            : undefined
+        const prop = new InstancedProp(root, Math.max(ids.length, 1), this.group, recolor)
         this.props.set(key, prop)
         ids.forEach((nodeId, i) => {
           const n = this.nodes[nodeId]

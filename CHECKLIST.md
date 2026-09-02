@@ -133,3 +133,8 @@ Bugs the gate caught: reach measured from camera (all swings whiffed); camera-dr
 - [x] Player is now a Quaternius "Casual2" slim natural-proportioned human (CC0, 24 clips), recolored at load into a bare castaway: shirt+shoes→skin (shirtless, barefoot), jeans→ragged brown shorts. Clip remap (Idle_Neutral/Walk/Run/Punch_R/Sword_Slash/Punch_L); no sit clip → idle astride. Barbarian retired.
 - [x] Global dark pass: foliage materials pulled toward deep leaf green at load (green-dominant detection), terrain palette darkened again (lush 0x1f3d18), noon exposure 0.52 + hemi 0.5 + env 0.22 with sun 2.4 — ambient down, sun up ⇒ shadows carry the frame
 - [x] Gates 9/9, 29/29, 12/12; golden-hour vista now frames the sun setting behind the volcano
+
+### M6e — the ARK pass (user: match real ARK screenshots — intense shadows, darker everything, gray rocks, treelike trees, ground foliage)
+- [x] Pulled actual ARK Survival Evolved screenshots from Steam as reference; extracted the look: brown dirt/leaf-litter forest floors, trunk-dominant tall forests, low-bush understory carpet, very low ambient with sunlit breaks, gray weathered stone
+- [x] Forest floors now turn to dirt/leaf-litter under the (now shared) forest mask; rocks recolor to weathered gray by luminance; trees 7-16 m and pines 8-19 m (trunk-dominant); ferns 10K/bushes 3.6K bigger + denser; noon ambient down again (hemi 0.34, env 0.13) with sun up (2.7) — shadow pools with bright breaks
+- [x] Gates 9/9, 29/29, 12/12

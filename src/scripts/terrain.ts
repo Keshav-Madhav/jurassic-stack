@@ -6,7 +6,7 @@
 // through heightmap.ts. LOD0 vertex data doubles as the physics collider mesh
 // (physics.ts asks for it via chunkGridData).
 import * as THREE from 'three'
-import { heightAt, normalAt, HALF_SIZE, SEA_LEVEL } from './heightmap'
+import { heightAt, normalAt, forestMaskAt, HALF_SIZE, SEA_LEVEL } from './heightmap'
 
 export const CHUNK_SIZE = 128
 export const CHUNKS_PER_SIDE = (HALF_SIZE * 2) / CHUNK_SIZE // 16
@@ -123,8 +123,10 @@ const C_SAND = new THREE.Color(0xa08753)
 const C_GRASS_LUSH = new THREE.Color(0x1f3d18) // dark rich green
 const C_GRASS_LIGHT = new THREE.Color(0x35571f)
 const C_GRASS_DRY = new THREE.Color(0x555a28) // olive dry patches
-const C_ROCK = new THREE.Color(0x5c5349)
-const C_ROCK_STEEP = new THREE.Color(0x453e37)
+const C_ROCK = new THREE.Color(0x5e5c58) // weathered gray
+const C_ROCK_STEEP = new THREE.Color(0x44423f)
+const C_FLOOR = new THREE.Color(0x3a2e1f) // forest floor: dirt + leaf litter
+const C_FLOOR_LIT = new THREE.Color(0x51402a)
 const C_BASALT = new THREE.Color(0x453d36) // volcano flanks
 const C_CINDER = new THREE.Color(0x332c27) // summit
 
@@ -146,6 +148,13 @@ function groundColorAt(x: number, z: number, h: number, ny: number, out: THREE.C
     // grass field: lush ↔ light by variation, dry olive patches where n1 peaks
     out.copy(C_GRASS_LUSH).lerp(C_GRASS_LIGHT, THREE.MathUtils.clamp(0.5 + varT * 0.9, 0, 1))
     if (n1 > 0.22) out.lerp(C_GRASS_DRY, THREE.MathUtils.clamp((n1 - 0.22) * 2.0, 0, 0.9))
+    // under the woods the ground is dirt and leaf litter, not lawn (the ARK
+    // reference: forest floors are brown, greens live in the understory)
+    const forest = forestMaskAt(x, z)
+    if (forest > 0.05) {
+      const t = THREE.MathUtils.clamp((forest - 0.05) / 0.25, 0, 1) * 0.85
+      out.lerp(_c.copy(C_FLOOR).lerp(C_FLOOR_LIT, 0.5 + varT * 0.5), t)
+    }
     // beach→grass blend band
     if (h < 3.6) out.lerp(_c2.copy(C_SAND), (3.6 - h) / 1.2 * 0.6)
     // altitude: fade toward volcanic rock
