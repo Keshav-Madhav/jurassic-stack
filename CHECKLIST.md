@@ -192,3 +192,7 @@ User's 10 + mandate, to be burned down across M7d+ and the MAP OVERHAUL mileston
 9. Bushes weirdly bright green; need more bush variety + density; denser grass/foliage overall
 10. Trees and props spawning inside lakes
 **MAP OVERHAUL milestone (commitment):** the island gets genuinely hand-sculpted — composition authored feature-by-feature (every lake, mountain, cliff, the volcano silhouette, forest placement), iterated through the screenshot loop with per-vantage visual verification until each landmark is *approved-looking*, not just validator-passing. The volcano specifically called out as looking bad.
+
+### M7c.1 — the pose that actually poses (user: "its just lower down")
+- [x] Root cause found: GLTFLoader strips '.' from node names (reserved PropertyBinding char) — "UpperLeg.L" loads as "UpperLegL", so the pose matched ZERO bones and failed silently. Matcher normalizes both forms; load warns if no bones match; `poseInfo()` debug proves flex live (−0.04 rad standing → −1.29 riding)
+- [x] Process note: previous "verified" screenshot was dark-on-dark ambiguity — pose verification now shoots against bright sky. Gates 29/29, creative 9/9

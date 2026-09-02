@@ -100,12 +100,18 @@ export class Player {
     })
     this.object.add(model)
 
+    // NOTE: GLTFLoader sanitizes node names — '.' is a reserved PropertyBinding
+    // char and gets stripped, so the file's "UpperLeg.L" loads as "UpperLegL".
+    // Match both forms. (The first pose attempt matched the raw-file names and
+    // silently found zero bones.)
     model.traverse((o) => {
       if (!(o instanceof THREE.Bone)) return
-      if (o.name === 'UpperLeg.L') this.thighs.push({ bone: o, side: -1 })
-      if (o.name === 'UpperLeg.R') this.thighs.push({ bone: o, side: 1 })
-      if (o.name === 'LowerLeg.L' || o.name === 'LowerLeg.R') this.shins.push(o)
+      const n = o.name.replace(/\./g, '')
+      if (n === 'UpperLegL') this.thighs.push({ bone: o, side: -1 })
+      if (n === 'UpperLegR') this.thighs.push({ bone: o, side: 1 })
+      if (n === 'LowerLegL' || n === 'LowerLegR') this.shins.push(o)
     })
+    if (this.thighs.length === 0) console.warn('riding pose: no leg bones matched — rig names changed?')
 
     this.mixer = new THREE.AnimationMixer(model)
     for (const slot of Object.keys(CLIP_MATCH) as ClipSlot[]) {
@@ -119,6 +125,16 @@ export class Player {
         action.weight = slot === 'idle' ? 1 : 0
       }
       this.actions.set(slot, action)
+    }
+  }
+
+  /** Pose diagnostics: matched leg bones + live thigh flex (radians). */
+  poseInfo(): { thighs: number; shins: number; flexX: number; sitBlend: number } {
+    return {
+      thighs: this.thighs.length,
+      shins: this.shins.length,
+      flexX: this.thighs[0] ? +this.thighs[0].bone.rotation.x.toFixed(2) : 0,
+      sitBlend: +this.sitBlend.toFixed(2),
     }
   }
 

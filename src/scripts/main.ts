@@ -557,6 +557,7 @@ async function boot(): Promise<void> {
       },
       setCreative: (on: boolean) => setCreative(on),
       flying: () => player.flying,
+      poseInfo: () => player.poseInfo(),
       setFlying: (on: boolean) => { player.flying = on },
       save: async () => {
         await saveGame(collectSave())
