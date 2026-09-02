@@ -68,14 +68,18 @@ export class Dino {
 
   async load(): Promise<void> {
     const { scene: model, animations } = await loadModel(this.species.model)
-    const box = new THREE.Box3().setFromObject(model)
-    const size = box.getSize(new THREE.Vector3())
-    const s = this.species.height / (size.y || 1)
-    model.scale.setScalar(s)
-    const box2 = new THREE.Box3().setFromObject(model)
-    model.position.y -= box2.min.y
+    // dino rigs are skinned; any plain static mesh alongside is packaging junk
+    // (the T-Rex GLB ships a giant ground plane that rendered as a green slab)
+    let hasSkinned = false
+    model.traverse((o) => {
+      if (o instanceof THREE.SkinnedMesh) hasSkinned = true
+    })
     model.traverse((o) => {
       if (o instanceof THREE.Mesh) {
+        if (hasSkinned && !(o instanceof THREE.SkinnedMesh)) {
+          o.visible = false
+          return
+        }
         o.castShadow = true
         o.receiveShadow = true
       }
@@ -103,28 +107,51 @@ export class Dino {
       this.actions.run.weight = 0
     }
 
-    // Ground-contact calibration. Box3.setFromObject measured the BIND pose,
-    // but the idle animation holds the feet elsewhere — that offset is why
-    // dinos float. Apply one idle frame, then measure the true skinned min-y
-    // (getVertexPosition applies the skeleton) and pull the model down to it.
+    // Size + ground calibration, in ANIMATED pose. Order matters: several
+    // Sketchfab rigs carry scale/position tracks on their root nodes, so the
+    // first animation frame re-scales the skeleton — normalizing from the
+    // bind-pose bbox made trikes and the rex spawn at kaiju scale. Apply one
+    // idle frame first, THEN normalize height from the true skinned bounds,
+    // then drop feet to ground from those same bounds.
     this.mixer.update(0.01)
     this.object.updateMatrixWorld(true)
-    let minY = Infinity
+    const bounds = this.skinnedBounds(model)
+    if (bounds) {
+      const s = this.species.height / Math.max(0.01, bounds.max.y - bounds.min.y)
+      model.scale.setScalar(s)
+      this.object.updateMatrixWorld(true)
+      const b2 = this.skinnedBounds(model)
+      if (b2) {
+        const groundY = this.object.getWorldPosition(new THREE.Vector3()).y
+        model.position.y -= b2.min.y - groundY
+      }
+      this.debugCalib = { rawH: +(bounds.max.y - bounds.min.y).toFixed(2), scale: +s.toFixed(3) }
+    }
+  }
+
+  debugCalib: { rawH: number; scale: number } | null = null
+
+  /** World-space bounds of the skinned vertices in the CURRENT pose. */
+  private skinnedBounds(model: THREE.Object3D): { min: THREE.Vector3; max: THREE.Vector3 } | null {
+    const min = new THREE.Vector3(Infinity, Infinity, Infinity)
+    const max = new THREE.Vector3(-Infinity, -Infinity, -Infinity)
     const v = new THREE.Vector3()
+    let any = false
     model.traverse((o) => {
-      if (!(o instanceof THREE.SkinnedMesh)) return
+      if (!(o instanceof THREE.Mesh) || !o.visible) return
+      const isSkinned = o instanceof THREE.SkinnedMesh
       const count = o.geometry.attributes.position.count
       const step = Math.max(1, Math.floor(count / 2500))
       for (let i = 0; i < count; i += step) {
-        o.getVertexPosition(i, v)
+        if (isSkinned) (o as THREE.SkinnedMesh).getVertexPosition(i, v)
+        else v.fromBufferAttribute(o.geometry.attributes.position, i)
         v.applyMatrix4(o.matrixWorld)
-        if (v.y < minY) minY = v.y
+        min.min(v)
+        max.max(v)
+        any = true
       }
     })
-    if (Number.isFinite(minY)) {
-      const groundY = this.object.getWorldPosition(new THREE.Vector3()).y
-      model.position.y -= minY - groundY
-    }
+    return any ? { min, max } : null
   }
 
   /** A hit from the player. torporHit=true for fists (KO route), false for weapons (damage route). */

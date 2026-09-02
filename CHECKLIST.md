@@ -160,3 +160,10 @@ Bugs the gate caught: reach measured from camera (all swings whiffed); camera-dr
 - [x] Collisions: trunk collider radius scales with tree size, rock colliders sized to mesh, player-dino push scales with species height, ride capsule fits the smaller raptor
 - [x] Lighting: shadow radius 2 (softer edges), hemi 0.42 + sun 2.9 warmer at noon
 - [x] Explicit save hook for the gate (pagehide save raced reload — the longer hard-mode tame exposed it). Gates 9/9, 29/29, 12/12; navmesh + island rebaked and revalidated
+
+### M7a — species opener + river fix + discoverability (user: what are berries / river floating / keep going)
+- [x] River floating fixed for real: 4-column cross-section — flat surface between inner columns, outer edges tucked 0.9m DOWN under the banks (bank micro-bumps between samples made any flat ribbon read as hovering)
+- [x] 3 new species from the intaken roster, all data-table rows: Triceratops (2.6m skittish tank, 420hp, rideable), Stegosaurus (3m, 520hp, TailWhip), and the highlands T-Rex (4.4m apex, 1400hp/1200 torpor — effectively untameable until weapons exist, 55dmg, 26m aggro: the danger gradient made flesh)
+- [x] Two load-order bugs caught by screenshots: animation root-scale tracks made bind-pose normalization spawn kaiju-scale trikes/rex (fix: normalize from ANIMATED skinned bounds); the T-Rex GLB ships a giant static ground plane (fix: hide non-skinned meshes in skinned rigs)
+- [x] HUD help now teaches gathering: trees→wood, rocks→stone, bushes→berries (tame food)
+- [x] Dino separation scales with species size. Gates 9/9, 29/29, 12/12

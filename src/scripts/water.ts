@@ -74,31 +74,42 @@ export class WaterSystem {
         samples.push({ x: c.x, z: c.z, y, tx: tan.x, tz: tan.z })
         prev = y
       }
-      const pos = new Float32Array((SEGS + 1) * 2 * 3)
-      const uv = new Float32Array((SEGS + 1) * 2 * 2)
+      // 4-column cross-section: flat surface between the inner columns, outer
+      // edges TUCKED DOWN below the banks — bank micro-bumps between samples
+      // made a flat 2-column ribbon read as floating (user report)
+      const COLS = 4
+      const pos = new Float32Array((SEGS + 1) * COLS * 3)
+      const uv = new Float32Array((SEGS + 1) * COLS * 2)
       for (let i = 0; i <= SEGS; i++) {
         const t = i / SEGS
         const s = samples[i]
         const nx = -s.tz
         const nz = s.tx
-        // fit the ribbon to the channel: shrink each side until its edge sits
-        // below the water surface (canyon walls would otherwise poke through
-        // and the ribbon would hover over dry banks)
         const maxW = RIVER_HALF_WIDTH * (0.7 + 0.5 * t)
         let wL = maxW
-        while (wL > 3 && heightAt(s.x + nx * wL, s.z + nz * wL) > s.y - 0.1) wL -= 1.5
+        while (wL > 3 && heightAt(s.x + nx * wL, s.z + nz * wL) > s.y - 0.3) wL -= 1
         let wR = maxW
-        while (wR > 3 && heightAt(s.x - nx * wR, s.z - nz * wR) > s.y - 0.1) wR -= 1.5
-        const o = i * 6
-        pos[o] = s.x + nx * wL; pos[o + 1] = s.y; pos[o + 2] = s.z + nz * wL
-        pos[o + 3] = s.x - nx * wR; pos[o + 4] = s.y; pos[o + 5] = s.z - nz * wR
-        uv[i * 4] = 0; uv[i * 4 + 1] = t * 40
-        uv[i * 4 + 2] = 1; uv[i * 4 + 3] = t * 40
+        while (wR > 3 && heightAt(s.x - nx * wR, s.z - nz * wR) > s.y - 0.3) wR -= 1
+        const xs = [wL + 2.5, wL * 0.55, -wR * 0.55, -(wR + 2.5)]
+        const ys = [s.y - 0.9, s.y, s.y, s.y - 0.9]
+        for (let c = 0; c < COLS; c++) {
+          const o = (i * COLS + c) * 3
+          pos[o] = s.x + nx * xs[c]
+          pos[o + 1] = ys[c]
+          pos[o + 2] = s.z + nz * xs[c]
+          uv[(i * COLS + c) * 2] = c / (COLS - 1)
+          uv[(i * COLS + c) * 2 + 1] = t * 40
+        }
       }
       const indices: number[] = []
       for (let i = 0; i < SEGS; i++) {
-        const a = i * 2
-        indices.push(a, a + 1, a + 2, a + 1, a + 3, a + 2)
+        for (let c = 0; c < COLS - 1; c++) {
+          const a = i * COLS + c
+          const b = a + 1
+          const d = a + COLS
+          const e = d + 1
+          indices.push(a, d, b, b, d, e)
+        }
       }
       const geo = new THREE.BufferGeometry()
       geo.setAttribute('position', new THREE.BufferAttribute(pos, 3))

@@ -83,8 +83,8 @@ async function boot(): Promise<void> {
 
   // --- dinos ---
   const dinos: Dino[] = []
-  const spawnDino = (x: number, z: number): Dino => {
-    const d = new Dino(SPECIES.raptor, x, z, dinos.length)
+  const spawnDino = (speciesId: string, x: number, z: number): Dino => {
+    const d = new Dino(SPECIES[speciesId] ?? SPECIES.raptor, x, z, dinos.length)
     dinos.push(d)
     scene.add(d.object)
     void d.load()
@@ -93,20 +93,25 @@ async function boot(): Promise<void> {
   if (save) {
     for (const row of save.dinos as ReturnType<Dino['serialize']>[]) {
       if (!row.alive) continue
-      const d = spawnDino(row.x, row.z)
+      const d = spawnDino(row.species, row.x, row.z)
       d.hp = row.hp
       d.saddled = row.saddled
       d.tameProgress = row.tame
       if (row.state === 'tamed') d.state = 'tamed'
     }
   } else {
-    spawnDino(SPAWN.x + 26, SPAWN.z - 30)
-    spawnDino(SPAWN.x - 40, SPAWN.z - 55)
-    spawnDino(120, 420)
-    spawnDino(-200, 260)
-    spawnDino(60, 80)
-    spawnDino(-320, -60)
-    spawnDino(240, -140)
+    // raptors: spawn-adjacent (also keeps the E2E gate deterministic — nearest)
+    spawnDino('raptor', SPAWN.x + 26, SPAWN.z - 30)
+    spawnDino('raptor', SPAWN.x - 40, SPAWN.z - 55)
+    spawnDino('raptor', 60, 80)
+    spawnDino('raptor', -320, -60)
+    // herbivores: meadows and clearings, farther out
+    spawnDino('trike', 150, 430)
+    spawnDino('trike', 190, 460)
+    spawnDino('stego', -220, 280)
+    spawnDino('stego', 330, 170)
+    // the highlands apex — the danger gradient made flesh
+    spawnDino('trex', 40, -280)
   }
 
   const hud = new Hud(document.getElementById('hud')!, inventory, (id) => {
@@ -424,6 +429,7 @@ async function boot(): Promise<void> {
       riding: () => riding !== null,
       pieces: () => building.pieces.length,
       dinoStates: () => dinos.map((d) => ({ state: d.state, torpor: d.torpor, saddled: d.saddled })),
+      dinoCalib: () => dinos.map((d) => ({ sp: d.species.id, ...d.debugCalib })),
       nearestNodeDist: () => {
         const from = feetPos()
         let best = Infinity
@@ -584,7 +590,7 @@ async function boot(): Promise<void> {
         const dx = b.object.position.x - a.object.position.x
         const dz = b.object.position.z - a.object.position.z
         const d2 = Math.hypot(dx, dz)
-        const min = 1.6
+        const min = (a.species.height + b.species.height) * 0.55
         if (d2 > 0.01 && d2 < min) {
           const push = ((min - d2) / d2) * 0.5
           a.object.position.x -= dx * push
