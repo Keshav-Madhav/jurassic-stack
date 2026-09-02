@@ -74,6 +74,21 @@ export function heightAt(x: number, z: number): number {
   return (h00 * (1 - u) * (1 - v) + h10 * u * (1 - v) + h01 * (1 - u) * v + h11 * u * v) * scale
 }
 
+/** MAX height within ±halfWin of (x,z) — used by coarse terrain LODs so
+ *  distant ground renders at-or-above the true surface. Props are embedded
+ *  into the exact surface, so "at or above" means buried-at-worst, never
+ *  floating (undersampled LODs rendering BELOW truth was the floater bug). */
+export function heightMaxAt(x: number, z: number, halfWin: number): number {
+  let best = -Infinity
+  for (let dz = -halfWin; dz <= halfWin; dz += res) {
+    for (let dx = -halfWin; dx <= halfWin; dx += res) {
+      const h = heightAt(x + dx, z + dz)
+      if (h > best) best = h
+    }
+  }
+  return best
+}
+
 /** Normal via central differences on the sampled grid. `out` avoids allocation. */
 export function normalAt(x: number, z: number, out = new THREE.Vector3()): THREE.Vector3 {
   const e = 1.0

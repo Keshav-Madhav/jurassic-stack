@@ -116,8 +116,9 @@ for (let iz = 0; iz < SIDE; iz++) {
     // base: domain-warped FBM hills (the graybox's sin/cos, grown up)
     const wx = x + 180 * fbm(x * 0.0016 + 40, z * 0.0016 - 17, 3)
     const wz = z + 180 * fbm(x * 0.0016 - 31, z * 0.0016 + 23, 3)
-    let h = 13 * fbm(wx * 0.0021, wz * 0.0021, 6)
+    let h = 14.5 * fbm(wx * 0.0021, wz * 0.0021, 6)
     h += 5 * fbm(x * 0.011, z * 0.011, 4) // mid-frequency detail
+    h += 4 * fbm(x * 0.006 + 7, z * 0.006 - 3, 4) // extra mid band (backlog #5)
 
     // interior plateau: hold the island's core solidly above the sea so FBM
     // valleys read as inland lowlands, not a flooding strait (v1 bake split
@@ -136,12 +137,20 @@ for (let iz = 0; iz < SIDE; iz++) {
       h += 14 * Math.exp(-(d * d) / (2 * 90 * 90)) * smoothstep(900, 300, Math.hypot(x - VOLCANO.x, z - VOLCANO.z))
     }
 
-    // the volcano: concave-flank cone + shoulder + crater (M3 recipe, kept)
-    const dv = Math.hypot(x - VOLCANO.x, z - VOLCANO.z)
-    const cone = Math.max(0, 1 - dv / 320)
-    h += 240 * cone * cone
-    h += 40 * Math.exp(-(dv * dv) / (2 * 90 * 90))
-    h -= 95 * Math.exp(-(dv * dv) / (2 * 48 * 48))
+    // the volcano, resculpted (MAP OVERHAUL: "looks weirdly bad" — too smooth):
+    // angular radius modulation breaks the perfect-cone silhouette, radial
+    // ridges give the flanks gullies, and a raised crater rim reads from afar
+    const dvx = x - VOLCANO.x
+    const dvz = z - VOLCANO.z
+    const vAng = Math.atan2(dvz, dvx)
+    const radMod = 1 + 0.13 * Math.sin(vAng * 5 + 1.3) + 0.07 * Math.sin(vAng * 9 - 0.6)
+    const dv = Math.hypot(dvx, dvz) / radMod
+    const cone = Math.max(0, 1 - dv / 330)
+    h += 252 * cone * cone
+    h += 30 * Math.exp(-(dv * dv) / (2 * 85 * 85))
+    h += 9 * Math.sin(vAng * 12 + 0.7) * cone * cone * smoothstep(40, 95, dv) // flank ridges
+    h += 15 * Math.exp(-((dv - 54) * (dv - 54)) / (2 * 11 * 11)) // crater rim lip
+    h -= 110 * Math.exp(-(dv * dv) / (2 * 44 * 44)) // deeper caldera dish
 
     // island falloff to ocean floor
     const r = Math.sqrt(x * x * 1.15 + z * z * 0.95)
@@ -213,8 +222,8 @@ for (let iz = 0; iz < SIDE; iz++) {
       const target = Math.min(H[i0], bed)
       H[i0] = H[i0] * (1 - wBed) + target * wBed - wValley * 2.0
       if (canyon) {
-        // rim lift: shoulders rise above the surrounding ground
-        H[i0] += 3.2 * Math.exp(-((d - 30) * (d - 30)) / (2 * 9 * 9))
+        // rim lift: shoulders rise well above the surrounding ground
+        H[i0] += 6.5 * Math.exp(-((d - 28) * (d - 28)) / (2 * 10 * 10))
       }
     }
   }
@@ -252,6 +261,16 @@ console.time('sculpt')
             smoothstep(-60, -140, z) * (1 - smoothstep(-380, -460, z)) *
             (0.55 + 0.45 * fbm(x * 0.004 + 9, z * 0.004 - 4, 3))
           h = h * (1 - mask) + terrace(h, 14, 3.2) * mask
+        }
+      }
+
+      // canyon walls: terrace the east river's mid-course flanks so the gorge
+      // reads as stratified rock, not a soft ditch (backlog #4)
+      {
+        const { d, seg } = distToPath(x, z, RIVERS[0])
+        if (seg >= 1 && seg <= 3 && d > 16 && d < 64 && h > 6) {
+          const w = smoothstep(64, 34, d) * 0.75
+          h = h * (1 - w) + terrace(h, 7, 3.4) * w
         }
       }
 

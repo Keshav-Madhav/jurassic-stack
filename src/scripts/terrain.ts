@@ -6,7 +6,7 @@
 // through heightmap.ts. LOD0 vertex data doubles as the physics collider mesh
 // (physics.ts asks for it via chunkGridData).
 import * as THREE from 'three'
-import { heightAt, normalAt, forestMaskAt, worldMeta, HALF_SIZE, SEA_LEVEL } from './heightmap'
+import { heightAt, heightMaxAt, normalAt, forestMaskAt, worldMeta, HALF_SIZE, SEA_LEVEL } from './heightmap'
 
 export const CHUNK_SIZE = 128
 export const CHUNKS_PER_SIDE = (HALF_SIZE * 2) / CHUNK_SIZE // 16
@@ -325,12 +325,16 @@ function buildChunkGeometry(originX: number, originZ: number, quads: number): TH
   const c = new THREE.Color()
   const s4 = new THREE.Vector4()
 
+  // coarse LODs sample the MAX over the cells they span — conservative
+  // upward bias so distant terrain never renders below prop bases
+  const conservative = quads < 64
+  const halfWin = conservative ? step / 2 : 0
   for (let iz = 0; iz < side; iz++) {
     for (let ix = 0; ix < side; ix++) {
       const x = originX + ix * step
       const z = originZ + iz * step
       const o = (iz * side + ix) * 3
-      const h = heightAt(x, z)
+      const h = conservative ? heightMaxAt(x, z, halfWin) : heightAt(x, z)
       pos[o] = x
       pos[o + 1] = h
       pos[o + 2] = z

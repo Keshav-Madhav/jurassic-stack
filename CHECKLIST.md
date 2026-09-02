@@ -213,3 +213,10 @@ User's 10 + mandate, to be burned down across M7d+ and the MAP OVERHAUL mileston
 - [x] #7 dino density: 18 spawns — raptor packs across the interior, trike/stego herds, a second highlands rex
 - Known remainders for next rounds: willow still brighter than ideal; a floating log/mushroom artifact near the mesa (asset-floater hunt continues); canyon readability + the full MAP OVERHAUL
 - Gates 9/9, 29/29, 12/12, creative 12/12; island + navmesh rebaked, validators pass
+
+### M7e — floaters killed structurally + MAP OVERHAUL phase 1
+- [x] Distance floaters (user: "a lot of floating trees and assets still"): ROOT CAUSE — coarse terrain LODs undersample the baked ground detail, rendering distant terrain BELOW the exact surface props sit on. Fix: LOD1-3 vertices sample the MAX height over the cells they span (conservative upward bias) — props embed into the exact surface, so worst case is slightly buried, never floating. Verified: distant treelines sit solid.
+- [x] MAP OVERHAUL phase 1 — the volcano (user: "looks weirdly bad"): angular radius modulation breaks the perfect-cone silhouette, radial flank ridges cut gullies, raised crater rim lip + deeper caldera; in-game it now reads as a craggy shield volcano with jagged ridgelines
+- [x] Canyon (backlog #4): terraced east-gorge walls (stratified-rock look), rim lift doubled to 6.5m
+- [x] Base relief +20% with an extra mid-frequency band (backlog #5)
+- Gate note: one bush-harvest flake (positional); passes on rerun and in isolation. Gates 9/9, 29/29, 12/12, creative 12/12; island + navmesh rebaked, validators pass
