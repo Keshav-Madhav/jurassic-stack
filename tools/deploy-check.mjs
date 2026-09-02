@@ -8,10 +8,21 @@ const shot = process.argv[3] ?? 'shots/deploy.png'
 
 const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-gl=angle'] })
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } })
-await page.goto(url, { waitUntil: 'networkidle' })
-// boot fetches world data + models over the real network — wait for readiness,
-// not a fixed delay (a fixed 1.5 s false-failed the M5 deploy)
-await page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 90000 })
+// Two attempts: the first visit after a deploy pulls tens of MB through a cold
+// CDN edge and can exceed any sane timeout; the reload runs on a warm cache.
+let ok = false
+for (let attempt = 0; attempt < 2 && !ok; attempt++) {
+  await page.goto(url, { waitUntil: 'networkidle' })
+  ok = await page
+    .waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 90000 })
+    .then(() => true)
+    .catch(() => false)
+  if (!ok) console.log(`attempt ${attempt + 1}: not ready in 90s (cold edge?), retrying`)
+}
+if (!ok) {
+  console.error('FAIL: game never reached ready')
+  process.exit(1)
+}
 await page.waitForTimeout(500)
 
 const status = await page.textContent('#status')
