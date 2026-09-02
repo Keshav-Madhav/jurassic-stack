@@ -11,13 +11,15 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 720 } })
 // Two attempts: the first visit after a deploy pulls tens of MB through a cold
 // CDN edge and can exceed any sane timeout; the reload runs on a warm cache.
 let ok = false
-for (let attempt = 0; attempt < 2 && !ok; attempt++) {
-  await page.goto(url, { waitUntil: 'networkidle' })
+for (let attempt = 0; attempt < 3 && !ok; attempt++) {
+  // domcontentloaded, not networkidle — a cold CDN edge can stream assets for
+  // minutes and goto itself times out before the ready-poll even starts
+  await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 }).catch(() => {})
   ok = await page
-    .waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 90000 })
+    .waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 120000 })
     .then(() => true)
     .catch(() => false)
-  if (!ok) console.log(`attempt ${attempt + 1}: not ready in 90s (cold edge?), retrying`)
+  if (!ok) console.log(`attempt ${attempt + 1}: not ready (cold edge?), retrying`)
 }
 if (!ok) {
   console.error('FAIL: game never reached ready')
