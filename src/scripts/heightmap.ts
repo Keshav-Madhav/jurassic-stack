@@ -69,17 +69,9 @@ export function heightAt(x: number, z: number): number {
   const h10 = grid[i0 + 1]
   const h01 = grid[i0 + side]
   const h11 = grid[i0 + side + 1]
-  const base = (h00 * (1 - u) * (1 - v) + h10 * u * (1 - v) + h01 * (1 - u) * v + h11 * u * v) * scale
-  // micro-detail on top of the 2 m grid so ground isn't bilinear-flat.
-  // Lives INSIDE the shared height function: render, physics trimeshes, and
-  // AI clamping all see identical ground. Amplitude (0.35 m) stays below the
-  // navmesh bake's walkableClimb (0.7 m), so baked paths remain valid.
-  const detail =
-    0.22 * Math.sin(x * 0.71 + z * 0.53) * Math.cos(x * 0.47 - z * 0.66) +
-    0.13 * Math.sin(x * 1.63 - z * 1.31) * Math.cos(x * 1.19 + z * 1.7)
-  // fade detail out on beaches (below 2.6 m) so the spawn stays calm
-  const fade = Math.min(1, Math.max(0, (base - 1.2) / 1.4))
-  return base + detail * fade
+  // pure grid bilinear — micro-detail now lives IN the baked grid, so LOD0
+  // rendering, physics, AI, and prop placement are byte-identical sources
+  return (h00 * (1 - u) * (1 - v) + h10 * u * (1 - v) + h01 * (1 - u) * v + h11 * u * v) * scale
 }
 
 /** Normal via central differences on the sampled grid. `out` avoids allocation. */

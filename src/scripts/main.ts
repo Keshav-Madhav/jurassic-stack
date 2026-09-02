@@ -32,7 +32,7 @@ async function boot(): Promise<void> {
   const app = document.getElementById('app')!
   const renderer = new THREE.WebGLRenderer({ antialias: true })
   renderer.setSize(innerWidth, innerHeight)
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2))
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5)) // 2x retina fill cost was a top lag source
   renderer.shadowMap.enabled = true
   renderer.shadowMap.type = THREE.PCFSoftShadowMap
   app.appendChild(renderer.domElement)
@@ -208,9 +208,9 @@ async function boot(): Promise<void> {
     const target = nearestDino(REACH, (d) => d.state !== 'ko' && d.state !== 'tamed')
     if (target) {
       const from = feetPos()
-      if (held === 'spear') target.takeHit(10, 6, from.x, from.z)
-      else if (held === 'hatchet') target.takeHit(6, 4, from.x, from.z)
-      else target.takeHit(2, 14, from.x, from.z)
+      if (held === 'spear') target.takeHit(12, 5, from.x, from.z)
+      else if (held === 'hatchet') target.takeHit(7, 4, from.x, from.z)
+      else target.takeHit(2, 8, from.x, from.z) // fists: ~20 punches to KO
       hud.toast(target.state === 'ko' ? `${target.species.name} knocked out!` : `Hit ${target.species.name} (torpor ${Math.round(target.torpor)}/${target.species.torporMax})`)
       return true
     }
@@ -484,6 +484,10 @@ async function boot(): Promise<void> {
         cam.pitch = Math.atan2(best.y + 1 - head.y, Math.hypot(best.x - head.x, best.z - head.z)) * 0.8
         return bd
       },
+      save: async () => {
+        await saveGame(collectSave())
+        return true
+      },
       wipeAndReload: async () => {
         const { wipeSave } = await import('./save')
         await wipeSave()
@@ -593,7 +597,7 @@ async function boot(): Promise<void> {
         const dx = player.mover.position.x - a.object.position.x
         const dz = player.mover.position.z - a.object.position.z
         const d2 = Math.hypot(dx, dz)
-        const min = 1.3
+        const min = a.species.height * 0.6 + 0.45
         if (d2 > 0.01 && d2 < min) {
           const px = player.mover.position
           player.mover.teleport(a.object.position.x + (dx / d2) * min, px.y, a.object.position.z + (dz / d2) * min)
@@ -601,6 +605,7 @@ async function boot(): Promise<void> {
       }
     }
     scatter.ensureCollidersAround(focus.x, focus.z, physics)
+    scatter.updateVisibility(focus.x, focus.z)
     water.update(dt)
     daynight.setFocus(focus.x, focus.z)
     daynight.advance(dt)

@@ -49,7 +49,7 @@ check(berry >= 2, `gathered berries (${berry})`)
 check(fiber >= 2, `gathered fiber (${fiber})`)
 
 // ---------- craft (top up mats so the whole chain is testable in one run) ----------
-await g('window.__g.game.give("wood", 40); window.__g.game.give("stone", 12); window.__g.game.give("fiber", 60); window.__g.game.give("flint", 6); window.__g.game.give("berry", 10)')
+await g('window.__g.game.give("wood", 40); window.__g.game.give("stone", 12); window.__g.game.give("fiber", 60); window.__g.game.give("flint", 6); window.__g.game.give("berry", 14)')
 for (const item of ['hatchet', 'spear', 'foundation', 'wall', 'ceiling', 'saddle', 'campfire']) {
   const ok = await page.evaluate((i) => window.__g.game.craft(i), item)
   check(ok, `crafted ${item}`)
@@ -75,7 +75,7 @@ for (const item of ['foundation', 'wall', 'ceiling', 'campfire']) {
 // ---------- tame: punch to KO, feed to tame ----------
 check(await g('window.__g.game.gotoDino("idle")') || await g('window.__g.game.gotoDino("wander")'), 'found a wild raptor')
 await g('window.__g.game.select(8)') // empty slot = fists (torpor route)
-for (let i = 0; i < 10; i++) {
+for (let i = 0; i < 28; i++) {
   await g('window.__g.game.swing()')
   await page.waitForTimeout(520)
   const ko = await g('window.__g.game.dinoStates().some(d => d.state === "ko")')
@@ -85,7 +85,7 @@ for (let i = 0; i < 10; i++) {
 }
 check(await g('window.__g.game.dinoStates().some(d => d.state === "ko")'), 'raptor knocked out')
 await g('window.__g.game.gotoDino("ko")')
-for (let i = 0; i < 6; i++) {
+for (let i = 0; i < 14; i++) {
   await g('window.__g.game.interact()')
   await page.waitForTimeout(250)
   if (await g('window.__g.game.dinoStates().some(d => d.state === "tamed")')) break
@@ -114,7 +114,8 @@ check(!(await g('window.__g.game.riding()')), 'dismounted')
 
 // ---------- save / reload ----------
 const savedWood = await g('window.__g.game.count("wood")')
-await page.waitForTimeout(400)
+await page.evaluate(() => window.__g.game.save()) // explicit: pagehide races reload
+await page.waitForTimeout(200)
 await page.reload({ waitUntil: 'networkidle' })
 await ready()
 check((await g('window.__g.game.count("wood")')) === savedWood, `inventory survived reload (wood=${savedWood})`)

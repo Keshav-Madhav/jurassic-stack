@@ -152,3 +152,11 @@ Bugs the gate caught: reach measured from camera (all swings whiffed); camera-dr
 - [x] AI: territorial aggro (raptors charge within 11m unprovoked), pack aggro (same-species within 28m join the fight), flavor idle one-shots (sniff/call/roar), obstacle-avoid steering vs a spatial hash of all trunks+rocks (colliders only exist near the player; AI everywhere needed geometry knowledge)
 - [x] Collisions: rocks get streamed squat-cylinder colliders; dino-dino separation push; player-dino body push (soft, gameplay-level)
 - [x] Gates 9/9, 29/29, 12/12
+
+### M5e — floating/lag/balance round (user: collisions off, assets floating, laggy, better lighting, raptor too big/slow/weak)
+- [x] Floating fixed at the ROOT: runtime micro-detail desynced props from LOD-rendered terrain — detail now baked into the grid (heightAt = pure bilinear again); plus per-kind embed offsets (rocks 5%+4cm, trunks 14cm, cover 6cm) and dino clamp -6cm
+- [x] Perf: supercell instancing (256m groups, per-cell frustum culling via computeBoundingSphere), ground cover casts no shadows + hidden beyond 420m, pixelRatio 2→1.5 — dense-forest view 49→60fps
+- [x] Raptor rebalance: 1.4m tall (was 1.8 vs 1.75m human), runs 12m/s (player sprints 8 — you cannot outrun it), hp 60→140, torpor 50→160 (~20 punches to KO), drain 2.2/s, damage 14, aggro 14m, 9 feeds to tame — hard mode as requested
+- [x] Collisions: trunk collider radius scales with tree size, rock colliders sized to mesh, player-dino push scales with species height, ride capsule fits the smaller raptor
+- [x] Lighting: shadow radius 2 (softer edges), hemi 0.42 + sun 2.9 warmer at noon
+- [x] Explicit save hook for the gate (pagehide save raced reload — the longer hard-mode tame exposed it). Gates 9/9, 29/29, 12/12; navmesh + island rebaked and revalidated

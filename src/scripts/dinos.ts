@@ -274,7 +274,7 @@ export class Dino {
     const fz = Math.cos(this.heading) * 0.8
     const hFront = heightAt(pos.x + fx, pos.z + fz)
     const hBack = heightAt(pos.x - fx, pos.z - fz)
-    pos.y = (hFront + hBack) / 2
+    pos.y = (hFront + hBack) / 2 - 0.06 // slight embed: convex micro-ground floated feet
     this.object.rotation.y = this.heading
     this.object.rotation.x = THREE.MathUtils.clamp(Math.atan2(hBack - hFront, 1.6), -0.3, 0.3)
     const running = this.speed > this.species.walkSpeed * 1.4
@@ -392,7 +392,7 @@ export class Dino {
    *  so the idle kinematic capsule can't ghost-block anything. */
   beginRide(physics: Physics): void {
     const cfg: MoverConfig = {
-      radius: 0.55,
+      radius: Math.max(0.35, this.species.height * 0.32),
       halfHeight: this.species.height * 0.32,
       jumpSpeed: 8.5,
       gravityScale: 1.8,

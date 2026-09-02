@@ -34,9 +34,9 @@ const NOON: Grade = {
   fogNear: 260, fogFar: 2450,
   hemiSky: new THREE.Color(0x8fb6dc),
   hemiGround: new THREE.Color(0x1d2719),
-  hemiIntensity: 0.34, // shadow pools stay dark; the sun carries the frame
-  sun: new THREE.Color(0xfff2d8),
-  sunIntensity: 2.7,
+  hemiIntensity: 0.42, // shadow pools stay dark; the sun carries the frame
+  sun: new THREE.Color(0xffefcf),
+  sunIntensity: 2.9,
   rimIntensity: 0,
   turbidity: 6,
   rayleigh: 1.8,
@@ -135,6 +135,7 @@ export class DayNight {
     sc.camera.near = 1
     sc.camera.far = 800
     sc.camera.updateProjectionMatrix() // without this the default ±5 m box stays
+    sc.radius = 2 // soften PCF edges
     sc.bias = -0.0003
     // normalBias is in WORLD METERS — 1.6 erased every caster thinner than
     // 1.6 m (trunks, the player). ~2× texel size (170 m / 2048 ≈ 8 cm) is right.

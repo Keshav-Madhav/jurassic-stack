@@ -370,6 +370,21 @@ console.time('thermal')
 }
 console.timeEnd('thermal')
 
+// micro-detail: high-frequency ripple BAKED into the grid (a runtime detail
+// term desynced props from LOD-rendered terrain — everything floated)
+for (let iz = 0; iz < SIDE; iz++) {
+  for (let ix = 0; ix < SIDE; ix++) {
+    const x = worldX(ix), z = worldZ(iz)
+    const i0 = idx(ix, iz)
+    const b = H[i0]
+    const detail =
+      0.22 * Math.sin(x * 0.71 + z * 0.53) * Math.cos(x * 0.47 - z * 0.66) +
+      0.13 * Math.sin(x * 1.63 - z * 1.31) * Math.cos(x * 1.19 + z * 1.7)
+    const fadeD = Math.min(1, Math.max(0, (b - 1.2) / 1.4))
+    H[i0] = b + detail * fadeD
+  }
+}
+
 // lake shore ring: terrain just outside each basin must sit ABOVE the fill
 // level, or the water disc edge hangs over lower ground ("infinity pool" rim
 // seen edge-on — caught on the M5b screenshots)

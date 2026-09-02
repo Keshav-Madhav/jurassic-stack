@@ -113,7 +113,12 @@ const SPECS: Record<NodeKind, PlaceSpec> = {
 }
 
 const RESPAWN_MS = 240_000
-const ZERO_MATRIX = new THREE.Matrix4().makeScale(0, 0, 0)
+/** Supercell edge (m): instances group per cell so frustum culling works. */
+const SUPER = 256
+/** Ground-cover kinds: no shadow casting, distance-culled. */
+const GROUND_COVER = new Set<NodeKind>(['grass', 'fern', 'flower', 'mushroom', 'log', 'bush'])
+/** Cover cells beyond this range from the player are hidden entirely. */
+const COVER_DRAW_DIST = 420
 
 function mulberry32(seed: number): () => number {
   let a = seed >>> 0
@@ -125,6 +130,14 @@ function mulberry32(seed: number): () => number {
   }
 }
 
+
+function groupKeyOf(kind: NodeKind, variant: number, x: number, z: number): string {
+  return `${kind}#${variant}#${Math.floor((x + HALF_SIZE) / SUPER)},${Math.floor((z + HALF_SIZE) / SUPER)}`
+}
+function parseGroupKey(key: string): { kind: NodeKind; variant: number } {
+  const [kind, v] = key.split('#')
+  return { kind: kind as NodeKind, variant: Number(v) }
+}
 
 function riverDistAt(x: number, z: number): number {
   const meta = worldMeta
@@ -171,13 +184,16 @@ function toFloatGeometry(src: THREE.BufferGeometry): THREE.BufferGeometry {
 class InstancedProp {
   meshes: THREE.InstancedMesh[] = []
   private dummy = new THREE.Object3D()
+  private castShadowFlag = true
 
   constructor(
     root: THREE.Object3D,
     capacity: number,
     group: THREE.Group,
+    castShadow: boolean,
     private recolor?: (mat: THREE.MeshStandardMaterial) => void,
   ) {
+    this.castShadowFlag = castShadow
     const box = new THREE.Box3().setFromObject(root)
     const size = box.getSize(new THREE.Vector3())
     const s = 1 / (size.y || 1) // normalize to 1 m tall; instance scale = world height
@@ -224,8 +240,8 @@ class InstancedProp {
       if (this.recolor) this.recolor(mat)
       const im = new THREE.InstancedMesh(geo, mat, capacity)
       im.count = 0
-      im.frustumCulled = false
-      im.castShadow = true
+      im.frustumCulled = true // per-supercell now — computeBounds() after fill
+      im.castShadow = this.castShadowFlag
       im.receiveShadow = true
       this.meshes.push(im)
       group.add(im)
@@ -247,11 +263,22 @@ class InstancedProp {
     }
   }
 
-  hideInstance(i: number): void {
+  /** Hide by zero-scaling AT the node position (a zero matrix at the origin
+   *  would balloon the instanced bounding sphere toward world 0,0,0). */
+  hideInstance(i: number, x: number, y: number, z: number): void {
+    this.dummy.position.set(x, y, z)
+    this.dummy.rotation.set(0, 0, 0)
+    this.dummy.scale.setScalar(0.0001)
+    this.dummy.updateMatrix()
     for (const m of this.meshes) {
-      m.setMatrixAt(i, ZERO_MATRIX)
+      m.setMatrixAt(i, this.dummy.matrix)
       m.instanceMatrix.needsUpdate = true
     }
+  }
+
+  /** Compute per-mesh bounding spheres from the filled instances. */
+  computeBounds(): void {
+    for (const m of this.meshes) m.computeBoundingSphere()
   }
 }
 
@@ -260,6 +287,7 @@ export class Scatter {
   readonly nodes: ScatterNode[] = []
   private props = new Map<string, InstancedProp>()
   private order = new Map<string, number[]>()
+  private propMeta = new Map<string, { cx: number; cz: number; cover: boolean }>()
   private treeColliders = new Map<number, RAPIER.Collider>()
   private activeChunks = new Set<number>()
   private lastChunkKey = -1
@@ -281,28 +309,45 @@ export class Scatter {
       this.place(kind, SPECS[kind])
     }
 
-    for (const kind of Object.keys(KIND_MODELS) as NodeKind[]) {
-      for (let v = 0; v < KIND_MODELS[kind].length; v++) {
-        const ref = KIND_MODELS[kind][v]
-        const src = loaded.get(ref.file)!
-        const root = ref.node ? (src.getObjectByName(ref.node) ?? src) : src
-        const key = `${kind}#${v}`
-        const ids = this.order.get(key) ?? []
-        // rocks weather to gray (the ARK reference: stone is gray, not clay)
-        const recolor =
-          kind === 'rock'
-            ? (mat: THREE.MeshStandardMaterial) => {
-                const lum = mat.color.r * 0.3 + mat.color.g * 0.6 + mat.color.b * 0.1
-                mat.color.setScalar(THREE.MathUtils.clamp(lum * 0.85 + 0.12, 0.18, 0.5))
-              }
-            : undefined
-        const prop = new InstancedProp(root, Math.max(ids.length, 1), this.group, recolor)
-        this.props.set(key, prop)
-        ids.forEach((nodeId, i) => {
-          const n = this.nodes[nodeId]
-          prop.setInstance(i, n.x, n.y, n.z, n.scale, n.rotY, n.tint)
-        })
+    for (const [key, ids] of this.order) {
+      const { kind, variant } = parseGroupKey(key)
+      const ref = KIND_MODELS[kind][variant]
+      const src = loaded.get(ref.file)!
+      const root = ref.node ? (src.getObjectByName(ref.node) ?? src) : src
+      // rocks weather to gray (the ARK reference: stone is gray, not clay)
+      const recolor =
+        kind === 'rock'
+          ? (mat: THREE.MeshStandardMaterial) => {
+              const lum = mat.color.r * 0.3 + mat.color.g * 0.6 + mat.color.b * 0.1
+              mat.color.setScalar(THREE.MathUtils.clamp(lum * 0.85 + 0.12, 0.18, 0.5))
+            }
+          : undefined
+      const cover = GROUND_COVER.has(kind)
+      const prop = new InstancedProp(root, Math.max(ids.length, 1), this.group, !cover, recolor)
+      this.props.set(key, prop)
+      ids.forEach((nodeId, i) => {
+        const n = this.nodes[nodeId]
+        prop.setInstance(i, n.x, n.y, n.z, n.scale, n.rotY, n.tint)
+      })
+      prop.computeBounds()
+      // cell center for distance culling
+      let cx = 0
+      let cz = 0
+      for (const nodeId of ids) {
+        cx += this.nodes[nodeId].x
+        cz += this.nodes[nodeId].z
       }
+      this.propMeta.set(key, { cx: cx / ids.length, cz: cz / ids.length, cover })
+    }
+  }
+
+  /** Hide ground-cover cells far from the player (big fill/vertex win). */
+  updateVisibility(x: number, z: number): void {
+    for (const [key, meta] of this.propMeta) {
+      if (!meta.cover) continue
+      const visible = Math.hypot(meta.cx - x, meta.cz - z) < COVER_DRAW_DIST
+      const prop = this.props.get(key)!
+      for (const m of prop.meshes) m.visible = visible
     }
   }
 
@@ -339,7 +384,7 @@ export class Scatter {
           alive: true,
           respawnAt: 0,
         })
-        const key = `${kind}#${variant}`
+        const key = groupKeyOf(kind, variant, x, z)
         if (!this.order.has(key)) this.order.set(key, [])
         this.order.get(key)!.push(id)
         if (TRUNK_KINDS.has(kind)) addObstacle(x, z, kind === 'rock' ? scale * 0.42 : 0.4)
@@ -412,11 +457,11 @@ export class Scatter {
   }
 
   private setNodeVisible(node: ScatterNode, visible: boolean): void {
-    const key = `${node.kind}#${node.variant}`
+    const key = groupKeyOf(node.kind, node.variant, node.x, node.z)
     const prop = this.props.get(key)!
     const idx = this.order.get(key)!.indexOf(node.id)
     if (visible) prop.setInstance(idx, node.x, node.y, node.z, node.scale, node.rotY, node.tint)
-    else prop.hideInstance(idx)
+    else prop.hideInstance(idx, node.x, node.y, node.z)
   }
 
   ensureCollidersAround(x: number, z: number, physics: Physics, force = false): void {
@@ -445,7 +490,7 @@ export class Scatter {
       if (!this.activeChunks.has(this.chunkKeyOf(n)) || this.treeColliders.has(n.id)) continue
       const rock = n.kind === 'rock'
       const half = rock ? n.scale * 0.32 : n.scale * 0.5
-      const radius = rock ? n.scale * 0.42 : 0.35
+      const radius = rock ? n.scale * 0.42 : Math.max(0.3, n.scale * 0.045)
       const col = physics.world.createCollider(
         RAPIER.ColliderDesc.cylinder(half, radius).setTranslation(n.x, n.y + half, n.z),
       )
