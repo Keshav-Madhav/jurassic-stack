@@ -116,7 +116,22 @@ export class WaterSystem {
       geo.setAttribute('uv', new THREE.BufferAttribute(uv, 2))
       geo.setIndex(indices)
       geo.computeVertexNormals()
-      const mesh = new THREE.Mesh(geo, this.makeWaterMat(0x3f86b8, 0.85, new THREE.Vector2(0, -1.4), 0))
+      // depth tint: darker where the bed drops away (per-vertex color)
+      const colors = new Float32Array((SEGS + 1) * COLS * 3)
+      for (let i = 0; i <= SEGS; i++) {
+        for (let c = 0; c < COLS; c++) {
+          const vi = (i * COLS + c) * 3
+          const vx = pos[vi]
+          const vz = pos[vi + 2]
+          const depth = THREE.MathUtils.clamp((samples[i].y - heightAt(vx, vz)) / 3.2, 0, 1)
+          const k = 1 - depth * 0.55
+          colors[vi] = k
+          colors[vi + 1] = k
+          colors[vi + 2] = 1 // keep blue
+        }
+      }
+      geo.setAttribute('color', new THREE.BufferAttribute(colors, 3))
+      const mesh = new THREE.Mesh(geo, this.makeWaterMat(0x4a90c0, 0.85, new THREE.Vector2(0, -2.6), 0, true))
       this.group.add(mesh)
 
       this.rivers.push({ samples })
@@ -124,9 +139,16 @@ export class WaterSystem {
   }
 
   /** Shared animated standard material; flow = UV scroll direction. */
-  private makeWaterMat(color: number, opacity: number, flow: THREE.Vector2, swell: number): THREE.MeshStandardMaterial {
+  private makeWaterMat(
+    color: number,
+    opacity: number,
+    flow: THREE.Vector2,
+    swell: number,
+    foam = false,
+  ): THREE.MeshStandardMaterial {
     const mat = new THREE.MeshStandardMaterial({
       color,
+      vertexColors: foam, // rivers carry depth tint in vertex colors
       transparent: true,
       opacity,
       roughness: 0.18,
@@ -141,9 +163,10 @@ export class WaterSystem {
       shader.uniforms.uTime = { value: 0 }
       shader.uniforms.uFlow = { value: flow }
       shader.uniforms.uSwell = { value: swell }
+      shader.uniforms.uFoam = { value: foam ? 1 : 0 }
       ;(mat.userData as { shader?: typeof shader }).shader = shader
       shader.vertexShader = shader.vertexShader
-        .replace('#include <common>', '#include <common>\nuniform float uTime;\nuniform float uSwell;\nvarying vec3 vWaterWorld;')
+        .replace('#include <common>', '#include <common>\nuniform float uTime;\nuniform float uSwell;\nvarying vec3 vWaterWorld;\nvarying vec2 vWaterUv;')
         .replace(
           '#include <begin_vertex>',
           `#include <begin_vertex>
@@ -151,10 +174,11 @@ export class WaterSystem {
           if (uSwell > 0.0) {
             transformed.y += uSwell * (sin(wp0.x * 0.045 + uTime * 1.1) * 0.6 + sin(wp0.z * 0.06 + uTime * 0.8) * 0.4);
           }
-          vWaterWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;`,
+          vWaterWorld = (modelMatrix * vec4(transformed, 1.0)).xyz;
+          vWaterUv = uv;`,
         )
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\nuniform float uTime;\nuniform vec2 uFlow;\nvarying vec3 vWaterWorld;')
+        .replace('#include <common>', '#include <common>\nuniform float uTime;\nuniform vec2 uFlow;\nuniform float uFoam;\nvarying vec3 vWaterWorld;\nvarying vec2 vWaterUv;')
         .replace(
           '#include <normal_fragment_begin>',
           `#include <normal_fragment_begin>
@@ -164,6 +188,20 @@ export class WaterSystem {
             float nz = sin(p.y * 0.8 - uTime * 1.3) * 0.5 + sin(p.y * 0.41 + uTime * 0.9 + p.x * 0.23) * 0.5;
             normal = normalize(normal + vec3(nx, 0.0, nz) * 0.22);
           }`,
+        )
+        .replace(
+          '#include <opaque_fragment>',
+          `{
+            if (uFoam > 0.5) {
+              // churning foam bands along both banks
+              float bank = 1.0 - smoothstep(0.02, 0.16, vWaterUv.x) * smoothstep(0.98, 0.84, vWaterUv.x);
+              float churn = 0.6 + 0.4 * sin(vWaterUv.y * 60.0 - uTime * 5.0 + sin(vWaterWorld.x * 0.7) * 3.0);
+              float f = clamp(bank * churn, 0.0, 1.0) * 0.75;
+              outgoingLight = mix(outgoingLight, vec3(0.92, 0.96, 1.0), f);
+              diffuseColor.a = min(1.0, diffuseColor.a + f * 0.35);
+            }
+          }
+          #include <opaque_fragment>`,
         )
     }
     this.materials.push(mat)

@@ -220,3 +220,10 @@ User's 10 + mandate, to be burned down across M7d+ and the MAP OVERHAUL mileston
 - [x] Canyon (backlog #4): terraced east-gorge walls (stratified-rock look), rim lift doubled to 6.5m
 - [x] Base relief +20% with an extra mid-frequency band (backlog #5)
 - Gate note: one bush-harvest flake (positional); passes on rerun and in isolation. Gates 9/9, 29/29, 12/12, creative 12/12; island + navmesh rebaked, validators pass
+
+### M8a — rivers get character + THE ARC BEGINS (keystones + Wayfinder)
+- [x] Rivers meander (backlog #2): control polylines densified with dual-sine perpendicular offsets over arc length (amp grows downstream, pinned ends; first bake's 30m amp carved a bay through the SW coast — capped at 14m, west mouth now reads as a sandy estuary); carve/canyon/shores/validators/meta all follow the dense path
+- [x] River bed re-asserted post-erosion (droplets silted channels to wading depth — swim gate caught it after the meander moved its probe onto a silt bar)
+- [x] River visuals: churning foam bands along both banks (uv-driven, animated), per-vertex depth tint (deep = darker), faster flow perturbation
+- [x] **M8 OPENS — the arc's thread:** 5 glowing keystones at the pre-caldera ruin sites (bobbing, spinning, point-lit), E to collect, count toasts, save-persisted; **N = the Wayfinder** — points to the nearest missing keystone (or the caldera gate once all 5 are held) with direction + distance. New gate-m8 (6 checks) green first run.
+- Gates: 9/9, 29/29, 12/12, m8 6/6, creative 12/12; island + navmesh rebaked

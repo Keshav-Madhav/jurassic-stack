@@ -36,7 +36,7 @@ export class Hud {
       <div id="hud-toast"></div>
       <div id="hud-hotbar"></div>
       <div id="hud-panel" hidden></div>
-      <div id="hud-help">WASD · LMB use · E interact · F eat 🫐 · TAB inventory · C creative · trees→🪵 rocks→🪨 bushes→🫐</div>
+      <div id="hud-help">WASD · LMB use · E interact · F eat 🫐 · N wayfinder · TAB inventory · C creative · bushes→🫐</div>
     `
     this.fpsEl = root.querySelector('#hud-fps')!
     this.posEl = root.querySelector('#hud-pos')!

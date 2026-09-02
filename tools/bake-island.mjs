@@ -89,6 +89,43 @@ const LAKES = [
   { x: 300, z: 300, r: 70, level: 6 },  // lowland lake east of center
 ]
 
+// Meander: densify each river's control polyline and push points sideways
+// with two superimposed sine waves over arc length (amplitude grows down-
+// stream, pinned at source and mouth). Rivers stop being ruler-straight
+// (backlog #2: "no twisty turney").
+function meander(path, seed) {
+  const pts = []
+  for (let i = 0; i < path.length - 1; i++) {
+    const a = path[i]
+    const b = path[i + 1]
+    const steps = Math.max(4, Math.round(Math.hypot(b.x - a.x, b.z - a.z) / 26))
+    for (let st = 0; st < steps; st++) {
+      const t = st / steps
+      pts.push({ x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t })
+    }
+  }
+  pts.push(path[path.length - 1])
+  const out = []
+  let arc = 0
+  for (let i = 0; i < pts.length; i++) {
+    if (i > 0) arc += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z)
+    const prev = pts[Math.max(0, i - 1)]
+    const next = pts[Math.min(pts.length - 1, i + 1)]
+    const dx = next.x - prev.x
+    const dz = next.z - prev.z
+    const len = Math.hypot(dx, dz) || 1
+    const t = i / (pts.length - 1)
+    const pin = smoothstep(0, 0.12, t) * (1 - smoothstep(0.88, 1, t))
+    // downstream amp capped: 30m meanders over low coastal ground carved a
+    // bay through the southwest coast on first bake
+    const amp = (13 + 14 * t) * pin
+    const off = Math.sin(arc * 0.022 + seed) * 0.62 + Math.sin(arc * 0.0093 - seed * 0.7) * 0.38
+    out.push({ x: pts[i].x + (-dz / len) * off * amp, z: pts[i].z + (dx / len) * off * amp })
+  }
+  return out
+}
+const RIVERS_DENSE = RIVERS.map((p, i) => meander(p, i * 3.7 + 1.2))
+
 /** distance from point to a polyline; also returns segment index + local t */
 function distToPath(px, pz, path) {
   let best = Infinity
@@ -190,7 +227,7 @@ const hAtGrid = (x, z) => {
   return H[idx(ix, iz)] * (1 - u) * (1 - v) + H[idx(ix + 1, iz)] * u * (1 - v) +
     H[idx(ix, iz + 1)] * (1 - u) * v + H[idx(ix + 1, iz + 1)] * u * v
 }
-const RIVER_BEDS = RIVERS.map((path) => {
+const RIVER_BEDS = RIVERS_DENSE.map((path) => {
   // source → mouth: bed sits ~3.5 m under terrain, clamped monotonic downhill
   const beds = []
   let prev = Infinity
@@ -207,14 +244,15 @@ for (let iz = 0; iz < SIDE; iz++) {
     const x = worldX(ix), z = worldZ(iz)
     const dv = Math.hypot(x - VOLCANO.x, z - VOLCANO.z)
     if (dv < 200) continue // never carve the cone itself
-    for (let ri = 0; ri < RIVERS.length; ri++) {
-      const { d, seg, t } = distToPath(x, z, RIVERS[ri])
+    for (let ri = 0; ri < RIVERS_DENSE.length; ri++) {
+      const { d, seg, t } = distToPath(x, z, RIVERS_DENSE[ri])
       if (d > 120) continue
       const beds = RIVER_BEDS[ri]
-      const bed = beds[seg] * (1 - t) + beds[seg + 1] * t
+      const bed = beds[seg] * (1 - t) + beds[Math.min(seg + 1, beds.length - 1)] * t
       // the east river's mid-course is a canyon: tight channel, steep walls,
       // raised rims; elsewhere a soft valley
-      const canyon = ri === 0 && seg >= 1 && seg <= 3
+      const frac = seg / (RIVERS_DENSE[ri].length - 1)
+      const canyon = ri === 0 && frac > 0.18 && frac < 0.62
       const sigma = canyon ? 14 : 22
       const wBed = Math.exp(-(d * d) / (2 * sigma * sigma))
       const wValley = (canyon ? 0.15 : 0.35) * Math.exp(-(d * d) / (2 * 65 * 65))
@@ -267,8 +305,9 @@ console.time('sculpt')
       // canyon walls: terrace the east river's mid-course flanks so the gorge
       // reads as stratified rock, not a soft ditch (backlog #4)
       {
-        const { d, seg } = distToPath(x, z, RIVERS[0])
-        if (seg >= 1 && seg <= 3 && d > 16 && d < 64 && h > 6) {
+        const { d, seg } = distToPath(x, z, RIVERS_DENSE[0])
+        const frac = seg / (RIVERS_DENSE[0].length - 1)
+        if (frac > 0.18 && frac < 0.62 && d > 16 && d < 64 && h > 6) {
           const w = smoothstep(64, 34, d) * 0.75
           h = h * (1 - w) + terrace(h, 7, 3.4) * w
         }
@@ -417,7 +456,7 @@ for (let iz = 0; iz < SIDE; iz++) {
       if (d < lake.r * 0.92 || d > lake.r * 1.5) continue
       // rivers cut through the shore — leave their corridors as inlets/outlets
       let riverGap = false
-      for (const path of RIVERS) {
+      for (const path of RIVERS_DENSE) {
         if (distToPath(x, z, path).d < 26) {
           riverGap = true
           break
@@ -435,6 +474,24 @@ for (let iz = 0; iz < SIDE; iz++) {
         const t = 1 - Math.abs(dw - lake.r * 1.1) / (lake.r * 0.45)
         H[i0] = Math.max(H[i0], need - 0.4 + Math.max(0, t) * (0.7 + wob * 0.5))
       }
+    }
+  }
+}
+
+// re-assert river beds after erosion: 220K droplets deposit sediment into the
+// carved channels, silting them up to wading depth (caught by the swim gate
+// after the meander moved its probe point onto a silt bar)
+for (let iz = 0; iz < SIDE; iz++) {
+  for (let ix = 0; ix < SIDE; ix++) {
+    const x = worldX(ix), z = worldZ(iz)
+    for (let ri = 0; ri < RIVERS_DENSE.length; ri++) {
+      const { d, seg, t } = distToPath(x, z, RIVERS_DENSE[ri])
+      if (d > 10) continue
+      const beds = RIVER_BEDS[ri]
+      const bed = beds[seg] * (1 - t) + beds[Math.min(seg + 1, beds.length - 1)] * t
+      const i0 = idx(ix, iz)
+      const w = Math.exp(-(d * d) / (2 * 6 * 6))
+      H[i0] = Math.min(H[i0], bed * w + H[i0] * (1 - w) + 0.001)
     }
   }
 }
@@ -525,7 +582,7 @@ if (hPeak < 140) fail(`volcano rim only ${hPeak.toFixed(0)} m`)
   if (blocked) fail('volcano rim not visible from spawn eye height')
 }
 // rivers must run downhill: sample the BED densely along each path, mouth → source
-for (const [ri, path] of RIVERS.entries()) {
+for (const [ri, path] of RIVERS_DENSE.entries()) {
   let prev = -Infinity
   const samples = []
   for (let i = path.length - 1; i > 0; i--) {
@@ -548,7 +605,7 @@ for (const lake of LAKES) {
   for (let a = 0; a < Math.PI * 2; a += 0.3) {
     const sx = lake.x + Math.cos(a) * lake.r * 1.12
     const sz = lake.z + Math.sin(a) * lake.r * 1.12
-    const nearRiver = RIVERS.some((p) => distToPath(sx, sz, p).d < 30)
+    const nearRiver = RIVERS_DENSE.some((p) => distToPath(sx, sz, p).d < 30)
     if (!nearRiver && hAt(sx, sz) < lake.level + 0.2) {
       fail(`lake at (${lake.x},${lake.z}) shore below fill level at angle ${a.toFixed(1)}`)
       break
@@ -564,7 +621,7 @@ writeFileSync('public/world/heightmap.bin', Buffer.from(out.buffer))
 const meta = {
   side: SIDE, res: RES, scale: SCALE, half: HALF, sea: SEA,
   spawn: SPAWN, volcano: VOLCANO,
-  rivers: RIVERS, lakes: LAKES, ruinSites: RUIN_SITES,
+  rivers: RIVERS_DENSE, lakes: LAKES, ruinSites: RUIN_SITES,
   bakedAt: new Date().toISOString(),
 }
 writeFileSync('public/world/world-meta.json', JSON.stringify(meta, null, 2))

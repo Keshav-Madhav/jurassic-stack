@@ -14,11 +14,12 @@ import { SPECIES } from './species'
 import { Scatter } from './scatter'
 import { Building, type PieceKind } from './building'
 import { Ruins } from './ruins'
+import { Keystones } from './keystones'
 import { Inventory } from './inventory'
 import { ITEMS, type ItemId } from './items'
 import { Hud } from './hud'
 import { saveGame, loadGame, SAVE_VERSION, type SaveFile } from './save'
-import { heightAt, loadHeightmap, SPAWN } from './heightmap'
+import { heightAt, loadHeightmap, worldMeta, SPAWN } from './heightmap'
 import { loadNavmesh, findPath } from './navmesh'
 import { WaterSystem } from './water'
 
@@ -88,6 +89,11 @@ async function boot(): Promise<void> {
   const ruins = new Ruins()
   await ruins.build(physics)
   scene.add(ruins.group)
+
+  const keystones = new Keystones()
+  keystones.build()
+  scene.add(keystones.group)
+  if (save?.keystones) keystones.restore(save.keystones as string[])
 
   const building = new Building(physics)
   scene.add(building.group)
@@ -287,6 +293,16 @@ async function boot(): Promise<void> {
       dismount()
       return true
     }
+    // keystones (the arc's thread)
+    const f0 = feetPos()
+    const got = keystones.collectNear(f0.x, f0.z)
+    if (got) {
+      const n = keystones.collectedCount
+      hud.toast(n === keystones.total
+        ? `Keystone ${n}/${keystones.total} — the caldera gate awaits (N to point the way)`
+        : `Keystone ${n}/${keystones.total} collected (${got.tag})`)
+      return true
+    }
     // feed a KO'd dino
     const ko = nearestDino(INTERACT_RANGE, (d) => d.state === 'ko')
     if (ko) {
@@ -375,6 +391,18 @@ async function boot(): Promise<void> {
       }
       lastSpaceAt = now
     }
+    if (e.code === 'KeyN') {
+      const f = feetPos()
+      const gate = worldMeta?.ruinSites.find((r) => r.tag === 'caldera-gate')
+      const target = keystones.collectedCount < keystones.total ? keystones.nearestMissing(f.x, f.z) : gate ?? null
+      if (target) {
+        const d = Math.hypot(target.x - f.x, target.z - f.z)
+        const ang = ((Math.atan2(-(target.x - f.x), -(target.z - f.z)) * 180) / Math.PI + 360) % 360
+        const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
+        const label = keystones.collectedCount < keystones.total ? 'keystone' : 'the caldera gate'
+        hud.toast(`Wayfinder: ${label} ${dirs[Math.round(ang / 45) % 8]} · ${Math.round(d)}m`)
+      }
+    }
     if (e.code === 'KeyE') interact()
     if (e.code === 'Tab') {
       e.preventDefault()
@@ -402,6 +430,7 @@ async function boot(): Promise<void> {
     pieces: building.serialize(),
     deadNodes: scatter.serialize(),
     dinos: dinos.map((d) => d.serialize()),
+    keystones: keystones.serialize(),
     }
   }
   setInterval(() => void saveGame(collectSave()), 30_000)
@@ -585,6 +614,8 @@ async function boot(): Promise<void> {
         return bd
       },
       setCreative: (on: boolean) => setCreative(on),
+      keystoneCount: () => keystones.collectedCount,
+      keystoneSites: () => keystones.sites.map((k) => ({ tag: k.tag, x: k.x, z: k.z, collected: k.collected })),
       flying: () => player.flying,
       poseInfo: () => player.poseInfo(),
       setFlying: (on: boolean) => { player.flying = on },
@@ -734,8 +765,12 @@ async function boot(): Promise<void> {
     const held = inventory.held
     building.updateGhost(held && ITEMS[held].placeable ? (held as PieceKind) : null, held && ITEMS[held].placeable ? updateAim() : null)
 
+    keystones.update(dt)
     // context prompt
+    const fk = feetPos()
+    const nearKey = keystones.sites.find((k) => !k.collected && Math.hypot(k.x - fk.x, k.z - fk.z) < 5)
     if (riding) hud.prompt('E — dismount')
+    else if (nearKey) hud.prompt('E — take the keystone')
     else {
       const ko = nearestDino(INTERACT_RANGE, (d) => d.state === 'ko')
       const tame = nearestDino(INTERACT_RANGE, (d) => d.state === 'tamed')
