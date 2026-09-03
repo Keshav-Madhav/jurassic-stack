@@ -479,7 +479,15 @@ async function boot(): Promise<void> {
 
   // --- debug/E2E API: the gate drives the same verbs the input layer calls ---
   let debugIntent: { vx: number; vz: number } | null = null
+  /** QA free camera: when set, the render camera detaches from the player. */
+  let freeCam: { x: number; y: number; z: number; yaw: number; pitch: number } | null = null
   const dbg = {
+    setFreeCam: (x: number, y: number, z: number, yaw: number, pitch: number) => {
+      freeCam = { x, y, z, yaw, pitch }
+    },
+    clearFreeCam: () => {
+      freeCam = null
+    },
     setTime: (t: number) => daynight.setTime(t),
     teleport: (x: number, z: number) => {
       if (riding?.mover) riding.mover.teleport(x, heightAt(x, z) + 1.4, z)
@@ -824,13 +832,23 @@ async function boot(): Promise<void> {
     water.update(dt)
     daynight.setFocus(focus.x, focus.z)
     daynight.advance(dt)
-    terrain.update(focus.x, focus.z)
+    terrain.update(freeCam ? freeCam.x : focus.x, freeCam ? freeCam.z : focus.z)
 
-    // camera follows whoever is being driven
-    const camTargetFeet = pFeet.clone()
-    cam.update(input, camTargetFeet, dt)
-    cam.camera.position.y += camKick
-    if (riding) cam.camera.position.addScaledVector(cam.camera.getWorldDirection(new THREE.Vector3()), -2.2)
+    // camera follows whoever is being driven (or the QA free camera)
+    if (freeCam) {
+      cam.camera.position.set(freeCam.x, freeCam.y, freeCam.z)
+      const cp = Math.cos(freeCam.pitch)
+      cam.camera.lookAt(
+        freeCam.x - Math.sin(freeCam.yaw) * cp,
+        freeCam.y + Math.sin(freeCam.pitch),
+        freeCam.z - Math.cos(freeCam.yaw) * cp,
+      )
+    } else {
+      const camTargetFeet = pFeet.clone()
+      cam.update(input, camTargetFeet, dt)
+      cam.camera.position.y += camKick
+      if (riding) cam.camera.position.addScaledVector(cam.camera.getWorldDirection(new THREE.Vector3()), -2.2)
+    }
 
     // ghost preview when holding a placeable
     const held = inventory.held

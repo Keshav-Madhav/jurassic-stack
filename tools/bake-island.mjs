@@ -131,10 +131,20 @@ const SWAMP = { x: 560, z: 330, r: 170, level: 4.2 } // east-coast marsh, the ca
 const DESERT = { x: -520, z: 300, r: 220 } // west rain-shadow flats, the west river oasis crosses it
 const PLAINS = { x: -240, z: 520, r: 200 } // rolling bush plains southwest of spawn
 const RIDGES = [
-  // NE range and NW range: terraced cliff walls with two passes each
-  [{ x: 600, z: -380 }, { x: 690, z: -160 }, { x: 745, z: 60 }],
-  [{ x: -600, z: -430 }, { x: -690, z: -180 }, { x: -740, z: 30 }],
+  // NE and NW ranges: denser wobbled spines (straight 3-point lines read as
+  // smooth mounds from the air)
+  [{ x: 590, z: -390 }, { x: 640, z: -290 }, { x: 700, z: -170 }, { x: 705, z: -60 }, { x: 745, z: 40 }, { x: 720, z: 130 }],
+  [{ x: -590, z: -440 }, { x: -660, z: -330 }, { x: -680, z: -210 }, { x: -730, z: -90 }, { x: -720, z: 10 }, { x: -750, z: 90 }],
 ]
+
+/** Noise-warped radial distance: turns circular region masks into natural
+ *  irregular boundaries (bays, headlands, lobes). Amp is a fraction of r. */
+function warpedDist(x, z, cx, cz, r, seed, amp = 0.42) {
+  const d = Math.hypot(x - cx, z - cz)
+  // low-frequency, 2-octave: smooth lobes, no high-freq jitter at the boundary
+  const wob = fbm((x + seed * 137) * 0.006, (z - seed * 91) * 0.006, 2)
+  return d + wob * r * amp
+}
 
 /** distance from point to a polyline; also returns segment index + local t */
 function distToPath(px, pz, path) {
@@ -188,10 +198,12 @@ for (let iz = 0; iz < SIDE; iz++) {
     for (const ridge of RIDGES) {
       const rr = distToPath(x, z, ridge)
       const frac = (rr.seg + rr.t) / (ridge.length - 1)
-      // continuous wall with two gentle pass dips (v1's deep fast modulation
-      // beaded the range into separate bumps — hillshade iteration 2)
-      const passes = 0.8 + 0.2 * Math.sin(frac * Math.PI * 2 + 0.9)
-      h += 64 * passes * Math.exp(-(rr.d * rr.d) / (2 * 58 * 58))
+      // REAL mountains (user: "not high enough, just mounds"): 105m spines
+      // with jagged peak modulation + a narrow sharp crest on the wide base
+      const peaks = 0.72 + 0.28 * Math.sin(frac * Math.PI * 5 + 1.7)
+      const passes = 0.78 + 0.22 * Math.sin(frac * Math.PI * 2 + 0.9)
+      h += 78 * passes * Math.exp(-(rr.d * rr.d) / (2 * 66 * 66)) // massif base
+      h += 42 * peaks * passes * Math.exp(-(rr.d * rr.d) / (2 * 26 * 26)) // sharp crest
     }
 
     // the volcano, resculpted (MAP OVERHAUL: "looks weirdly bad" — too smooth):
@@ -219,10 +231,11 @@ for (let iz = 0; iz < SIDE; iz++) {
     const beach = Math.exp(-(ds * ds) / (2 * 210 * 210)) * 0.92
     h = h * (1 - beach) + 3.0 * beach
 
-    // swamp: flatten low with pool depressions carved below the water table
+    // swamp: noise-warped marsh basin (the circular region read as a stamped
+    // disc from the air) with pool depressions below the water table
     {
-      const d = Math.hypot(x - SWAMP.x, z - SWAMP.z)
-      const w = smoothstep(SWAMP.r, SWAMP.r * 0.55, d)
+      const d = warpedDist(x, z, SWAMP.x, SWAMP.z, SWAMP.r, 55)
+      const w = smoothstep(SWAMP.r * 1.05, SWAMP.r * 0.5, d)
       if (w > 0.01) {
         const pool = Math.max(0, fbm(x * 0.02 + 11, z * 0.02 - 5, 3)) * 2.6
         h = h * (1 - w) + (5.5 - pool) * w
@@ -241,12 +254,16 @@ for (let iz = 0; iz < SIDE; iz++) {
       if (w > 0.01) h = h * (1 - w) + (7 + 1.4 * fbm(x * 0.01 - 7, z * 0.01 + 2, 3)) * w
     }
 
-    // lake basins: uniformly DEEP inside the waterline (a soft-blended basin
-    // left a walkable shelf 1-3m under the surface — you could stand on the
-    // bed with the water sheet overhead; backlog #3 "lake is floating")
-    for (const lake of LAKES) {
-      const d = Math.hypot(x - lake.x, z - lake.z)
-      const w = smoothstep(lake.r * 1.02, lake.r * 0.8, d)
+    // lake basins: uniformly DEEP inside the waterline, with noise-warped
+    // boundaries — the terrain-vs-level intersection IS the visible shoreline,
+    // so warping the basin field grows bays and headlands (aerial review:
+    // perfect circles read as compass-drawn)
+    for (const [li, lake] of LAKES.entries()) {
+      const d = warpedDist(x, z, lake.x, lake.z, lake.r, li * 7 + 3)
+      // wide transition band: the terrain crosses the waterline on a gentle
+      // slope (a hard basin→ring step quantized the shoreline into grid
+      // staircases — aerial iteration 2)
+      const w = smoothstep(lake.r * 1.12, lake.r * 0.68, d)
       h = h * (1 - w) + (lake.level - 4.5) * w
     }
 
@@ -304,6 +321,12 @@ for (let iz = 0; iz < SIDE; iz++) {
       if (canyon) {
         // rim lift: shoulders rise well above the surrounding ground
         H[i0] += 6.5 * Math.exp(-((d - 28) * (d - 28)) / (2 * 10 * 10))
+      } else if (d < 34) {
+        // bank cap (user: "randomly very tall banks"): outside the canyon,
+        // where the meander cuts through a hill the walls soften instead of
+        // towering — banks cap ~5m over the bed
+        const cap = bed + 5
+        if (H[i0] > cap) H[i0] = cap + (H[i0] - cap) * 0.35
       }
     }
   }
@@ -502,9 +525,13 @@ for (let iz = 0; iz < SIDE; iz++) {
 for (let iz = 0; iz < SIDE; iz++) {
   for (let ix = 0; ix < SIDE; ix++) {
     const x = worldX(ix), z = worldZ(iz)
-    for (const lake of LAKES) {
-      const d = Math.hypot(x - lake.x, z - lake.z)
-      if (d < lake.r * 0.92 || d > lake.r * 1.5) continue
+    for (const [li, lake] of LAKES.entries()) {
+      // raise everything under the water DISC (geometric) that the warped
+      // basin doesn't claim — mixed frames here left below-level ground under
+      // the disc edge (floating waterline)
+      const dGeo = Math.hypot(x - lake.x, z - lake.z)
+      const d = warpedDist(x, z, lake.x, lake.z, lake.r, li * 7 + 3)
+      if (dGeo > lake.r * 1.5 || d < lake.r * 0.95) continue
       // rivers cut through the shore — leave their corridors as inlets/outlets
       let riverGap = false
       for (const path of RIVERS_DENSE) {
@@ -515,15 +542,10 @@ for (let iz = 0; iz < SIDE; iz++) {
       }
       if (riverGap) continue
       const i0 = idx(ix, iz)
-      // natural bank: wobble the ring radius and height with noise so the
-      // shore doesn't read as a stamped circle (v1 looked like a crop circle)
-      const wob = fbm(x * 0.022 + 3, z * 0.022 - 7, 3)
-      const dw = d + wob * 14
-      if (dw < lake.r * 0.92 || dw > lake.r * 1.5) continue
-      const need = lake.level + 0.55 + wob * 0.5
+      const need = lake.level + 0.55
       if (H[i0] < need) {
-        const t = 1 - Math.abs(dw - lake.r * 1.1) / (lake.r * 0.45)
-        H[i0] = Math.max(H[i0], need - 0.4 + Math.max(0, t) * (0.7 + wob * 0.5))
+        const t = 1 - Math.abs(d - lake.r * 1.05) / (lake.r * 0.5)
+        H[i0] = Math.max(H[i0], need + Math.max(0, t) * 0.6)
       }
     }
   }
@@ -650,12 +672,18 @@ for (const [ri, path] of RIVERS_DENSE.entries()) {
     prev = Math.max(prev, h)
   }
 }
-// lakes hold water: basin floor below fill level, shore ring above it
-for (const lake of LAKES) {
+// lakes hold water: basin floor below fill level, shore above it — sampled
+// just OUTSIDE the warped boundary (walk each ray until the warped field
+// exits the ring)
+for (const [li, lake] of LAKES.entries()) {
   if (hAt(lake.x, lake.z) > lake.level - 1) fail(`lake at (${lake.x},${lake.z}) floor above fill level`)
-  for (let a = 0; a < Math.PI * 2; a += 0.3) {
-    const sx = lake.x + Math.cos(a) * lake.r * 1.12
-    const sz = lake.z + Math.sin(a) * lake.r * 1.12
+  // the disc edge (geometric 1.32r) must sit on ground above the fill level
+  // wherever the warped basin doesn't claim it as open water
+  for (let a = 0; a < Math.PI * 2; a += 0.25) {
+    const sx = lake.x + Math.cos(a) * lake.r * 1.32
+    const sz = lake.z + Math.sin(a) * lake.r * 1.32
+    const wd = warpedDist(sx, sz, lake.x, lake.z, lake.r, li * 7 + 3)
+    if (wd < lake.r * 1.02) continue // legitimately water (warp bay)
     const nearRiver = RIVERS_DENSE.some((p) => distToPath(sx, sz, p).d < 30)
     if (!nearRiver && hAt(sx, sz) < lake.level + 0.2) {
       fail(`lake at (${lake.x},${lake.z}) shore below fill level at angle ${a.toFixed(1)}`)
@@ -687,9 +715,9 @@ writeFileSync('public/world/world-meta.json', JSON.stringify(meta, null, 2))
       const x = worldX(ix), z = worldZ(iz)
       const h = H[idx(ix, iz)]
       let b = 0
-      if (Math.hypot(x - SWAMP.x, z - SWAMP.z) < SWAMP.r) b = 1
-      else if (Math.hypot(x - DESERT.x, z - DESERT.z) < DESERT.r) b = 2
-      else if (Math.hypot(x - PLAINS.x, z - PLAINS.z) < PLAINS.r) b = 3
+      if (warpedDist(x, z, SWAMP.x, SWAMP.z, SWAMP.r, 55) < SWAMP.r) b = 1
+      else if (warpedDist(x, z, DESERT.x, DESERT.z, DESERT.r, 77) < DESERT.r) b = 2
+      else if (warpedDist(x, z, PLAINS.x, PLAINS.z, PLAINS.r, 99) < PLAINS.r) b = 3
       else if (h > 52) b = 4
       biomes[idx(ix, iz)] = b
     }

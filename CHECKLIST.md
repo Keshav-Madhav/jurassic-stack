@@ -271,3 +271,12 @@ User's 10 + mandate, to be burned down across M7d+ and the MAP OVERHAUL mileston
 - [x] Perf: pixelRatio 1.3 (user-approved resolution trade)
 - Gates: 9/9, 29/29, 12/12, 11/11, 12/12 (73). Caverns deferred to a dedicated round (needs interiors). Weather/moon/inventory/icons/stats: next rounds.
 - **WORKING AGREEMENT (user): small focused picks per round, deeper work per pick**
+
+### M9b — de-circling the island (one-by-one todo, aerial self-check loop each)
+Process change (user): free-camera aerial QA tool (`tools/aerial.mjs` + `setFreeCam` debug, LODs follow the free cam) — screenshot → improve → screenshot per item.
+- [x] ① LAKES: noise-warped basin fields — the terrain-vs-level intersection IS the shoreline, so warping the basin grows bays/headlands; oversized water discs hide under raised shores; warp-aware ring + validator (3 iterations: frames mixed → blocky transitions → soft organic pools)
+- [x] ② SWAMP: warped marsh boundary; water sheet rebuilt from BIOME CELLS (8m quads where swamp+submerged+above-sea) after the oversized disc floated over the ocean
+- [x] ③ DESERT: warped boundary — natural sand fields around the oasis river (the flood now reads as intentional)
+- [x] ④ MOUNTAINS: 6-point wobbled spines, 78m massif base + 42m jagged crest line (~150m peaks with terrain) with pass dips — ranges, not mounds
+- [x] ⑤ RIVER BANKS: outside the canyon, banks cap ~5m over the bed (softened 65%) — no more random levee walls where meanders cut hills
+- All 73 gate checks green; navmesh revalidated

@@ -6,7 +6,7 @@
 // perturbation injected into MeshStandardMaterial, plus small Gerstner-ish
 // vertex swell on the ocean.
 import * as THREE from 'three'
-import { heightAt, SEA_LEVEL, HALF_SIZE, worldMeta } from './heightmap'
+import { heightAt, biomeAt, BIOME, SEA_LEVEL, HALF_SIZE, worldMeta } from './heightmap'
 
 const RIVER_HALF_WIDTH = 11
 /** water surface height above the carved bed — deep enough to actually swim */
@@ -44,13 +44,46 @@ export class WaterSystem {
     ocean.position.y = SEA_LEVEL
     this.group.add(ocean)
 
-    // --- swamp: one broad sheet at the marsh water table; carved pool
-    // depressions below it read as scattered ponds ---
+    // --- swamp: sheet built from the BIOME CELLS themselves (a disc floated
+    // over the ocean past the coast) — 8m quads wherever swamp cells sit
+    // below the water table, +1 cell margin so edges tuck under banks ---
     if (meta.swamp) {
       const sw = meta.swamp
-      const geo = new THREE.CircleGeometry(sw.r * 1.02, 48).rotateX(-Math.PI / 2)
+      const CELL = 8
+      const positions: number[] = []
+      const indices: number[] = []
+      const uvs: number[] = []
+      let vi = 0
+      const R = sw.r * 1.6
+      for (let z0 = sw.z - R; z0 < sw.z + R; z0 += CELL) {
+        for (let x0 = sw.x - R; x0 < sw.x + R; x0 += CELL) {
+          // include a cell if any corner is swampy-and-submerged
+          let wet = false
+          for (const [ox, oz] of [[0, 0], [CELL, 0], [0, CELL], [CELL, CELL], [CELL / 2, CELL / 2]]) {
+            const hh = heightAt(x0 + ox, z0 + oz)
+            if (biomeAt(x0 + ox, z0 + oz) === BIOME.SWAMP && hh < sw.level + 0.3 && hh > 0.6) {
+              wet = true
+              break
+            }
+          }
+          if (!wet) continue
+          positions.push(
+            x0, sw.level, z0,
+            x0 + CELL, sw.level, z0,
+            x0, sw.level, z0 + CELL,
+            x0 + CELL, sw.level, z0 + CELL,
+          )
+          uvs.push(x0, z0, x0 + CELL, z0, x0, z0 + CELL, x0 + CELL, z0 + CELL)
+          indices.push(vi, vi + 2, vi + 1, vi + 1, vi + 2, vi + 3)
+          vi += 4
+        }
+      }
+      const geo = new THREE.BufferGeometry()
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs.map((v) => v * 0.02), 2))
+      geo.setIndex(indices)
+      geo.computeVertexNormals()
       const mesh = new THREE.Mesh(geo, this.makeWaterMat(0x39493a, 0.9, new THREE.Vector2(0.03, 0.02), 0))
-      mesh.position.set(sw.x, sw.level, sw.z)
       this.group.add(mesh)
     }
 
@@ -58,7 +91,9 @@ export class WaterSystem {
     for (const lake of meta.lakes) {
       // slightly inside the carved basin so the rim never overhangs lower
       // terrain outside it (the "floating infinity pool" edge)
-      const geo = new THREE.CircleGeometry(lake.r * 0.92, 40).rotateX(-Math.PI / 2)
+      // oversized disc: the warped BASIN defines the visible shoreline; the
+      // disc edge stays hidden under the raised shore ring
+      const geo = new THREE.CircleGeometry(lake.r * 1.35, 48).rotateX(-Math.PI / 2)
       const mesh = new THREE.Mesh(geo, this.makeWaterMat(0x3878b0, 0.88, new THREE.Vector2(0.12, 0.06), 0))
       mesh.position.set(lake.x, lake.level, lake.z)
       this.group.add(mesh)
@@ -233,11 +268,11 @@ export class WaterSystem {
     // ocean wherever the terrain is below sea level
     if (heightAt(x, z) < SEA_LEVEL) level = SEA_LEVEL
     for (const lake of meta.lakes) {
-      if (Math.hypot(x - lake.x, z - lake.z) < lake.r * 1.1 && heightAt(x, z) < lake.level - 0.2) {
+      if (Math.hypot(x - lake.x, z - lake.z) < lake.r * 1.4 && heightAt(x, z) < lake.level - 0.2) {
         level = Math.max(level ?? -Infinity, lake.level)
       }
     }
-    if (meta.swamp && Math.hypot(x - meta.swamp.x, z - meta.swamp.z) < meta.swamp.r * 1.02 && heightAt(x, z) < meta.swamp.level - 0.15) {
+    if (meta.swamp && biomeAt(x, z) === BIOME.SWAMP && heightAt(x, z) < meta.swamp.level - 0.15) {
       level = Math.max(level ?? -Infinity, meta.swamp.level)
     }
     for (const r of this.rivers) {
