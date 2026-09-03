@@ -280,3 +280,11 @@ Process change (user): free-camera aerial QA tool (`tools/aerial.mjs` + `setFree
 - [x] ④ MOUNTAINS: 6-point wobbled spines, 78m massif base + 42m jagged crest line (~150m peaks with terrain) with pass dips — ranges, not mounds
 - [x] ⑤ RIVER BANKS: outside the canyon, banks cap ~5m over the bed (softened 65%) — no more random levee walls where meanders cut hills
 - All 73 gate checks green; navmesh revalidated
+
+### M9c — mountains v3 (single pick, ARK reference, aerial-iterated)
+- [x] The two "circles pulled up" identified as the relocated MESAS — deleted outright (rock formations return later as placed meshes, not terrain stamps)
+- [x] Mountains rebuilt: exponential-ridge crest (sharp spine, not gaussian mound), 88m warped massif + 74m crest, multi-frequency peak line (7π + 17π), lateral domain warp on flank contours, altitude-gated jagged fbm (scree/spurs), ~190-215m peaks
+- [x] Snow caps above ~112m with noise-dithered snowline (ranges only — the volcano stays hot dark rock)
+- [x] Aerial + ground verification: serrated multi-peak skyline, river valley threading volcano↔range; 60fps
+- [x] Fixed a real flake the reruns exposed: takeoff raced auto-land (flight cancelled if a fixed step ran between setFlying and the first Space) — auto-land now requires actual descent. Creative 12/12 twice consecutively
+- Gates: 9/9, 29/29, 12/12, 11/11, 12/12

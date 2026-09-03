@@ -215,6 +215,7 @@ function waterEdgeDist(x: number, z: number): number {
 }
 const C_BASALT = new THREE.Color(0x453d36) // volcano flanks
 const C_CINDER = new THREE.Color(0x332c27) // summit
+const C_SNOW = new THREE.Color(0xcdd4d8) // mountain caps
 
 const _c = new THREE.Color()
 const _c2 = new THREE.Color()
@@ -331,6 +332,12 @@ function groundColorAt(x: number, z: number, h: number, ny: number, out: THREE.C
     // altitude: fade toward volcanic rock
     if (h > 55) out.lerp(C_BASALT, THREE.MathUtils.clamp((h - 55) / 55, 0, 1))
     if (h > 130) out.lerp(C_CINDER, THREE.MathUtils.clamp((h - 130) / 60, 0, 1))
+    // snow caps on the ranges (not the volcano cone: hot rock stays dark) —
+    // dithered snowline via the variation noise
+    const dvv = Math.hypot(x - 0, z - -620)
+    if (h > 112 && dvv > 330) {
+      out.lerp(C_SNOW, THREE.MathUtils.clamp((h - 112 - varT * 10) / 22, 0, 0.92))
+    }
   }
   // slope: rock faces override
   if (ny < 0.82) {

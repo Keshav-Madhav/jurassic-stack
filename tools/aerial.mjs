@@ -15,7 +15,8 @@ const shots = [
   ['lake-east', 300, 500, 550, 0, -0.9, 0.5],
   ['swamp', 560, 420, 620, 0, -0.9, 0.5],
   ['desert', -520, 420, 580, 0, -0.9, 0.5],
-  ['ridge-ne', 690, 380, 240, -0.9, -0.35, 0.55],
+  ['ridge-ne', 700, 260, 420, 0.12, -0.18, 0.55], // south of the NE range looking north along it
+  ['ridge-ground', 520, 40, 150, -0.8, 0.12, 0.45], // eye-ish level looking up at the range
 ]
 for (const [name, x, y, z, yaw, pitch, t] of shots) {
   await page.evaluate(([xx, yy, zz, ya, pi, tt]) => {

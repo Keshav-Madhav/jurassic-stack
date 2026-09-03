@@ -170,10 +170,11 @@ export class Player {
         this.mover.intent.vx = override.vx
         this.mover.intent.vz = override.vz
         if (override.vx || override.vz) this.facing = Math.atan2(override.vx, override.vz)
-        this.mover.velocityY = input.down('Space') ? 9 : input.down('ShiftLeft') ? -9 : 0
+        const vertO = input.down('Space') ? 9 : input.down('ShiftLeft') ? -9 : 0
+        this.mover.velocityY = vertO
         this.mover.intent.jump = false
         this.mover.update(dt, 0)
-        if (this.mover.grounded && this.mover.velocityY <= 0) this.flying = false
+        if (this.mover.grounded && vertO < 0) this.flying = false // land = descend into ground
         return
       }
       let fwd = 0
@@ -200,7 +201,7 @@ export class Player {
       this.mover.velocityY = vert
       this.mover.intent.jump = false
       this.mover.update(dt, 0)
-      if (this.mover.grounded && vert <= 0) this.flying = false
+      if (this.mover.grounded && vert < 0) this.flying = false // land = descend into ground
       return
     }
 

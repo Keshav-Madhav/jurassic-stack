@@ -198,12 +198,18 @@ for (let iz = 0; iz < SIDE; iz++) {
     for (const ridge of RIDGES) {
       const rr = distToPath(x, z, ridge)
       const frac = (rr.seg + rr.t) / (ridge.length - 1)
-      // REAL mountains (user: "not high enough, just mounds"): 105m spines
-      // with jagged peak modulation + a narrow sharp crest on the wide base
-      const peaks = 0.72 + 0.28 * Math.sin(frac * Math.PI * 5 + 1.7)
-      const passes = 0.78 + 0.22 * Math.sin(frac * Math.PI * 2 + 0.9)
-      h += 78 * passes * Math.exp(-(rr.d * rr.d) / (2 * 66 * 66)) // massif base
-      h += 42 * peaks * passes * Math.exp(-(rr.d * rr.d) / (2 * 26 * 26)) // sharp crest
+      // ARK-reference mountains v3: taller, exponential-ridge crest (sharp
+      // spine, not gaussian mound), multi-frequency peak line, and jagged
+      // high-altitude noise. Peaks reach ~190m with base terrain.
+      const peaks = 0.62 + 0.28 * Math.sin(frac * Math.PI * 7 + 1.7) + 0.1 * Math.sin(frac * Math.PI * 17 - 0.4)
+      const passes = 0.76 + 0.24 * Math.sin(frac * Math.PI * 2 + 0.9)
+      // warp the lateral distance so flank contours wander
+      const dWarp = rr.d + 18 * fbm(x * 0.01 + 31, z * 0.01 - 13, 3)
+      h += 88 * passes * Math.exp(-(dWarp * dWarp) / (2 * 78 * 78)) // broad massif
+      h += 74 * peaks * passes * Math.exp(-Math.abs(dWarp) / 17) // exponential ridge: sharp crest
+      // jagged rock noise that only bites at altitude (scree fields + spurs)
+      const alt = smoothstep(55, 110, h)
+      h += 13 * alt * fbm(x * 0.045 + 5, z * 0.045 - 9, 4)
     }
 
     // the volcano, resculpted (MAP OVERHAUL: "looks weirdly bad" — too smooth):
@@ -344,11 +350,9 @@ console.time('sculpt')
     return (Math.floor(t) + shaped) * step
   }
   // mesas: flat-topped buttes in the dry east and west interior
-  // relocated inland — the coastal ridges now own the old mesa ground
-  const MESAS = [
-    { x: 250, z: -60, r: 65, top: 42 },
-    { x: -350, z: 190, r: 55, top: 38 },
-  ]
+  // mesas removed: even relocated they read as "circles pulled up" from the
+  // air (player review). Rock formations return later as placed meshes.
+  const MESAS = []
   for (let iz = 0; iz < SIDE; iz++) {
     for (let ix = 0; ix < SIDE; ix++) {
       const x = worldX(ix), z = worldZ(iz)
