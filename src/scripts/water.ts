@@ -42,6 +42,11 @@ export class WaterSystem {
     const oceanGeo = new THREE.PlaneGeometry(HALF_SIZE * 6, HALF_SIZE * 6, 96, 96).rotateX(-Math.PI / 2)
     const ocean = new THREE.Mesh(oceanGeo, this.makeWaterMat(0x2e6ba8, 0.9, new THREE.Vector2(0.4, 0.2), 0.28))
     ocean.position.y = SEA_LEVEL
+    // Transparent sheets with depthWrite:false sort by mesh center — arbitrary
+    // for island-sized overlapping sheets, so a FAR sheet could draw over a
+    // NEAR one (user-hit: ocean striping over the swamp, river over swamp
+    // water). Deterministic renderOrder by surface elevation: lowest first.
+    ocean.renderOrder = 1
     this.group.add(ocean)
 
     // --- swamp: sheet built from the BIOME CELLS themselves (a disc floated
@@ -61,7 +66,11 @@ export class WaterSystem {
           let wet = false
           for (const [ox, oz] of [[0, 0], [CELL, 0], [0, CELL], [CELL, CELL], [CELL / 2, CELL / 2]]) {
             const hh = heightAt(x0 + ox, z0 + oz)
-            if (biomeAt(x0 + ox, z0 + oz) === BIOME.SWAMP && hh < sw.level + 0.3 && hh > 0.6) {
+            // include flooded coastal cells (ground down to -0.5) — the 0.6m
+            // clip left a patchwork of holes over the flooded strip where the
+            // ocean showed through as checkerboard (aerial review); only true
+            // sea floor is excluded
+            if (biomeAt(x0 + ox, z0 + oz) === BIOME.SWAMP && hh < sw.level + 0.3 && hh > -0.5) {
               wet = true
               break
             }
@@ -83,7 +92,12 @@ export class WaterSystem {
       geo.setAttribute('uv', new THREE.Float32BufferAttribute(uvs.map((v) => v * 0.02), 2))
       geo.setIndex(indices)
       geo.computeVertexNormals()
-      const mesh = new THREE.Mesh(geo, this.makeWaterMat(0x39493a, 0.9, new THREE.Vector2(0.03, 0.02), 0))
+      // near-opaque: the ocean sheet stacks beneath the coastal swamp strip
+      // and its animated swell showed through as zebra banding
+      // rough + slow: stagnant marsh water shouldn't mirror the sun (the
+      // grazing-angle glint striped the whole sheet white)
+      const mesh = new THREE.Mesh(geo, this.makeWaterMat(0x39493a, 0.97, new THREE.Vector2(0.015, 0.01), 0, false, 0.65))
+      mesh.renderOrder = 2 // above the ocean
       this.group.add(mesh)
     }
 
@@ -96,6 +110,7 @@ export class WaterSystem {
       const geo = new THREE.CircleGeometry(lake.r * 1.35, 48).rotateX(-Math.PI / 2)
       const mesh = new THREE.Mesh(geo, this.makeWaterMat(0x3878b0, 0.88, new THREE.Vector2(0.12, 0.06), 0))
       mesh.position.set(lake.x, lake.level, lake.z)
+      mesh.renderOrder = 3 + lake.level * 0.01 // higher lakes draw later
       this.group.add(mesh)
     }
 
@@ -177,6 +192,7 @@ export class WaterSystem {
       }
       geo.setAttribute('color', new THREE.BufferAttribute(colors, 3))
       const mesh = new THREE.Mesh(geo, this.makeWaterMat(0x4a90c0, 0.85, new THREE.Vector2(0, -2.6), 0, true))
+      mesh.renderOrder = 4 // rivers sit above every standing sheet they cross
       this.group.add(mesh)
 
       this.rivers.push({ samples })
@@ -190,13 +206,14 @@ export class WaterSystem {
     flow: THREE.Vector2,
     swell: number,
     foam = false,
+    roughness = 0.18,
   ): THREE.MeshStandardMaterial {
     const mat = new THREE.MeshStandardMaterial({
       color,
       vertexColors: foam, // rivers carry depth tint in vertex colors
       transparent: true,
       opacity,
-      roughness: 0.18,
+      roughness,
       metalness: 0,
       depthWrite: false,
       // double-sided: visible from underwater, and immune to ribbon-winding

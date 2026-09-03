@@ -288,3 +288,9 @@ Process change (user): free-camera aerial QA tool (`tools/aerial.mjs` + `setFree
 - [x] Aerial + ground verification: serrated multi-peak skyline, river valley threading volcano↔range; 60fps
 - [x] Fixed a real flake the reruns exposed: takeoff raced auto-land (flight cancelled if a fixed step ran between setFlying and the first Space) — auto-land now requires actual descent. Creative 12/12 twice consecutively
 - Gates: 9/9, 29/29, 12/12, 11/11, 12/12
+
+### M9d — the render-order bug (single pick, repro → fix → verify)
+- [x] Reproduced at the swamp coast: ocean swell striping OVER the nearer swamp sheet, river band drawn over occluding water — transparent sheets with depthWrite:false sort by mesh center, arbitrary for island-sized overlapping sheets
+- [x] Fix: deterministic renderOrder by surface elevation (ocean 1 → swamp 2 → lakes 3+level → rivers 4); far-over-near is now impossible among water sheets
+- [x] Two follow-on iterations at the same vantage: swamp sea-clip loosened to ground > -0.5 (the 0.6m clip left checkerboard holes over the flooded strip); marsh roughness 0.65 + slower drift (grazing-angle sun glint striped the sheet white — stagnant water shouldn't mirror)
+- [x] Ground-level swamp verification: calm matte marsh, dead trees, river threading past — approved. Gates 73/73
