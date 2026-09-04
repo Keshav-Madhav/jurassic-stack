@@ -171,11 +171,17 @@ export function buildElderTree(seed: number, far = false): THREE.Group {
  * or two coarse masses matching the kind's silhouette and leaf colour. Pines
  * get a dark cone. ~30-50 tris.
  */
-export function buildDotTree(kind: 'canopy' | 'elder' | 'pine' | 'palm' | 'bare', seed: number): THREE.Group {
+export function buildDotTree(kind: 'canopy' | 'elder' | 'pine' | 'palm' | 'bare' | 'redwood', seed: number): THREE.Group {
   massDetail = 0
   const rand = mulberry32(seed)
   const parts: THREE.BufferGeometry[] = []
-  if (kind === 'palm') {
+  if (kind === 'redwood') {
+    // a tall red column with a narrow dark crown, readable from kilometres off
+    const t = limb(new THREE.Vector3(0, -0.02, 0), new THREE.Vector3(0.01, 0.75, 0), 0.05, 0.02, 5, rand)
+    paint(t, REDWOOD_BARK, 0.08, rand); parts.push(t)
+    parts.push(leafMass(0.008, 0.7, 0, 0.12, 0.22, 0.12, _c.copy(LEAF).lerp(LEAF_DEEP, 0.4), rand))
+    parts.push(leafMass(0.012, 0.92, 0.004, 0.07, 0.1, 0.07, LEAF, rand))
+  } else if (kind === 'palm') {
     // a leaning trunk and one flat frond mass, palm-green
     parts.push(limb(new THREE.Vector3(0, -0.02, 0), new THREE.Vector3(0.08, 0.78, 0.04), 0.045, 0.03, 5, rand))
     parts.push(leafMass(0.08, 0.84, 0.04, 0.42, 0.14, 0.42, new THREE.Color(0x3f7a2c), rand))
@@ -246,4 +252,51 @@ export function buildMushroom(seed: number): THREE.Group {
     parts.push(leafMass(x, hgt - r * 0.15, z, r, r * 0.55, r, caps[i % caps.length], rand))
   }
   return finish(parts, `Mushroom_${seed}`)
+}
+
+const REDWOOD_BARK = new THREE.Color(0x5a2e1e)
+const REDWOOD_BARK_LIT = new THREE.Color(0x8a4a30)
+/**
+ * Redwood, unit height (place at 55-80 m): a fluted, buttressed red trunk
+ * carrying more than half the height bare, then a narrow crown of small
+ * dark masses in tiers — the emergent the Holm is seen by from anywhere on
+ * the south half. Grows nowhere else.
+ */
+export function buildRedwood(seed: number, far = false): THREE.Group {
+  massDetail = far ? 0 : 1
+  const rand = mulberry32(seed)
+  const parts: THREE.BufferGeometry[] = []
+  const R = 0.036
+  const bark = (t: number) => _c.copy(REDWOOD_BARK).lerp(REDWOOD_BARK_LIT, t)
+  // buttress flare, then the trunk in three tapering runs (9 sides: the
+  // fluting reads at the base where you stand)
+  const b0 = limb(new THREE.Vector3(0, -0.02, 0), new THREE.Vector3(0, 0.05, 0), R * 2.1, R * 1.25, 9, rand)
+  paint(b0, bark(0.15), 0.1, rand); parts.push(b0)
+  const b1 = limb(new THREE.Vector3(0, 0.045, 0), new THREE.Vector3(0.005, 0.45, 0), R * 1.25, R * 0.8, 9, rand)
+  paint(b1, bark(0.35), 0.08, rand); parts.push(b1)
+  const b2 = limb(new THREE.Vector3(0.005, 0.44, 0), new THREE.Vector3(0.01, 0.78, 0.004), R * 0.8, R * 0.45, 7, rand)
+  paint(b2, bark(0.45), 0.08, rand); parts.push(b2)
+  const b3 = limb(new THREE.Vector3(0.01, 0.77, 0.004), new THREE.Vector3(0.012, 0.99, 0.006), R * 0.45, R * 0.12, 6, rand)
+  paint(b3, bark(0.5), 0.08, rand); parts.push(b3)
+  // crown tiers: narrow — a redwood is a column, not a dome
+  const tiers = [
+    { y: 0.56, n: 4, rad: 0.11, r: 0.075, tone: 0.6 },
+    { y: 0.68, n: 4, rad: 0.1, r: 0.08, tone: 0.45 },
+    { y: 0.8, n: 3, rad: 0.08, r: 0.07, tone: 0.3 },
+    { y: 0.9, n: 3, rad: 0.05, r: 0.06, tone: 0.15 },
+  ]
+  for (const t of tiers) {
+    const a0 = rand() * Math.PI * 2
+    for (let i = 0; i < t.n; i++) {
+      const ang = a0 + (i / t.n) * Math.PI * 2 + (rand() - 0.5) * 0.5
+      const rad = t.rad * (0.8 + rand() * 0.4)
+      const c = new THREE.Vector3(Math.cos(ang) * rad, t.y + (rand() - 0.5) * 0.03, Math.sin(ang) * rad)
+      const lb = limb(new THREE.Vector3(0.008, t.y - 0.02, 0.003), c, R * 0.25, R * 0.08, 4, rand)
+      paint(lb, bark(0.4), 0.08, rand); parts.push(lb)
+      const r = t.r * (0.85 + rand() * 0.3)
+      parts.push(leafMass(c.x, c.y + r * 0.3, c.z, r, r * 0.8, r, _c.copy(LEAF).lerp(LEAF_DEEP, t.tone * 0.9).lerp(LEAF_SUN, (1 - t.tone) * 0.25), rand))
+    }
+  }
+  parts.push(leafMass(0.012, 0.985, 0.006, 0.045, 0.06, 0.045, _c.copy(LEAF).lerp(LEAF_SUN, 0.4), rand)) // the spire
+  return finish(parts, `Redwood_${seed}${far ? '_far' : ''}`)
 }

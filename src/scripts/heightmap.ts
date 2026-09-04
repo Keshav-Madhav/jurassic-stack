@@ -187,7 +187,7 @@ export function forestMaskAt(x: number, z: number): number {
 }
 
 /** Which wood this is: 0 broadleaf · 1 pine · 2 mixed (nearest cell). */
-export const FOREST_KIND = { BROADLEAF: 0, PINE: 1, MIXED: 2 } as const
+export const FOREST_KIND = { BROADLEAF: 0, PINE: 1, MIXED: 2, REDWOOD: 3 } as const
 export function forestKindAt(x: number, z: number): number {
   if (!forest) return 0
   const ix = Math.round((x + HALF_SIZE) / res)

@@ -13,14 +13,14 @@ import RAPIER from '@dimforge/rapier3d-compat'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import { heightAt, lodFloorAt, normalAt, forestMaskAt, forestKindAt, biomeAt, shoreDist, BIOME, FOREST_KIND, SEA_LEVEL, HALF_SIZE, SPAWN, VOLCANO, worldMeta } from './heightmap'
-import { buildCanopyTree, buildElderTree, buildDotTree, buildFarPine, buildMushroom } from './trees'
+import { buildCanopyTree, buildElderTree, buildDotTree, buildFarPine, buildMushroom, buildRedwood } from './trees'
 import { CHUNK_SIZE, CHUNKS_PER_SIDE } from './terrain'
 import { addObstacle } from './obstacles'
 import type { Physics } from './physics'
 import type { ItemId } from './items'
 
 export type NodeKind =
-  | 'tree' | 'elder' | 'pine' | 'deadtree' | 'palm' | 'willow'
+  | 'tree' | 'elder' | 'redwood' | 'pine' | 'deadtree' | 'palm' | 'willow'
   | 'rock' | 'log' | 'bush' | 'fern' | 'flower' | 'grass' | 'mushroom'
 
 export interface ScatterNode {
@@ -41,6 +41,7 @@ export interface ScatterNode {
 const NODE_DEFS: Record<NodeKind, { hp: number; yields: Partial<Record<ItemId, [number, number]>> }> = {
   tree: { hp: 3, yields: { wood: [2, 4], fiber: [1, 2] } },
   elder: { hp: 6, yields: { wood: [5, 9], fiber: [2, 4] } },
+  redwood: { hp: 8, yields: { wood: [7, 12], fiber: [1, 3] } },
   pine: { hp: 3, yields: { wood: [2, 4], fiber: [1, 2] } },
   deadtree: { hp: 2, yields: { wood: [2, 3] } },
   palm: { hp: 3, yields: { wood: [2, 3], fiber: [1, 3] } },
@@ -55,10 +56,10 @@ const NODE_DEFS: Record<NodeKind, { hp: number; yields: Partial<Record<ItemId, [
 }
 
 /** Kinds whose trunks get physics cylinders (rocks: squat cylinders too). */
-const TRUNK_KINDS = new Set<NodeKind>(['tree', 'elder', 'pine', 'palm', 'deadtree', 'willow', 'rock'])
+const TRUNK_KINDS = new Set<NodeKind>(['tree', 'elder', 'redwood', 'pine', 'palm', 'deadtree', 'willow', 'rock'])
 /** Single-trunk canopy kinds: wide crowns in the air, so slope under the
  *  footprint doesn't matter (the flatness guard is for merged groves). */
-const CANOPY_KINDS = new Set<NodeKind>(['tree', 'elder'])
+const CANOPY_KINDS = new Set<NodeKind>(['tree', 'elder', 'redwood'])
 
 interface ModelRef {
   /** GLB in models/props/ … */
@@ -66,7 +67,7 @@ interface ModelRef {
   /** optional named sub-node to extract (variant packs) */
   node?: string
   /** … or a tree built in code (trees.ts), deterministic per seed */
-  gen?: 'canopy' | 'elder' | 'mushroom'
+  gen?: 'canopy' | 'elder' | 'mushroom' | 'redwood'
   seed?: number
 }
 
@@ -75,6 +76,7 @@ const KIND_MODELS: Record<NodeKind, ModelRef[]> = {
   // read as neon lollipops against them and are out of the mix)
   tree: [{ gen: 'canopy', seed: 11 }, { gen: 'canopy', seed: 12 }, { gen: 'canopy', seed: 13 }, { gen: 'canopy', seed: 14 }],
   elder: [{ gen: 'elder', seed: 21 }, { gen: 'elder', seed: 22 }],
+  redwood: [{ gen: 'redwood', seed: 41 }, { gen: 'redwood', seed: 42 }, { gen: 'redwood', seed: 43 }],
   pine: [{ file: 'Pine1' }],
   deadtree: [
     { file: 'DeadTree', node: 'DeadTree_10' },
@@ -125,6 +127,11 @@ const SPECS: Record<NodeKind, PlaceSpec> = {
     cell: 36, chance: 0.62, sMin: 36, sMax: 52, cap: 2400, seed: 121,
     habitat: (h, _ny, f, _rd, k) => f > 0.5 && h > 4 && h < 100 && k === FOREST_KIND.BROADLEAF,
   },
+  // REDWOODS: the Holm only (forest kind 3) — 55-80 m columns, tight-packed
+  redwood: {
+    cell: 15, chance: 0.75, sMin: 55, sMax: 80, cap: 3000, seed: 141, woodland: true,
+    habitat: (h, _ny, f, _rd, k) => f > -0.6 && h > 4 && k === FOREST_KIND.REDWOOD,
+  },
   pine: {
     cell: 7, chance: 0.78, sMin: 10, sMax: 20, cap: 64000, seed: 202, woodland: true,
     habitat: (h, _ny, f, _rd, k) => f > -0.45 && h > 6 && h < 210 && (k === FOREST_KIND.PINE || k === FOREST_KIND.MIXED),
@@ -155,14 +162,14 @@ const SUPER = 256
 /** Ground-cover kinds: no shadow casting, distance-culled. */
 const GROUND_COVER = new Set<NodeKind>(['grass', 'fern', 'flower', 'mushroom', 'log', 'bush'])
 /** Cover cells beyond this range from the player are hidden entirely. */
-const COVER_DRAW_DIST = 340
+const COVER_DRAW_DIST = 290
 /** Tree LOD bands per supercell (viewer distance to cell centre): built
  *  trees swap to 20-tri leaf masses beyond FAR, and every tree kind becomes
  *  a ~40-tri trunk-and-blob beyond DOT (a few pixels tall in the haze). */
 const TREE_LOD_FAR = 180
 const TREE_LOD_DOT = 600
-const DOT_KINDS: Partial<Record<NodeKind, 'canopy' | 'elder' | 'pine' | 'palm' | 'bare'>> = {
-  tree: 'canopy', elder: 'elder', pine: 'pine', palm: 'palm', deadtree: 'bare', willow: 'canopy',
+const DOT_KINDS: Partial<Record<NodeKind, 'canopy' | 'elder' | 'pine' | 'palm' | 'bare' | 'redwood'>> = {
+  tree: 'canopy', elder: 'elder', redwood: 'redwood', pine: 'pine', palm: 'palm', deadtree: 'bare', willow: 'canopy',
 }
 /** Small solid props (boulders, logs) vanish beyond this — a 2 m rock is a
  *  pixel at 600 m, but 2,000 of them at full geometry are not free. */
@@ -389,7 +396,7 @@ export class Scatter {
         built.set(key, buildMushroom(ref.seed ?? 1))
         continue
       }
-      const make = ref.gen === 'elder' ? buildElderTree : buildCanopyTree
+      const make = ref.gen === 'elder' ? buildElderTree : ref.gen === 'redwood' ? buildRedwood : buildCanopyTree
       built.set(key, make(ref.seed ?? 1))
       built.set(key + ':far', make(ref.seed ?? 1, true))
     }
@@ -482,7 +489,7 @@ export class Scatter {
     }
 
     // the dots: per kind, every node of every variant, grouped by cell
-    for (const [kind, dotKind] of Object.entries(DOT_KINDS) as [NodeKind, 'canopy' | 'elder' | 'pine' | 'palm' | 'bare'][]) {
+    for (const [kind, dotKind] of Object.entries(DOT_KINDS) as [NodeKind, 'canopy' | 'elder' | 'pine' | 'palm' | 'bare' | 'redwood'][]) {
       const byCell = new Map<string, number[]>()
       for (const [key, ids] of this.order) {
         if (parseGroupKey(key).kind !== kind) continue
@@ -603,12 +610,12 @@ export class Scatter {
         // tree/fern marsh; deserts are near-barren rock+deadwood; plains are
         // open bush-and-grass seas with the odd lone tree
         if (biome === BIOME.SWAMP) {
-          if (kind === 'tree' || kind === 'elder' || kind === 'pine' || kind === 'palm' || kind === 'flower') continue
+          if (kind === 'tree' || kind === 'elder' || kind === 'redwood' || kind === 'pine' || kind === 'palm' || kind === 'flower') continue
           if (kind === 'willow' && rand() > 0.9) { /* willows thrive: bypass river rule below */ }
         } else if (biome === BIOME.DESERT) {
           if (!(kind === 'rock' || kind === 'deadtree' || (kind === 'grass' && rand() < 0.15) || (kind === 'bush' && rand() < 0.08))) continue
         } else if (biome === BIOME.PLAINS) {
-          if (kind === 'tree' || kind === 'pine' || kind === 'elder') { if (rand() > 0.06) continue }
+          if (kind === 'tree' || kind === 'pine' || kind === 'elder' || kind === 'redwood') { if (rand() > 0.06) continue }
           if (kind === 'fern' || kind === 'mushroom') continue
         }
         // swamp fauna bypass their usual habitat rules (willows off-river,
@@ -642,7 +649,7 @@ export class Scatter {
         const key = groupKeyOf(kind, variant, x, z)
         if (!this.order.has(key)) this.order.set(key, [])
         this.order.get(key)!.push(id)
-        if (TRUNK_KINDS.has(kind)) addObstacle(x, z, kind === 'rock' ? scale * 0.42 : kind === 'elder' ? scale * 0.05 : 0.4)
+        if (TRUNK_KINDS.has(kind)) addObstacle(x, z, kind === 'rock' ? scale * 0.42 : kind === 'elder' ? scale * 0.05 : kind === 'redwood' ? scale * 0.04 : 0.4)
         count++
       }
     }
@@ -758,7 +765,7 @@ export class Scatter {
       if (!this.activeChunks.has(this.chunkKeyOf(n)) || this.treeColliders.has(n.id)) continue
       const rock = n.kind === 'rock'
       const half = rock ? n.scale * 0.32 : n.scale * 0.5
-      const radius = rock ? n.scale * 0.42 : n.kind === 'elder' ? n.scale * 0.05 : Math.max(0.3, n.scale * 0.045)
+      const radius = rock ? n.scale * 0.42 : n.kind === 'elder' ? n.scale * 0.05 : n.kind === 'redwood' ? n.scale * 0.04 : Math.max(0.3, n.scale * 0.045)
       const col = physics.world.createCollider(
         RAPIER.ColliderDesc.cylinder(half, radius).setTranslation(n.x, n.y + half, n.z),
       )

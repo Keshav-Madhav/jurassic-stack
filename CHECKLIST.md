@@ -335,7 +335,7 @@ Story in PLAN.md → "The island v2 — the Lasso". One round each, gates + scre
 - [x] **M10a — the 4 km canvas + the Lasso.** DONE (below)
 - [x] **M10b — two lakes + the terrain body.** DONE (below)
 - [x] **M10c — biome edges by hand.** DONE (below)
-- [~] **M10d — forests retraced + the Holm redwoods.** Forests retraced island-wide in M10b (below); the redwood species for the Holm still to come
+- [x] **M10d — forests retraced + the Holm redwoods.** DONE (forests in M10b; redwoods below)
 - [ ] **M10e — ruins hand-placed; caldera gate visible** at the volcano's south foot (mandate item 6)
 - [ ] **M10f — swamp flora (mangrove-type, dried bushes) + desert flora** (mandate item 4)
 - [ ] **M10g — ground clutter** (sticks, pebbles, stones, ground foliage) (mandate item 5)
@@ -364,3 +364,8 @@ Story in PLAN.md → "The island v2 — the Lasso". One round each, gates + scre
 - [x] `BIOMES` in hand-geometry: the Writhing Flats (swamp, wraps the outflow's upper course in the Reservoir's lee, lobes to the east foothills; floor 4.8 with pools under a 4.2 water table), the Dune Country (desert in the West Range's rain shadow down to Dune Bay, floor 9 with dunes), the South Plain (floor 14, a grassy shelf on the way down to the beach). Each a traced polygon with a floor the ground eases to over `edge` metres; `warpedDist` and the three discs deleted; `biomes.bin` and the swamp sheet read the polygons
 - [x] Biome floors never cut into a range (h > 45 m untouched) and the swamp never climbs the Holm
 - [x] Spawn meadow widened (wood line 1480 → 1430) and the canopy tree trimmed to 8 leaf masses (~720 tris); dot LOD from 600 m; the m3 fps gate now samples steady state (12 s after ready, best of 3) — the first ten seconds are 200 rigs cloning and 100K instance buffers uploading. 73/73
+
+### M10d — THE HOLM REDWOODS
+- [x] `buildRedwood` (trees.ts): 55–80 m fluted, buttressed red columns carrying more than half their height bare, then a narrow tiered crown; far twin + a tall dot LOD readable from kilometres off. Forest kind `redwood` (3) — the Holm wood polygon is the only one that carries it, so they grow nowhere else; ~2,300 of them
+- [x] Eye level in the Holm reads as ARK's Redwood Forest: red columns under a high canopy, the temple arch between them
+- [x] Perf: Bush1 360 → 190 and Fern 288 → 142 tris (cover was the biggest eye-level cost — 27K bushes), cover draw distance 340 → 290 m; spawn steady-state 60 fps again, gates 73/73

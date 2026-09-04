@@ -102,6 +102,8 @@ originals untouched in `_raw/nature/`, turntable-verified:
 | Palm | 3,134 | 940 | `--ratio 0.3 --error 0.02` |
 | Willow | 2,056 | 2,056 (simplifier no-op; left as is) | — |
 | Grass1 | 155 | 62 | `--ratio 0.4 --error 0.02` (M10a: 117K tufts on the 4 km island) |
+| Bush1 | 360 | 190 | `--ratio 0.4 --error 0.05` (M10d: 27K bushes, the biggest eye-level cost) |
+| Fern | 288 | 142 | `--ratio 0.45 --error 0.01` |
 | Mushroom | 6,044 | retired | it was a mushroom *creature* (eyes, arms); replaced by a built 60-tri cluster (`trees.ts`) |
 
 Built trees (`src/scripts/trees.ts`, not assets): canopy ≈ 850 tris full / ≈ 250 far LOD;

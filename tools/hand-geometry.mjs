@@ -270,8 +270,8 @@ export const FORESTS = [
     ],
   },
   {
-    // THE HOLM WOOD — inside the ring (redwoods from M10d)
-    name: 'holm', kind: 'broadleaf', density: 1, edge: 40,
+    // THE HOLM WOOD — the redwoods: 55-80 m columns that grow nowhere else
+    name: 'holm', kind: 'redwood', density: 1, edge: 40,
     shore: [
       [-420, 260], [-330, 100], [-200, 30], [-40, 20], [130, 30], [250, 110], [320, 230],
       [330, 380], [300, 520], [220, 640], [80, 710], [-100, 720], [-260, 650], [-380, 540], [-440, 400],

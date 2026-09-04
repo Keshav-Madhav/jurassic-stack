@@ -2121,7 +2121,7 @@
     },
     {
       "name": "holm",
-      "kind": "broadleaf",
+      "kind": "redwood",
       "density": 1,
       "edge": 40,
       "shore": [
@@ -3120,5 +3120,5 @@
       ]
     ]
   ],
-  "bakedAt": "2026-09-04T19:47:02.079Z"
+  "bakedAt": "2026-09-04T20:01:20.883Z"
 }
