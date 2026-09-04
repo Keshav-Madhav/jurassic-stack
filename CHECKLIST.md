@@ -301,3 +301,14 @@ Process change (user): free-camera aerial QA tool (`tools/aerial.mjs` + `setFree
 - [x] Depth = distance-from-drawn-shore toward the deep point; banks ease down over a 14m band; carve-only (ground never raised); levels chosen against surrounding terrain and validator-asserted at every shore vertex
 - [x] Runtime rebuilt on polygons: lake sheet = fan over the traced shore (+6m tuck), waterLevelAt/scatter/terrain colors all use shared shoreDist point-in-polygon
 - [x] Aerial + ground verification: both lakes sit IN the land, river flows through the west lake, oasis shoreline at ground level. Gates 73/73
+
+### THE HAND-MADE MANDATE (user, 2026-09-04 — "do everything manually, no shortcuts; I wanted this from the start")
+Standing rule: world geometry is hand-traced control geometry (polygons/paths, every vertex deliberate). Formula shortcuts (center+radius+noise, sine meanders) get replaced on touch.
+TODO (one pick per round):
+1. **RIVERS (this round)**: hand-traced paths; natural sources (spring tarns — no abrupt mid-slope starts); ribbon must not cut through lakes (screenshots 11-12)
+2. Swamp boundary + desert edge → hand-traced polygons
+3. Forest placement → hand-drawn forest regions; MUCH denser; rich wide-canopy tree models (crowns dominate, fewer visible trunks; ref screenshot 13) + giant trees mixed in
+4. Swamp flora: mangrove-type trees, dried bushes — swamp is empty; desert flora: dried bushes, cacti-like — desert is empty
+5. Ground clutter everywhere: sticks, pebbles, small rocks, scattered stones, ground foliage — world too clean/empty
+6. Volcano gate not visible — caldera-gate ruin/door placement needs relocation/visibility pass (arc must read on approach)
+7. Rocks: boulders/outcrops as placed meshes (still missing after mesa deletion)
