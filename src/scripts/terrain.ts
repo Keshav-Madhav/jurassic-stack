@@ -39,10 +39,6 @@ export class Terrain {
   private chunks: Chunk[] = []
   private supers: { sx: number; sz: number; mesh: THREE.Mesh; geo: THREE.BufferGeometry | null; active: boolean }[] = []
   private material: THREE.MeshStandardMaterial
-  /** far super-chunks: vertex colour only — the ground textures tile at
-   *  metres and are sub-pixel past a kilometre, so their four taps per pixel
-   *  over half the screen bought nothing */
-  private farMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0 })
 
   constructor() {
     // Splat-textured ground: four CC0 tiling albedos (grass/dirt/rock/sand)
@@ -129,7 +125,11 @@ export class Terrain {
     }
     for (let sz = 0; sz < CHUNKS_PER_SIDE / SUPER; sz++) {
       for (let sx = 0; sx < CHUNKS_PER_SIDE / SUPER; sx++) {
-        const mesh = new THREE.Mesh(undefined, this.farMaterial)
+        // same splat material as the near chunks: a vertex-colour-only far
+        // material read as a yellow-grey patchwork with a hard seam where the
+        // near chunks began (live review) — the textures are what blend the
+        // palette's low-frequency variation into ground
+        const mesh = new THREE.Mesh(undefined, this.material)
         mesh.frustumCulled = true
         mesh.receiveShadow = false // beyond the shadow camera anyway
         mesh.visible = false
