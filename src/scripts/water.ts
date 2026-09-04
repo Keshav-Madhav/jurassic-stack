@@ -183,6 +183,9 @@ export class WaterSystem {
       // the current still flows across via riverFlowAt, only the mesh yields
       const inStanding = (i: number): boolean => {
         const smp = samples[i]
+        // past the coast the river IS the sea — the hand paths run out into
+        // the bay so the mouth carves, but the ribbon must end at the shore
+        if (heightAt(smp.x, smp.z) < SEA_LEVEL - 1.2) return true
         for (const lake of meta.lakes) {
           if (shoreDist(smp.x, smp.z, lake.shore) < -4) return true
         }
