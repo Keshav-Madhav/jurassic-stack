@@ -58,13 +58,19 @@ const LAYOUTS: Record<string, PiecePlan[]> = {
     { model: 'Column', dx: -7, dz: 5, h: 4.2 },
     { model: 'Column', dx: 7, dz: 5, h: 3, toppled: true },
   ],
+  // THE CALDERA GATE — monumental: a 15 m arch (the door the keystones
+  // unseal, M8) at the head of a 70 m causeway of columns, two guardian
+  // statues facing the approach — readable from the far end of the corridor
   'caldera-gate': [
-    { model: 'Arch', dx: 0, dz: 0, h: 9, rotY: 0 }, // the door the keystones unseal (M8)
-    { model: 'Column', dx: -7, dz: 2, h: 5.5 },
-    { model: 'Column', dx: 7, dz: 2, h: 5.5 },
-    { model: 'Column', dx: -10, dz: 7, h: 4, toppled: true },
-    { model: 'Column', dx: 10, dz: 7, h: 5 },
-    { model: 'Statue', dx: 0, dz: 5, h: 4, rotY: Math.PI },
+    { model: 'Arch', dx: 0, dz: 0, h: 15, rotY: 0 },
+    { model: 'Column', dx: -11, dz: 3, h: 9 },
+    { model: 'Column', dx: 11, dz: 3, h: 9 },
+    { model: 'Statue', dx: -7, dz: 12, h: 7, rotY: Math.PI },
+    { model: 'Statue', dx: 7, dz: 12, h: 7, rotY: Math.PI },
+    { model: 'Column', dx: -9, dz: 24, h: 7 }, { model: 'Column', dx: 9, dz: 24, h: 7 },
+    { model: 'Column', dx: -9, dz: 38, h: 7 }, { model: 'Column', dx: 9, dz: 38, h: 5, toppled: true },
+    { model: 'Column', dx: -9, dz: 52, h: 6.5, toppled: true }, { model: 'Column', dx: 9, dz: 52, h: 7 },
+    { model: 'Column', dx: -9, dz: 66, h: 7 }, { model: 'Column', dx: 9, dz: 66, h: 7 },
   ],
 }
 

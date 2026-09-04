@@ -103,22 +103,23 @@ async function boot(): Promise<void> {
   // the caldera door: a stone slab sealing the gate arch until all five
   // keystones are set (the arc's lock)
   const gateSite = worldMeta!.ruinSites.find((r) => r.tag === 'caldera-gate')!
+  // (sized to the 15 m arch: 12 × 15.5 m slab)
   const doorMesh = new THREE.Mesh(
-    new THREE.BoxGeometry(7.5, 9.5, 1.4),
+    new THREE.BoxGeometry(12, 15.5, 1.6),
     new THREE.MeshStandardMaterial({ color: 0x3c3a38, roughness: 0.95 }),
   )
   const doorGroundY = heightAt(gateSite.x, gateSite.z)
-  doorMesh.position.set(gateSite.x, doorGroundY + 4.4, gateSite.z)
+  doorMesh.position.set(gateSite.x, doorGroundY + 7.4, gateSite.z)
   doorMesh.castShadow = true
   doorMesh.receiveShadow = true
   scene.add(doorMesh)
   let doorOpen = save?.doorOpen ?? false
   let doorAnim = 0
   const doorCollider = physics.world.createCollider(
-    RAPIER.ColliderDesc.cuboid(3.75, 4.75, 0.7).setTranslation(gateSite.x, doorGroundY + 4.4, gateSite.z),
+    RAPIER.ColliderDesc.cuboid(6, 7.75, 0.8).setTranslation(gateSite.x, doorGroundY + 7.4, gateSite.z),
   )
   if (doorOpen) {
-    doorMesh.position.y = doorGroundY - 5.5
+    doorMesh.position.y = doorGroundY - 8.5
     physics.world.removeCollider(doorCollider, false)
   }
 
@@ -865,7 +866,7 @@ async function boot(): Promise<void> {
     keystones.update(dt)
     if (doorAnim > 0) {
       doorAnim -= dt
-      doorMesh.position.y = Math.max(doorGroundY - 5.5, doorMesh.position.y - dt * 2.6)
+      doorMesh.position.y = Math.max(doorGroundY - 8.5, doorMesh.position.y - dt * 4)
     }
     // context prompt
     const fk = feetPos()

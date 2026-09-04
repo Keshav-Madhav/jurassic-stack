@@ -336,7 +336,7 @@ Story in PLAN.md → "The island v2 — the Lasso". One round each, gates + scre
 - [x] **M10b — two lakes + the terrain body.** DONE (below)
 - [x] **M10c — biome edges by hand.** DONE (below)
 - [x] **M10d — forests retraced + the Holm redwoods.** DONE (forests in M10b; redwoods below)
-- [ ] **M10e — ruins hand-placed; caldera gate visible** at the volcano's south foot (mandate item 6)
+- [x] **M10e — ruins hand-placed; caldera gate visible.** DONE (below)
 - [ ] **M10f — swamp flora (mangrove-type, dried bushes) + desert flora** (mandate item 4)
 - [ ] **M10g — ground clutter** (sticks, pebbles, stones, ground foliage) (mandate item 5)
 - [ ] **M10h — boulders / outcrops as placed meshes** (mandate item 7)
@@ -369,3 +369,7 @@ Story in PLAN.md → "The island v2 — the Lasso". One round each, gates + scre
 - [x] `buildRedwood` (trees.ts): 55–80 m fluted, buttressed red columns carrying more than half their height bare, then a narrow tiered crown; far twin + a tall dot LOD readable from kilometres off. Forest kind `redwood` (3) — the Holm wood polygon is the only one that carries it, so they grow nowhere else; ~2,300 of them
 - [x] Eye level in the Holm reads as ARK's Redwood Forest: red columns under a high canopy, the temple arch between them
 - [x] Perf: Bush1 360 → 190 and Fern 288 → 142 tris (cover was the biggest eye-level cost — 27K bushes), cover draw distance 340 → 290 m; spawn steady-state 60 fps again, gates 73/73
+
+### M10e — THE CALDERA GATE READS FROM THE APPROACH (mandate item 6)
+- [x] Ruins are hand-placed coordinates in hand-geometry (since M10a) — the gate stands at the volcano's south foot on the open approach corridor the pines leave clear
+- [x] The gate made monumental: a 15 m arch with its 12 × 15.5 m slab (door + collider resized, drop animation deeper/faster), two 7 m guardian statues facing the approach, a 70 m causeway of columns — visible as a monument from 270 m down the corridor with the volcano behind it (screenshot-verified), 73/73
