@@ -54,23 +54,28 @@ export interface WorldMeta {
   lakes: LakeDef[]
   ruinSites: RuinSite[]
   swamp?: SwampDef
+  forests?: { name: string; kind: 'broadleaf' | 'pine' | 'mixed'; density: number; edge?: number; shore: [number, number][] }[]
+  clearings?: [number, number][][]
 }
 
 let grid: Int16Array | null = null
 let biomes: Uint8Array | null = null
+let forest: Uint8Array | null = null
 let side = 0
 let res = 2
 let scale = 0.01
 export let worldMeta: WorldMeta | null = null
 
 export async function loadHeightmap(base = ''): Promise<void> {
-  const [metaRes, binRes, bioRes] = await Promise.all([
+  const [metaRes, binRes, bioRes, forRes] = await Promise.all([
     fetch(`${base}world/world-meta.json`),
     fetch(`${base}world/heightmap.bin`),
     fetch(`${base}world/biomes.bin`),
+    fetch(`${base}world/forest.bin`),
   ])
   if (!metaRes.ok || !binRes.ok) throw new Error('world data missing — run tools/bake-island.mjs')
   if (bioRes.ok) biomes = new Uint8Array(await bioRes.arrayBuffer())
+  if (forRes.ok) forest = new Uint8Array(await forRes.arrayBuffer())
   worldMeta = (await metaRes.json()) as WorldMeta
   side = worldMeta.side
   res = worldMeta.res
@@ -127,39 +132,6 @@ export function normalAt(x: number, z: number, out = new THREE.Vector3()): THREE
   return out.set(hl - hr, 2 * e, hd - hu).normalize()
 }
 
-// --- seeded forest-mask noise (shared by scatter placement + terrain color) ---
-const _perm = new Uint8Array(512)
-{
-  let a = 77 >>> 0
-  const rand = () => {
-    a |= 0; a = (a + 0x6d2b79f5) | 0
-    let t = Math.imul(a ^ (a >>> 15), 1 | a)
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-  const p = [...Array(256).keys()]
-  for (let i = 255; i > 0; i--) {
-    const j = Math.floor(rand() * (i + 1))
-    ;[p[i], p[j]] = [p[j], p[i]]
-  }
-  for (let i = 0; i < 512; i++) _perm[i] = p[i & 255]
-}
-const _fade = (t: number) => t * t * t * (t * (t * 6 - 15) + 10)
-const _grad = (h2: number, x: number, y: number) => (h2 & 1 ? -x : x) + (h2 & 2 ? -y : y)
-function _noise2(x: number, y: number): number {
-  const X = Math.floor(x) & 255
-  const Y = Math.floor(y) & 255
-  x -= Math.floor(x)
-  y -= Math.floor(y)
-  const u = _fade(x)
-  const v = _fade(y)
-  const aa = _perm[_perm[X] + Y]
-  const ab = _perm[_perm[X] + Y + 1]
-  const ba = _perm[_perm[X + 1] + Y]
-  const bb = _perm[_perm[X + 1] + Y + 1]
-  const l = (a2: number, b: number, t: number) => a2 + t * (b - a2)
-  return l(l(_grad(aa, x, y), _grad(ba, x - 1, y), u), l(_grad(ab, x, y - 1), _grad(bb, x - 1, y - 1), u), v)
-}
 /** Biome id at (x,z): 0 default · 1 swamp · 2 desert · 3 plains · 4 alpine. */
 export const BIOME = { DEFAULT: 0, SWAMP: 1, DESERT: 2, PLAINS: 3, ALPINE: 4 } as const
 export function biomeAt(x: number, z: number): number {
@@ -170,7 +142,32 @@ export function biomeAt(x: number, z: number): number {
   return biomes[iz * side + ix]
 }
 
-/** Forest mask in ~[-1, 1]: >0.1 woods, <0 open. */
+/** Forest fullness in [-1, 1] from the baked hand-traced woods (forest.bin):
+ *  -1 open country, 0 the feathered wood line, +1 deep forest. Bilinear. */
 export function forestMaskAt(x: number, z: number): number {
-  return _noise2(x * 0.0045, z * 0.0045) * 0.72 + _noise2(x * 0.013, z * 0.013) * 0.28
+  if (!forest) return -1
+  const fx = (x + HALF_SIZE) / res
+  const fz = (z + HALF_SIZE) / res
+  if (fx < 0 || fz < 0 || fx >= side - 1 || fz >= side - 1) return -1
+  const ix = Math.floor(fx)
+  const iz = Math.floor(fz)
+  const u = fx - ix
+  const v = fz - iz
+  const i0 = iz * side + ix
+  const d00 = forest[i0] >> 2
+  const d10 = forest[i0 + 1] >> 2
+  const d01 = forest[i0 + side] >> 2
+  const d11 = forest[i0 + side + 1] >> 2
+  const d = (d00 * (1 - u) * (1 - v) + d10 * u * (1 - v) + d01 * (1 - u) * v + d11 * u * v) / 63
+  return d * 2 - 1
+}
+
+/** Which wood this is: 0 broadleaf · 1 pine · 2 mixed (nearest cell). */
+export const FOREST_KIND = { BROADLEAF: 0, PINE: 1, MIXED: 2 } as const
+export function forestKindAt(x: number, z: number): number {
+  if (!forest) return 0
+  const ix = Math.round((x + HALF_SIZE) / res)
+  const iz = Math.round((z + HALF_SIZE) / res)
+  if (ix < 0 || iz < 0 || ix >= side || iz >= side) return 0
+  return forest[iz * side + ix] & 3
 }

@@ -33,6 +33,13 @@ Vercel. **No React, no framework.**
   (ragdolls, dino decisions, physics) is licensed. Bug triage: "funny or frustrating?" first.
 - Fixed-timestep simulation; pause the loop on `document.hidden`; clamp dt.
 - Verify before claiming done: `npm run build`, then the milestone's gate in CHECKLIST.md.
+- **The hand-made mandate (user, 2026-09-04):** world geometry is traced by hand, every vertex a
+  decision — rivers as paths, lakes/forests/glades as polygons in `tools/hand-geometry.mjs`. No
+  center+radius+noise, no sine meanders; any such shortcut still in the bake (swamp, desert, plains
+  edges) gets replaced on touch. Trace against the planning map (`node tools/map.mjs`, `--region`
+  and `--ppm` to zoom), re-bake (`node tools/bake-island.mjs` → `heightmap.bin`, `biomes.bin`,
+  `forest.bin`, `world-meta.json`, then `node tools/bake-navmesh.mjs`), and let the validators fail
+  loudly. Runtime reads the baked grids (`heightAt`, `biomeAt`, `forestMaskAt`), never the polygons.
 
 ## Dev commands
 

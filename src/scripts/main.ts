@@ -828,7 +828,7 @@ async function boot(): Promise<void> {
       }
     }
     scatter.ensureCollidersAround(focus.x, focus.z, physics)
-    scatter.updateVisibility(focus.x, focus.z)
+    scatter.updateVisibility(freeCam ? freeCam.x : focus.x, freeCam ? freeCam.z : focus.z)
     water.update(dt)
     daynight.setFocus(focus.x, focus.z)
     daynight.advance(dt)

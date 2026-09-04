@@ -240,9 +240,10 @@ function splatAt(x: number, z: number, h: number, ny: number, out: THREE.Vector4
       sand = ((3.6 - h) / 1.2) * 0.6
       grass = 1 - sand
     }
+    // forest floor turns to dirt from the feathered wood line inward
     const forest = forestMaskAt(x, z)
-    if (forest > 0.05) {
-      dirt = Math.min(1, ((forest - 0.05) / 0.25)) * 0.85
+    if (forest > -0.35) {
+      dirt = Math.min(1, ((forest + 0.35) / 0.6)) * 0.85
       grass *= 1 - dirt
     }
     const wd = waterEdgeDist(x, z)
@@ -313,8 +314,8 @@ function groundColorAt(x: number, z: number, h: number, ny: number, out: THREE.C
     // under the woods the ground is dirt and leaf litter, not lawn (the ARK
     // reference: forest floors are brown, greens live in the understory)
     const forest = forestMaskAt(x, z)
-    if (forest > 0.05) {
-      const t = THREE.MathUtils.clamp((forest - 0.05) / 0.25, 0, 1) * 0.85
+    if (forest > -0.35) {
+      const t = THREE.MathUtils.clamp((forest + 0.35) / 0.6, 0, 1) * 0.85
       out.lerp(_c.copy(C_FLOOR).lerp(C_FLOOR_LIT, 0.5 + varT * 0.5), t)
     }
     // wet banks: mud then a sand lip against rivers and lakes (backlog #1)

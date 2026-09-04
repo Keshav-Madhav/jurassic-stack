@@ -89,3 +89,18 @@ clone won't have them).
 - Quaternius Stylized Nature MegaKit + Ultimate Nature (CC0) — foliage (M5/M6)
 - Quaternius Ultimate Modular Ruins, KayKit Medieval Builder + Dungeon Remastered (CC0) — M5/M8
 
+
+## Decimation pass (M9g, forest density round)
+
+Trees now number ~6K and every triangle counts. The heaviest legacy props were
+simplified in place with `gltf-transform simplify` (meshopt simplifier), raw
+originals untouched in `_raw/nature/`, turntable-verified:
+
+| Prop | Before | After | Flags |
+|---|---|---|---|
+| DeadTree (5 variants) | 15,464 tris | 4,327 | `--ratio 0.28 --error 0.004` |
+| Palm | 3,134 | 940 | `--ratio 0.3 --error 0.02` |
+| Willow | 2,056 | 2,056 (simplifier no-op; left as is) | — |
+
+Built trees (`src/scripts/trees.ts`, not assets): canopy ≈ 850 tris full / ≈ 250 far LOD;
+elder ≈ 1,500 / ≈ 450.

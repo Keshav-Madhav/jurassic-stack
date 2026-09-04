@@ -12,6 +12,7 @@
 //   valleys carved from the volcano's flanks to the sea (wet at M5b) · two
 //   lake basins · six flat ruin sites on a spawn→summit gradient.
 import { writeFileSync, mkdirSync } from 'node:fs'
+import { RIVERS, LAKES, FORESTS, CLEARINGS, shoreDist } from './hand-geometry.mjs'
 
 const HALF = 1024
 const RES = 2
@@ -76,107 +77,8 @@ const idx = (ix, iz) => iz * SIDE + ix
 const worldX = (ix) => -HALF + ix * RES
 const worldZ = (iz) => -HALF + iz * RES
 
-// HAND-TRACED river paths — every bend a decision (meander formula deleted).
-// Each river rises from a spring tarn (see LAKES) and runs to the sea.
-const RIVERS = [
-  // EAST RIVER: born in a tarn on the volcano's SE shoulder, cuts the canyon,
-  // crosses the flats in lazy S-bends, deltas through the swamp to the sea
-  [
-    { x: 148, z: -438 }, { x: 185, z: -408 }, { x: 228, z: -372 },
-    { x: 272, z: -338 }, { x: 312, z: -296 }, { x: 344, z: -248 },
-    { x: 372, z: -198 }, { x: 398, z: -152 }, { x: 424, z: -108 },
-    { x: 442, z: -62 }, { x: 448, z: -14 }, { x: 440, z: 34 },
-    { x: 452, z: 82 }, { x: 478, z: 124 }, { x: 502, z: 168 },
-    { x: 512, z: 218 }, { x: 522, z: 272 }, { x: 540, z: 328 },
-    { x: 558, z: 388 }, { x: 582, z: 448 }, { x: 606, z: 508 },
-    { x: 634, z: 566 }, { x: 668, z: 622 }, { x: 712, z: 672 }, { x: 758, z: 716 },
-  ],
-  // WEST RIVER: born in a highland tarn, runs down the west slopes, flows the
-  // LENGTH of the west lake (inlet neck → south bay), then crosses the desert
-  // as its oasis line and reaches the SW coast
-  [
-    { x: -202, z: -392 }, { x: -238, z: -352 }, { x: -278, z: -312 },
-    { x: -318, z: -268 }, { x: -352, z: -222 }, { x: -378, z: -172 },
-    { x: -398, z: -124 }, { x: -408, z: -76 }, { x: -398, z: -30 }, // approach the inlet neck
-    { x: -412, z: 8 }, { x: -438, z: 48 }, { x: -458, z: 92 }, { x: -478, z: 130 }, // through the lake
-    { x: -505, z: 158 }, // exit the south bay
-    { x: -532, z: 206 }, { x: -552, z: 258 }, { x: -576, z: 312 },
-    { x: -598, z: 368 }, { x: -622, z: 428 }, { x: -640, z: 486 },
-    { x: -654, z: 540 }, { x: -664, z: 592 },
-  ],
-]
-// HAND-TRACED lakes: each shoreline is an explicit polygon, drawn vertex by
-// vertex like tracing a map — no center/radius/noise formula anywhere.
-// (x,z) pairs, counterclockwise. `level` is chosen against the surrounding
-// terrain and asserted by the validator; `deep` is the hand-picked deepest spot.
-const LAKES = [
-  {
-    // WEST LAKE — elongated highland lake the west river flows through.
-    // Design: wide southern basin, narrowing north neck where the river
-    // enters, a peninsula pinching the east side, a small west bay.
-    name: 'west',
-    level: 8.2,
-    deep: { x: -445, z: 55 },
-    shore: [
-      [-390, -95], [-355, -60], [-345, -15], [-360, 20],   // NE inlet neck (river enters)
-      [-385, 40], [-395, 75], [-380, 105],                 // east shore → peninsula root
-      [-410, 120], [-450, 150], [-490, 165],               // peninsula pinch + south bulge
-      [-525, 150], [-545, 115], [-540, 75],                // SW shore (river exits ~here)
-      [-560, 45], [-555, 5], [-530, -25],                  // west bay
-      [-495, -40], [-470, -70], [-435, -95], [-405, -105], // NW shore back to inlet
-    ],
-  },
-  {
-    // EAST LAKE — smaller lowland lake with a marshy south end and one bay.
-    name: 'east',
-    level: 5.4,
-    deep: { x: 310, z: 290 },
-    shore: [
-      [255, 240], [290, 225], [330, 230], [355, 250],  // north shore
-      [370, 280], [360, 315], [372, 345],              // east + SE bay notch
-      [345, 370], [305, 380], [270, 365],              // south (marshy)
-      [245, 335], [238, 295], [242, 262],              // west shore
-    ],
-  },
-  {
-    // EAST SPRING TARN — the east river's source pool on the volcano's SE
-    // shoulder; the river visibly flows OUT of standing water
-    name: 'east-tarn',
-    level: 24.5, // iterated: shore min 25.2 (low side is the outlet)
-    deep: { x: 140, z: -452 },
-    shore: [
-      [112, -470], [132, -482], [158, -478], [172, -460],
-      [168, -438], [150, -424], [126, -428], [110, -448],
-    ],
-  },
-  {
-    // WEST SPRING TARN — the west river's highland source pool
-    name: 'west-tarn',
-    level: 14, // iterated: shore min 14.6
-    deep: { x: -212, z: -408 },
-    shore: [
-      [-238, -424], [-216, -436], [-192, -428], [-182, -406],
-      [-192, -386], [-216, -380], [-236, -392], [-244, -410],
-    ],
-  },
-]
-
-/** Signed distance to a hand-traced shoreline: negative inside. */
-function shoreDist(px, pz, shore) {
-  let inside = false
-  let minD = Infinity
-  for (let i = 0, j = shore.length - 1; i < shore.length; j = i++) {
-    const [xi, zi] = shore[i]
-    const [xj, zj] = shore[j]
-    if (zi > pz !== zj > pz && px < ((xj - xi) * (pz - zi)) / (zj - zi) + xi) inside = !inside
-    const dx = xj - xi
-    const dz = zj - zi
-    const t = Math.max(0, Math.min(1, ((px - xi) * dx + (pz - zi) * dz) / (dx * dx + dz * dz)))
-    minD = Math.min(minD, Math.hypot(px - (xi + dx * t), pz - (zi + dz * t)))
-  }
-  return inside ? -minD : minD
-}
-
+// HAND-TRACED rivers + lakes + forests live in tools/hand-geometry.mjs — one
+// file, every vertex a decision. This bake carves and validates them.
 // hand paths ARE the dense paths — no post-processing
 const RIVERS_DENSE = RIVERS
 
@@ -779,6 +681,7 @@ const meta = {
   spawn: SPAWN, volcano: VOLCANO,
   rivers: RIVERS_DENSE, lakes: LAKES, ruinSites: RUIN_SITES,
   swamp: SWAMP,
+  forests: FORESTS, clearings: CLEARINGS,
   bakedAt: new Date().toISOString(),
 }
 writeFileSync('public/world/world-meta.json', JSON.stringify(meta, null, 2))
@@ -800,6 +703,47 @@ writeFileSync('public/world/world-meta.json', JSON.stringify(meta, null, 2))
     }
   }
   writeFileSync('public/world/biomes.bin', Buffer.from(biomes.buffer))
+}
+
+// forest map: one byte per grid cell — density (0..63) in the high six bits,
+// kind in the low two (0 broadleaf · 1 pine · 2 mixed). Density is the hand
+// polygon's fullness feathered to zero over its `edge` metres inside the wood
+// line; clearings punch feathered holes. Runtime scatter/colors read this.
+{
+  const KIND_ID = { broadleaf: 0, pine: 1, mixed: 2 }
+  const forest = new Uint8Array(SIDE * SIDE)
+  let cells = 0
+  for (let iz = 0; iz < SIDE; iz++) {
+    for (let ix = 0; ix < SIDE; ix++) {
+      const x = worldX(ix), z = worldZ(iz)
+      let best = 0
+      let kind = 0
+      for (const f of FORESTS) {
+        const sd = shoreDist(x, z, f.shore)
+        if (sd >= 0) continue
+        const d = f.density * smoothstep(0, -(f.edge ?? 40), sd)
+        if (d > best) { best = d; kind = KIND_ID[f.kind] ?? 0 }
+      }
+      if (best > 0) {
+        for (const c of CLEARINGS) {
+          const sd = shoreDist(x, z, c)
+          if (sd < 15) best *= Math.max(0, sd) / 15
+        }
+      }
+      if (best > 0.02) cells++
+      forest[idx(ix, iz)] = (Math.round(Math.min(1, best) * 63) << 2) | kind
+    }
+  }
+  writeFileSync('public/world/forest.bin', Buffer.from(forest.buffer))
+  console.log(`forest: ${FORESTS.length} woods, ${CLEARINGS.length} glades, ${((cells * RES * RES) / 1e6).toFixed(2)} km² wooded`)
+  // every ruin (bar the gate) stands in a glade — traced by hand at the site
+  // coordinates, so a site that drifts out of its glade fails loudly here
+  for (const site of RUIN_SITES) {
+    if (site.tag === 'caldera-gate') continue
+    const ix = Math.round((site.x + HALF) / RES), iz = Math.round((site.z + HALF) / RES)
+    const d = (forest[idx(ix, iz)] >> 2) / 63
+    if (d > 0.15) fail(`ruin ${site.tag} (${site.x},${site.z}) stands in forest density ${d.toFixed(2)} — retrace its glade`)
+  }
 }
 
 // hillshade BMP for eyeball QA (24-bit, no deps)

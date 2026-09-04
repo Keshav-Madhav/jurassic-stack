@@ -307,7 +307,7 @@ Standing rule: world geometry is hand-traced control geometry (polygons/paths, e
 TODO (one pick per round):
 1. **RIVERS (this round)**: hand-traced paths; natural sources (spring tarns — no abrupt mid-slope starts); ribbon must not cut through lakes (screenshots 11-12)
 2. Swamp boundary + desert edge → hand-traced polygons
-3. Forest placement → hand-drawn forest regions; MUCH denser; rich wide-canopy tree models (crowns dominate, fewer visible trunks; ref screenshot 13) + giant trees mixed in
+3. ~~Forest placement → hand-drawn forest regions; MUCH denser; rich wide-canopy tree models (crowns dominate, fewer visible trunks; ref screenshot 13) + giant trees mixed in~~ DONE M9g
 4. Swamp flora: mangrove-type trees, dried bushes — swamp is empty; desert flora: dried bushes, cacti-like — desert is empty
 5. Ground clutter everywhere: sticks, pebbles, small rocks, scattered stones, ground foliage — world too clean/empty
 6. Volcano gate not visible — caldera-gate ruin/door placement needs relocation/visibility pass (arc must read on approach)
@@ -319,3 +319,13 @@ TODO (one pick per round):
 - [x] River ribbon CUT where it crosses a lake (shoreDist < -4) — no more river band slicing through the lake's sheet; the current still flows across via riverFlowAt, only the mesh yields; west river now runs the length of the west lake (inlet neck → south bay) as intended
 - [x] Tarn levels iterated against a pre-carve shore-terrain probe (east 24.5, west 14 — under their shore minima); canyon frac range retuned for the new waypoint count
 - [x] Aerial verification: east river flows from its tarn down through forest; west river enters/crosses/exits the lake cleanly. Gates 73/73, navmesh revalidated
+
+### M9g — HAND-MADE FORESTS (mandate item 3)
+- [x] `tools/hand-geometry.mjs` — ONE file for every traced shape (rivers, lakes, forests, glades); bake and map both read it. Forest-mask noise DELETED.
+- [x] `tools/map.mjs` — the planning map: gridded (100 m, labelled), hillshade + hypsometric tint, biomes, water, every polygon with its vertices; `--region`/`--ppm` zooms. This is the sheet the rest of the mandate gets traced on.
+- [x] Seven woods traced vertex by vertex: Southwood (first forest, ragged wood line a meadow north of the beach, wraps the east lake, fills the SE lowland) · Elderwood (old-growth heart, densest, holds the temple, wraps the east lake's north shore) · Eastbank (mixed, river↔range) · North Pines (between the tarns) · Westwood (NW range flank, the west river runs through it) · Lakeshore (light wood east of the west lake) · Range Pines. Six glades: one per ruin (validator: a ruin standing in forest fails the bake) + the Hollow + the South Meadow.
+- [x] `forest.bin` baked (density<<2 | kind, feathered `edge` m inside each wood line, glades punched) — runtime `forestMaskAt`/`forestKindAt` read it; terrain floor turns to dirt from the wood line inward
+- [x] Built trees (`src/scripts/trees.ts`): wide-canopy broadleaf (short trunk, limbs, 9-11 lumpy leaf masses a tree-height across, dark leaf greens, sunlit top) ×4 seeds; ELDER giants (36-52 m, buttressed trunk, three tiers) ×2 seeds in the old-growth cores. Quaternius lollipops out of the woods (neon against the canopy).
+- [x] Density: trees 1,221 → 3,725 (9 m cells, thinning to the wood line) · pines 1,301 → 1,949 · elders 111 · ferns/bushes thicker under canopy. Aerials read as continuous canopy with glades; eye level is a canopy roof over trunks.
+- [x] Perf so it stays 60: three LOD bands per supercell (full <300 m · coarse masses <900 m · ~40-tri trunk-and-blob beyond; pines get a 3-cone twin painted to match) — island judge view 6.9M → 1.5M tris; DeadTree 15.5K → 4.3K and Palm 3.1K → 0.9K tris decimated; berry bush pulled off neon.
+- [x] `tools/qa-forest.mjs` — wood vantages with per-kind triangle accounting (`--tris`). Gates 73/73 (m4 once flaked on a raptor in the gather line; 3 clean reruns), live-verified.
