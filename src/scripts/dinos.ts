@@ -26,8 +26,16 @@ async function loadModel(url: string) {
   return { scene: (await import('three/addons/utils/SkeletonUtils.js')).clone(gltf.scene) as THREE.Group, animations: gltf.animations }
 }
 
+/** wild dinos beyond SLEEP go dormant; they wake inside WAKE */
+const DORMANT_SLEEP = 680
+const DORMANT_WAKE = 600
+
 export class Dino {
   readonly object = new THREE.Group()
+  /** the loaded rig — hidden (not `object`, which doubles as "alive") while dormant */
+  private model: THREE.Object3D | null = null
+  /** far from the player: no AI, no animation, no draw, until they come back */
+  dormant = false
   state: DinoState = 'idle'
   hp: number
   torpor = 0
@@ -85,6 +93,8 @@ export class Dino {
       }
     })
     this.object.add(model)
+    this.model = model
+    if (this.dormant) model.visible = false
 
     this.mixer = new THREE.AnimationMixer(model)
     for (const slot of ['idle', 'walk', 'run', 'attack', 'ko'] as const) {
@@ -200,6 +210,22 @@ export class Dino {
     this.attackCooldown -= dt
     const pos = this.object.position
     this.distToPlayer = pos.distanceTo(playerPos)
+    // dormancy: a wild dino far from the player is frozen and undrawn (200 on
+    // the map, a few dozen ever simulated). Tames, KOs and anything already
+    // aggroed stay live; hysteresis keeps the edge from flickering.
+    const wildIdle = !this.ridden && (this.state === 'idle' || this.state === 'wander' || this.state === 'flee')
+    if (this.dormant) {
+      if (this.distToPlayer < DORMANT_WAKE || !wildIdle) {
+        this.dormant = false
+        if (this.model) this.model.visible = true
+      } else {
+        return
+      }
+    } else if (wildIdle && this.distToPlayer > DORMANT_SLEEP) {
+      this.dormant = true
+      if (this.model) this.model.visible = false
+      return
+    }
     // skinned casters are expensive in the shadow pass — only nearby dinos cast
     const wantShadow = this.distToPlayer < 110
     if (wantShadow !== this.castingShadow) {

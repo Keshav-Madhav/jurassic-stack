@@ -333,9 +333,9 @@ TODO (one pick per round):
 ### M10 — THE ISLAND v2: THE LASSO (user, 2026-09-04 — "the map is too small for its water; grow it 2×, one river, two lakes, a reservoir")
 Story in PLAN.md → "The island v2 — the Lasso". One round each, gates + screenshots + live check before the next. Culling, LODs and budgets are part of every round ("shit tons of culling and lods and optimizations").
 - [x] **M10a — the 4 km canvas + the Lasso.** DONE (below)
-- [ ] **M10b — two lakes.** Lake Aster (lowland, ~9 m) + the Alpine Tarn (West Range, ~230 m); validators: hold water, never touch the river
+- [x] **M10b — two lakes + the terrain body.** DONE (below)
 - [ ] **M10c — biome edges by hand.** Swamp wraps the Reservoir + outflow delta (~700 m); desert in the SW rain shadow (~1 km); plains south-centre; `warpedDist` deleted (mandate item 2)
-- [ ] **M10d — forests retraced + the Holm redwoods.** Redwood species (60–80 m, bare red trunk, narrow high crown) exclusive to the Holm polygon; canopy woods/pines/glades retraced for the new land (mandate item 3 carried over)
+- [~] **M10d — forests retraced + the Holm redwoods.** Forests retraced island-wide in M10b (below); the redwood species for the Holm still to come
 - [ ] **M10e — ruins hand-placed; caldera gate visible** at the volcano's south foot (mandate item 6)
 - [ ] **M10f — swamp flora (mangrove-type, dried bushes) + desert flora** (mandate item 4)
 - [ ] **M10g — ground clutter** (sticks, pebbles, stones, ground foliage) (mandate item 5)
@@ -350,3 +350,12 @@ Story in PLAN.md → "The island v2 — the Lasso". One round each, gates + scre
 - [x] Ruins hand-placed and asserted (flat/dry/open/off-river) + navmesh reachability 6/6 — the seeded search was retired after it perched the vault on a shoulder no path climbed
 - [x] Culling/LOD for the 4× world: caps ×4 (the north→south scan starved the beach of grass), island-wide dot meshes per tree kind (per-cell dots were hundreds of draw calls; island view 659 → 213 calls, JS render 14.7 → 3.6 ms), far twins for willows, dots for palms/dead trees, rocks hidden past 600 m, palms only on the beach band, Grass1 155 → 62 tris, the 6K-tri Quaternius "Mushroom" (a mushroom CREATURE with eyes, 670 of them in the woods) replaced by a built 60-tri cluster, ocean ripple fades with distance (killed the moiré), `__g.perf()` splits JS update/render ms
 - [x] Gates re-pointed at the world (spawn(), gateSite(), meta) — 73/73; aerials + qa-forest re-authored for v2
+
+### M10b — TWO LAKES, THE TERRAIN BODY, AND 200 DINOS (user: "too empty, too flat, WAY more forest, the ring too round, rivers too straight, more mounds and foothills, at least 200 dinos")
+- [x] **Lake Aster** against the West Range's foot (level 34.5, a peninsula from the south shore, a bay to the north-east) and **the Alpine Tarn** (231 m) on a hand-cut cirque bench — `SHELVES` in hand-geometry: a traced polygon held flat, the only flat ground a range ever offers. Levels chosen by probing shore terrain with `bake-island.mjs --no-lakes aster,tarn`
+- [x] **The ring** retraced as a bumpy, wavy oval ~900 × 850 m (was a compass circle); the Knot and Reservoir moved with it; **both legs** retraced with real turns (25 and 19 waypoints of S-bends)
+- [x] **Terrain body**: tableland 26 → 32 m with base relief 9 → 12 m, positive-only MOUNDS (200–500 m billows up to 18 m), six hand-traced FOOTHILL chains (`soft: true` ranges: rolling massif, no crest, no rock bands) and a third range, THE NORTHERN HORNS (230 m) on the NW shoulder; biome flats no longer cut into ranges (the desert had sliced the West Range into an orange wall)
+- [x] **Forests WAY more**: 15 traced woods, 5.39 km² wooded (was 1.2) — the Ringwood over the whole ring country, the Westwood wrapping Lake Aster, pines over both ranges' flanks and the Horns, mixed woods on the foothills and the volcano's skirts, the south-east and east-coast woods; altitude caps (broadleaf < 130 m, pines < 210 m) keep the peaks bare. Trees 4K → 43K broadleaf + 52K pines + 1.6K elders; 7 glades incl. one per ruin (validated)
+- [x] **200 dinos** (`population.ts`): habitat-placed packs/herds/apexes by forest mask + biome, deterministic per seed; **dormancy** in `Dino` — wild idle/wander dinos beyond 680 m freeze and hide (no AI, no mixer, no draw), wake inside 600 m; n² pack/separation loops skip dormant ones. Spawn-beach raptors spread out (a tight pack of three killed the new player)
+- [x] Bank cap FEATHERED at its edge (a hard stop left a 10 m step around every channel — reachability caught it); navmesh validator given a 65K-node A* pool (the default pool ran out mid-island on 4 km paths and reported reachable ruins as "stops short"); ruins re-sited by probing for flat, open ground
+- [x] Perf: full-LOD tree band 300 → 180 m; spawn 5.4M tris / 56–60 fps headless, gates 73/73

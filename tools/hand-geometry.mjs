@@ -54,7 +54,7 @@ export const COAST = [
 export const RANGES = [
   {
     // WEST RANGE — long, north–south, the island's spine on the west; kinked
-    // crest with spurs; the Alpine Tarn sits in its high saddle (M10b)
+    // crest with spurs; the Alpine Tarn sits in its high saddle
     name: 'west', width: 300,
     crest: [
       { x: -1400, z: -940, h: 140 }, { x: -1440, z: -760, h: 290 }, { x: -1360, z: -600, h: 380 },
@@ -77,60 +77,116 @@ export const RANGES = [
       { x: 1360, z: 100, h: 230 }, { x: 1300, z: 250, h: 160 },
     ],
   },
+  {
+    // THE NORTHERN HORNS — a third, smaller range on the north-west shoulder
+    // between the Bight and the volcano's foot: two horns and a col
+    name: 'horns', width: 200,
+    crest: [
+      { x: -1060, z: -1180, h: 90 }, { x: -920, z: -1280, h: 190 }, { x: -800, z: -1220, h: 230 },
+      { x: -690, z: -1330, h: 150 }, { x: -560, z: -1420, h: 210 }, { x: -430, z: -1460, h: 120 },
+    ],
+  },
+  // FOOTHILLS — soft rolling chains (no rock terraces, no snow): the ground
+  // between the ranges and the tableland rises and falls instead of lying flat
+  {
+    name: 'west-foothills', width: 170, soft: true,
+    crest: [
+      { x: -1020, z: -900, h: 75 }, { x: -940, z: -760, h: 95 }, { x: -980, z: -600, h: 70 },
+      { x: -900, z: -440, h: 88 }, { x: -930, z: -280, h: 60 }, { x: -860, z: -120, h: 80 },
+    ],
+  },
+  {
+    name: 'south-west-foothills', width: 160, soft: true,
+    crest: [
+      { x: -940, z: 620, h: 70 }, { x: -820, z: 720, h: 92 }, { x: -700, z: 860, h: 66 },
+      { x: -600, z: 1000, h: 80 }, { x: -520, z: 1140, h: 55 },
+    ],
+  },
+  {
+    name: 'east-foothills', width: 180, soft: true,
+    crest: [
+      { x: 1000, z: -560, h: 80 }, { x: 960, z: -380, h: 105 }, { x: 1010, z: -200, h: 85 },
+      { x: 960, z: -20, h: 98 }, { x: 1000, z: 160, h: 72 }, { x: 950, z: 330, h: 88 }, { x: 1000, z: 500, h: 60 },
+    ],
+  },
+  {
+    name: 'north-foothills', width: 170, soft: true,
+    crest: [
+      { x: 500, z: -1420, h: 70 }, { x: 640, z: -1300, h: 95 }, { x: 760, z: -1160, h: 78 },
+      { x: 860, z: -1020, h: 92 }, { x: 900, z: -870, h: 65 },
+    ],
+  },
+  {
+    name: 'south-mounds', width: 130, soft: true,
+    crest: [
+      // low mounds on the south plains between the ring and the Southwood
+      { x: 500, z: 800, h: 48 }, { x: 640, z: 940, h: 60 }, { x: 560, z: 1080, h: 44 },
+    ],
+  },
 ]
 
 // ---------- THE HOLM: the plateau the ring is cut into ----------
 // Land inside this line is held at ~20 m so the ring, the Reservoir and the
 // Knot all sit IN ground (a carve, never a raised donut).
 export const HOLM = [
-  [-560, 380], [-520, 160], [-400, -30], [-200, -130], [40, -150], [260, -80],
-  [420, 80], [520, 260], [520, 470], [430, 660], [240, 800], [0, 850],
-  [-240, 810], [-430, 690], [-540, 540],
+  [-640, 400], [-620, 200], [-520, 20], [-380, -110], [-190, -200], [30, -220], [250, -170],
+  [420, -60], [530, 120], [570, 330], [560, 520], [480, 700], [340, 850], [140, 930],
+  [-80, 950], [-300, 900], [-480, 780], [-600, 600],
+]
+
+// ---------- SHELVES: hand-cut benches in the mountains ----------
+// A traced polygon held at height `h` (feathered 40 m outward): the flat
+// ground a range otherwise never offers — the Alpine Tarn's cirque bench.
+export const SHELVES = [
+  { name: 'tarn-bench', h: 232, shore: [[-1320, 300], [-1260, 268], [-1200, 300], [-1180, 360], [-1210, 420], [-1270, 442], [-1320, 402], [-1342, 350]] },
 ]
 
 // ---------- THE LASSO: one river, three parts ----------
 // `flow` 1 = current runs source→end along the path; 0 = dead water at
 // `level`. Bed profiles: legs are monotonic downhill, the ring is level.
 export const RIVER = {
-  knot: { x: 310, z: 380 },
+  knot: { x: 400, z: 380 },
   level: 14, // the Knot's water surface: the ring and the Reservoir sit here
   parts: [
     {
       // INFLOW — out of the Wellspring pool in its coastal gorge at the East
       // Range's northern foot, then south down the long valley between the
-      // north pines and the range, meandering across the flats to the Knot
-      name: 'inflow', flow: 1, halfWidth: 11, canyon: [0.02, 0.36],
+      // north pines and the range, winding hard across the flats to the Knot
+      name: 'inflow', flow: 1, halfWidth: 11, canyon: [0.02, 0.3],
       path: [
-        { x: 1100, z: -1195 }, { x: 1068, z: -1130 }, { x: 1010, z: -1090 }, { x: 980, z: -990 },
-        { x: 920, z: -900 }, { x: 900, z: -790 }, { x: 840, z: -700 }, { x: 800, z: -600 },
-        { x: 760, z: -520 }, { x: 700, z: -440 }, { x: 690, z: -350 }, { x: 630, z: -280 },
-        { x: 600, z: -190 }, { x: 540, z: -110 }, { x: 520, z: -20 }, { x: 470, z: 60 },
-        { x: 450, z: 150 }, { x: 410, z: 230 }, { x: 370, z: 300 }, { x: 310, z: 380 },
+        { x: 1100, z: -1195 }, { x: 1068, z: -1130 }, { x: 1010, z: -1090 }, { x: 1020, z: -1010 },
+        { x: 950, z: -950 }, { x: 900, z: -860 }, { x: 930, z: -770 }, { x: 860, z: -700 },
+        { x: 790, z: -650 }, { x: 800, z: -560 }, { x: 740, z: -500 }, { x: 680, z: -450 },
+        { x: 720, z: -370 }, { x: 660, z: -300 }, { x: 590, z: -260 }, { x: 610, z: -180 },
+        { x: 560, z: -110 }, { x: 490, z: -80 }, { x: 520, z: 0 }, { x: 470, z: 70 },
+        { x: 400, z: 110 }, { x: 430, z: 190 }, { x: 480, z: 250 }, { x: 440, z: 320 }, { x: 400, z: 380 },
       ],
     },
     {
-      // THE RING — dead water round the Holm, back to the Knot. Closed path,
-      // egg-shaped; the Ford is the shallow bar on its far west side.
-      name: 'ring', flow: 0, halfWidth: 17, closed: true,
+      // THE RING — dead water round the Holm, back to the Knot. A bumpy,
+      // wavy oval ~900 × 850 m; the Ford is the shallow bar on its far west.
+      name: 'ring', flow: 0, halfWidth: 18, closed: true,
       path: [
-        { x: 310, z: 380 }, { x: 300, z: 270 }, { x: 262, z: 165 }, { x: 190, z: 85 },
-        { x: 90, z: 30 }, { x: -40, z: 5 }, { x: -180, z: 20 }, { x: -300, z: 80 },
-        { x: -390, z: 175 }, { x: -445, z: 330 }, // the Ford
-        { x: -435, z: 440 }, { x: -380, z: 560 }, { x: -280, z: 660 }, { x: -140, z: 720 },
-        { x: 10, z: 730 }, { x: 150, z: 690 }, { x: 250, z: 610 }, { x: 300, z: 500 },
+        { x: 400, z: 380 }, { x: 395, z: 270 }, { x: 360, z: 170 }, { x: 300, z: 110 },
+        { x: 250, z: 20 }, { x: 190, z: -60 }, { x: 60, z: -55 }, { x: -30, z: -20 },
+        { x: -160, z: -35 }, { x: -290, z: -30 }, { x: -350, z: 60 }, { x: -400, z: 170 },
+        { x: -470, z: 240 }, { x: -500, z: 350 }, // the Ford
+        { x: -520, z: 430 }, { x: -450, z: 540 }, { x: -340, z: 610 }, { x: -270, z: 720 },
+        { x: -170, z: 800 }, { x: -20, z: 790 }, { x: 90, z: 740 }, { x: 220, z: 720 },
+        { x: 320, z: 660 }, { x: 350, z: 560 }, { x: 395, z: 460 },
       ],
-      ford: { x: -445, z: 330 },
+      ford: { x: -500, z: 350 },
     },
     {
-      // OUTFLOW — from the Knot south-east in S-bends through the swamp's
+      // OUTFLOW — from the Knot south-east in real S-bends through the swamp's
       // delta to the Estuary Bay
       name: 'outflow', flow: 1, halfWidth: 12,
       path: [
-        { x: 310, z: 380 }, { x: 345, z: 440 }, { x: 410, z: 480 }, { x: 450, z: 560 },
-        { x: 520, z: 610 }, { x: 560, z: 690 }, { x: 640, z: 730 }, { x: 700, z: 810 },
-        { x: 730, z: 900 }, { x: 800, z: 960 }, { x: 880, z: 1000 }, { x: 930, z: 1080 },
-        { x: 1010, z: 1120 }, { x: 1050, z: 1210 }, { x: 1120, z: 1260 }, { x: 1160, z: 1330 },
-        { x: 1200, z: 1400 },
+        { x: 400, z: 380 }, { x: 450, z: 430 }, { x: 440, z: 510 }, { x: 500, z: 570 },
+        { x: 580, z: 580 }, { x: 610, z: 660 }, { x: 560, z: 740 }, { x: 620, z: 810 },
+        { x: 710, z: 830 }, { x: 760, z: 910 }, { x: 720, z: 990 }, { x: 790, z: 1060 },
+        { x: 880, z: 1070 }, { x: 940, z: 1140 }, { x: 920, z: 1220 }, { x: 990, z: 1290 },
+        { x: 1080, z: 1300 }, { x: 1140, z: 1360 }, { x: 1200, z: 1400 },
       ],
     },
   ],
@@ -144,10 +200,10 @@ export const LAKES = [
   {
     // THE RESERVOIR — the deep basin where the river crosses itself; four
     // arms of water meet here
-    name: 'reservoir', level: RIVER.level, depth: 11, deep: { x: 310, z: 380 },
+    name: 'reservoir', level: RIVER.level, depth: 11, deep: { x: 400, z: 380 },
     shore: [
-      [235, 330], [275, 300], [330, 300], [385, 325], [405, 375],
-      [390, 430], [345, 462], [285, 458], [240, 425], [222, 378],
+      [318, 335], [345, 300], [385, 288], [428, 296], [470, 322], [492, 366],
+      [486, 420], [452, 458], [405, 476], [352, 468], [318, 436], [304, 388],
     ],
   },
   {
@@ -159,6 +215,27 @@ export const LAKES = [
       [1122, -1175], [1088, -1179],
     ],
   },
+  {
+    // LAKE ASTER — the big lowland lake in the west, between the ring hills
+    // and the West Range's foot; never touches the river. Bays to the north
+    // and west, a peninsula from the south shore.
+    name: 'aster', level: 34.5, depth: 7, deep: { x: -830, z: 250 },
+    shore: [
+      [-940, 130], [-880, 90], [-800, 80], [-730, 120], [-700, 200],   // north shore → NE bay
+      [-710, 290], [-690, 360], [-730, 430], [-800, 470],              // east shore
+      [-850, 430], [-870, 350], [-900, 420], [-950, 450], [-990, 400], // south shore: a peninsula points north
+      [-1010, 320], [-1000, 240], [-990, 170],                         // west shore against the range's foot
+    ],
+  },
+  {
+    // THE ALPINE TARN — a small cold lake on a shelf in the West Range's
+    // saddle; iterated against the shore probe
+    name: 'tarn', level: 231, depth: 5, deep: { x: -1255, z: 352 },
+    shore: [
+      [-1290, 330], [-1268, 314], [-1236, 318], [-1218, 342], [-1224, 372],
+      [-1250, 392], [-1284, 384], [-1300, 358],
+    ],
+  },
 ]
 
 // ---------- FORESTS: traced woodland regions ----------
@@ -166,39 +243,135 @@ export const LAKES = [
 // 'mixed' · 'redwood' (the Holm only, M10d). Rough first pass for M10a so
 // the woods don't vanish for a round; retraced properly in M10d.
 export const FORESTS = [
+  // ARK reference (The Island): forest covers most of the land — beaches,
+  // the plains, the desert flats, the swamp core, the high peaks and the
+  // volcano's cone are the exceptions, not the rule. Woods run up onto the
+  // foothills and the ranges' lower flanks (the scatter caps broadleaf at
+  // ~130 m and pines at ~210 m; above that is alpine rock).
   {
-    // THE SOUTHWOOD — first forest, a meadow north of the spawn beach
-    name: 'southwood', kind: 'broadleaf', density: 0.85, edge: 50,
+    // THE SOUTHWOOD — first forest, a meadow north of the spawn beach; runs
+    // east over the south mounds to the estuary lowland and north to the ring
+    name: 'southwood', kind: 'broadleaf', density: 0.9, edge: 50,
     shore: [
-      [-500, 1440], [-450, 1330], [-340, 1250], [-180, 1200], [40, 1180], [280, 1200],
-      [480, 1270], [620, 1370], [630, 1450], [520, 1500], [300, 1480], [60, 1470], [-160, 1480], [-370, 1500],
+      [-600, 1440], [-560, 1290], [-500, 1150], [-440, 1020], [-330, 930], [-200, 890],
+      [0, 880], [200, 860], [380, 880], [520, 940], [620, 1050], [680, 1180], [700, 1320],
+      [660, 1440], [540, 1500], [300, 1480], [60, 1470], [-160, 1480], [-370, 1500], [-500, 1480],
+    ],
+  },
+  {
+    // THE RINGWOOD — a broad wood over the whole ring country: the Holm, the
+    // moat's banks and the land outside it, up to the pines and down to the
+    // Southwood, so the river runs through forest, not lawn
+    name: 'ringwood', kind: 'broadleaf', density: 0.85, edge: 50,
+    shore: [
+      [-640, -120], [-450, -260], [-200, -300], [60, -310], [300, -260], [480, -160], [560, 0],
+      [600, 200], [560, 420], [520, 600], [420, 800], [200, 880], [-50, 900], [-300, 880],
+      [-500, 820], [-650, 700], [-720, 520], [-740, 300], [-720, 80],
     ],
   },
   {
     // THE HOLM WOOD — inside the ring (redwoods from M10d)
     name: 'holm', kind: 'broadleaf', density: 1, edge: 40,
     shore: [
-      [-360, 200], [-240, 90], [-60, 60], [120, 100], [230, 220], [250, 380],
-      [200, 530], [60, 640], [-120, 660], [-290, 580], [-380, 420], [-395, 300],
+      [-420, 260], [-330, 100], [-200, 30], [-40, 20], [130, 30], [250, 110], [320, 230],
+      [330, 380], [300, 520], [220, 640], [80, 710], [-100, 720], [-260, 650], [-380, 540], [-440, 400],
     ],
   },
   {
-    // THE NORTH PINES, WEST — conifers on the northern rise, west of the
-    // volcano's south approach (the approach itself stays open so the caldera
-    // gate reads from far off)
-    name: 'north-pines-west', kind: 'pine', density: 0.8, edge: 50,
+    // THE WESTWOOD — wraps Lake Aster: between the lake and the ring, north to
+    // the pines, south toward the desert, west up the range's foot
+    name: 'westwood', kind: 'broadleaf', density: 0.85, edge: 50,
     shore: [
-      [-700, -420], [-560, -640], [-340, -780], [-250, -760], [-230, -560],
-      [-260, -330], [-380, -170], [-620, -240],
+      [-720, -20], [-820, 50], [-940, 60], [-1020, 40], [-1080, 140], [-1060, 300], [-1040, 420],
+      [-960, 480], [-860, 500], [-820, 560], [-880, 760], [-780, 900], [-620, 880], [-540, 760],
+      [-600, 600], [-640, 420], [-620, 250], [-560, 60], [-440, -120], [-560, -180], [-700, -150],
     ],
   },
   {
-    // THE NORTH PINES, EAST — the other half, running to the inflow valley
-    name: 'north-pines-east', kind: 'pine', density: 0.8, edge: 50,
+    // THE NORTH PINES, WEST — conifers over the west foothills and the
+    // northern rise, up to the caldera approach (kept open east of x -130)
+    name: 'north-pines-west', kind: 'pine', density: 0.85, edge: 50,
     shore: [
-      [250, -760], [440, -700], [560, -520], [520, -320], [380, -200],
-      [260, -260], [240, -500],
+      [-1000, -560], [-900, -760], [-760, -940], [-560, -1040], [-320, -1000], [-150, -900],
+      [-130, -640], [-150, -420], [-260, -260], [-420, -200], [-600, -220], [-760, -300], [-900, -420],
     ],
+  },
+  {
+    // THE NORTH PINES, EAST — the other half, west of the inflow valley
+    name: 'north-pines-east', kind: 'pine', density: 0.85, edge: 50,
+    shore: [
+      [130, -900], [250, -1000], [420, -1060], [560, -980], [640, -820], [600, -640],
+      [560, -480], [500, -330], [400, -240], [280, -260], [150, -420], [130, -700],
+    ],
+  },
+  {
+    // THE EASTBANK — mixed wood on the inflow's east bank up the east
+    // foothills to the East Range's foot
+    name: 'eastbank', kind: 'mixed', density: 0.8, edge: 45,
+    shore: [
+      [700, -1000], [860, -1080], [980, -960], [1000, -800], [1050, -600], [1100, -400],
+      [1120, -200], [1100, 0], [1080, 200], [1000, 380], [880, 420], [780, 300],
+      [720, 180], [650, 60], [640, -100], [700, -250], [720, -500], [680, -700], [700, -850],
+    ],
+  },
+  {
+    // THE WEST RANGE PINES — the range's flanks below the snow
+    name: 'range-pines-west', kind: 'pine', density: 0.7, edge: 40,
+    shore: [
+      [-1150, -950], [-1050, -700], [-1100, -420], [-1140, -150], [-1180, 120], [-1150, 360],
+      [-1100, 580], [-1000, 780], [-1120, 820], [-1280, 700], [-1400, 500], [-1450, 250],
+      [-1480, 0], [-1500, -250], [-1520, -500], [-1500, -760], [-1420, -1000], [-1280, -1060],
+    ],
+  },
+  {
+    // THE EAST RANGE PINES
+    name: 'range-pines-east', kind: 'pine', density: 0.7, edge: 40,
+    shore: [
+      [1100, -1150], [1250, -1200], [1400, -1000], [1450, -800], [1480, -600], [1500, -400],
+      [1520, -200], [1500, 0], [1450, 200], [1380, 380], [1250, 420], [1150, 300],
+      [1180, 100], [1200, -100], [1150, -300], [1130, -500], [1100, -700], [1080, -900],
+    ],
+  },
+  {
+    // THE HORNS PINES — over the Northern Horns
+    name: 'horns-pines', kind: 'pine', density: 0.7, edge: 40,
+    shore: [
+      [-1150, -1150], [-1000, -1300], [-800, -1400], [-600, -1500], [-400, -1540], [-300, -1440],
+      [-450, -1330], [-600, -1240], [-750, -1160], [-900, -1080], [-1050, -1050],
+    ],
+  },
+  {
+    // THE NORTH FOOTHILLS WOOD — mixed, between the volcano's NE flank and the
+    // East Range's northern end
+    name: 'north-foothills', kind: 'mixed', density: 0.75, edge: 45,
+    shore: [
+      [400, -1500], [560, -1560], [760, -1480], [900, -1320], [980, -1150], [900, -1020],
+      [760, -1030], [620, -1140], [500, -1280], [420, -1400],
+    ],
+  },
+  {
+    // THE VOLCANO SKIRTS — mixed woods on the cone's lower flanks, NW and NE,
+    // leaving the south approach open
+    name: 'skirt-west', kind: 'mixed', density: 0.7, edge: 40,
+    shore: [[-750, -980], [-600, -1150], [-420, -1260], [-300, -1160], [-330, -980], [-450, -860], [-620, -840]],
+  },
+  {
+    name: 'skirt-east', kind: 'mixed', density: 0.7, edge: 40,
+    shore: [[300, -1160], [430, -1280], [600, -1200], [620, -1040], [500, -900], [350, -880], [280, -1000]],
+  },
+  {
+    // THE SOUTH-EAST WOOD — between the outflow and the east coast, south of
+    // the swamp
+    name: 'southeast', kind: 'broadleaf', density: 0.8, edge: 45,
+    shore: [
+      [900, 700], [1000, 520], [1150, 440], [1300, 450], [1420, 600], [1460, 800], [1450, 1000],
+      [1350, 1150], [1200, 1250], [1050, 1180], [980, 1000], [900, 850],
+    ],
+  },
+  {
+    // THE EAST COAST WOOD — the strip under the East Range's seaward side
+    name: 'east-coast', kind: 'broadleaf', density: 0.75, edge: 40,
+    shore: [[1420, 450], [1520, 500], [1540, 700], [1480, 880], [1400, 800], [1380, 600]],
   },
 ]
 
@@ -208,15 +381,27 @@ export const FORESTS = [
 export const RUINS = [
   { tag: 'beach-statue', x: 180, z: 1500 }, // the spawn beach's east end, pointing inland
   { tag: 'coast-shrine', x: 560, z: 1480 }, // the root of East Head, looking over the Estuary Bay
-  { tag: 'forest-temple', x: -80, z: 380 }, // the Holm glade, heart of the ring
-  { tag: 'highland-arch', x: 850, z: -250 }, // the open rise between the inflow and the East Range
-  { tag: 'foothill-vault', x: -820, z: -420 }, // the highland shelf under the West Range
+  { tag: 'forest-temple', x: -60, z: 380 }, // the Holm glade, heart of the ring
+  { tag: 'highland-arch', x: 660, z: -240 }, // the terrace on the inflow's east bank, under the east foothills
+  { tag: 'foothill-vault', x: -760, z: -320 }, // the shelf between the west foothills and the pines
   { tag: 'caldera-gate', x: 0, z: -690 }, // the volcano's south foot, on the open approach
 ]
 
 export const CLEARINGS = [
   // the Holm glade — the temple's clearing at the heart of the ring
-  [[-140, 340], [-100, 320], [-40, 325], [-10, 360], [-20, 410], [-60, 440], [-110, 435], [-145, 395]],
+  [[-125, 335], [-85, 312], [-20, 320], [15, 362], [0, 415], [-45, 445], [-100, 438], [-135, 395]],
+  // the vault glade (foothill-vault -760,-320)
+  [[-800, -350], [-770, -365], [-730, -350], [-720, -318], [-735, -288], [-770, -280], [-800, -300]],
+  // the arch glade (highland-arch 660,-240)
+  [[625, -270], [655, -285], [690, -270], [700, -238], [685, -208], [655, -200], [625, -215]],
+  // the shrine glade (coast-shrine 560,1480)
+  [[520, 1455], [555, 1440], [595, 1455], [605, 1485], [585, 1512], [550, 1520], [520, 1500]],
+  // the statue glade (beach-statue 180,1500)
+  [[140, 1478], [180, 1462], [220, 1478], [230, 1505], [205, 1528], [165, 1530], [138, 1508]],
+  // the south meadow — a break in the Southwood halfway to the ring
+  [[-120, 1250], [-60, 1230], [20, 1250], [50, 1300], [20, 1350], [-50, 1365], [-110, 1330], [-135, 1285]],
+  // the bank meadow — open ground on the Eastbank above the inflow
+  [[860, -80], [920, -100], [980, -70], [990, -10], [950, 40], [880, 40], [850, -20]],
 ]
 
 /** Signed distance to a traced polygon: negative inside. */

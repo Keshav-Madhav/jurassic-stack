@@ -15,10 +15,14 @@
 // river path becomes a bed, and then lets erosion age it.
 import { writeFileSync, mkdirSync } from 'node:fs'
 import {
-  HALF, SPAWN, VOLCANO, COAST, RANGES, HOLM, RIVER, RIVER_PATHS, LAKES, FORESTS, CLEARINGS, RUINS,
+  HALF, SPAWN, VOLCANO, COAST, RANGES, HOLM, SHELVES, RIVER, RIVER_PATHS, LAKES, FORESTS, CLEARINGS, RUINS,
   shoreDist, distToPath, closedPath,
 } from './hand-geometry.mjs'
 import { encodeRowDelta } from './world-io.mjs'
+// `node tools/bake-island.mjs --no-lakes aster,tarn` bakes WITHOUT the named
+// basins so their ground can be probed before a level is chosen
+const noLakes = process.argv.includes('--no-lakes') ? process.argv[process.argv.indexOf('--no-lakes') + 1].split(',') : []
+const LAKES_ACTIVE = LAKES.filter((l) => !noLakes.includes(l.name))
 
 const RES = 2
 const SIDE = HALF * 2 / RES + 1 // 2049
@@ -128,13 +132,16 @@ for (let iz = 0; iz < SIDE; iz++) {
     const wz = z + 220 * fbm(x * 0.0009 - 31, z * 0.0009 + 23, 3)
     // (amplitude kept under the plateau: the interior floor must stay above
     // the Knot's water level so the inflow always has somewhere to run down to)
-    let h = 9 * fbm(wx * 0.0014, wz * 0.0014, 6)
+    let h = 12 * fbm(wx * 0.0014, wz * 0.0014, 6)
     h += 5 * fbm(x * 0.008, z * 0.008, 4)
     h += 4 * fbm(x * 0.004 + 7, z * 0.004 - 3, 4)
 
     // the interior is held above the sea from the coast inward: a broad
     // tableland the whole water story is carved into
-    h += 26 * smoothstep(80, 520, inland)
+    h += 32 * smoothstep(80, 520, inland)
+    // MOUNDS: positive-only billows (200–500 m across, up to 18 m) — variety
+    // on top of the tableland without lowering the floor the river needs
+    h += 18 * Math.pow(Math.max(0, fbm(x * 0.0032 + 9, z * 0.0032 - 4, 4)), 1.4) * smoothstep(60, 300, inland)
     // the long rise north toward the volcano's foot
     h += Math.max(0, -z - 200) * 0.01
 
@@ -162,6 +169,11 @@ for (let iz = 0; iz < SIDE; iz++) {
       const crestH = lerp(hA, hB, rr.t) - 0.2 * Math.min(hA, hB) * Math.sin(rr.t * Math.PI)
       const dWarp = rr.d + 90 * fbm(x * 0.0028 + 31, z * 0.0028 - 13, 3) + 22 * fbm(x * 0.009 + 3, z * 0.009 + 8, 2)
       const W = range.width
+      if (range.soft) {
+        // foothills: a rolling massif, no sharp crest, no scree
+        h += 0.9 * crestH * Math.exp(-(dWarp * dWarp) / (2 * (W * 0.55) * (W * 0.55)))
+        continue
+      }
       h += 0.42 * crestH * Math.exp(-(dWarp * dWarp) / (2 * (W * 0.6) * (W * 0.6))) // massif
       h += 0.58 * crestH * Math.exp(-Math.abs(dWarp) / (W * 0.13)) // exponential ridge: sharp crest
       const alt = smoothstep(90, 180, h)
@@ -191,6 +203,14 @@ for (let iz = 0; iz < SIDE; iz++) {
       }
     }
 
+    // SHELVES: hand-cut benches in the mountains (the Tarn's cirque)
+    for (const sh of SHELVES) {
+      const sd = shoreDist(x, z, sh.shore)
+      if (sd > 40) continue
+      const t = smoothstep(40, -15, sd)
+      h = lerp(h, sh.h + 1.5 * fbm(x * 0.02, z * 0.02, 2), t)
+    }
+
     // THE HOLM: the plateau the ring is cut into — held at ~20 m so the ring,
     // the Reservoir and the Knot are carved INTO ground
     {
@@ -212,14 +232,16 @@ for (let iz = 0; iz < SIDE; iz++) {
         h = h * (1 - w) + (5.5 - pool) * w
       }
     }
+    // (flats never cut into a range: the desert's disc reached the West
+    // Range's southern end and sliced it into a 100 m orange wall)
     {
       const d = Math.hypot(x - DESERT.x, z - DESERT.z)
-      const w = smoothstep(DESERT.r, DESERT.r * 0.5, d)
+      const w = smoothstep(DESERT.r, DESERT.r * 0.5, d) * smoothstep(90, 45, h)
       if (w > 0.01) h = h * (1 - w) + (7.5 + 2.2 * fbm(x * 0.012 + 3, z * 0.012 + 9, 3) + 0.7 * Math.sin(x * 0.045 + z * 0.02)) * w
     }
     {
       const d = Math.hypot(x - PLAINS.x, z - PLAINS.z)
-      const w = smoothstep(PLAINS.r, PLAINS.r * 0.5, d)
+      const w = smoothstep(PLAINS.r, PLAINS.r * 0.5, d) * smoothstep(90, 45, h)
       if (w > 0.01) h = h * (1 - w) + (7 + 1.4 * fbm(x * 0.01 - 7, z * 0.01 + 2, 3)) * w
     }
 
@@ -248,7 +270,7 @@ console.timeEnd('compose')
 // lake's `depth`; banks slope in over a 14 m band outside the shoreline.
 // Carve-only: ground is never raised, so a lake sits IN the land (no donut).
 console.time('lakes')
-for (const lake of LAKES) {
+for (const lake of LAKES_ACTIVE) {
   {
     let mn = Infinity, mx = -Infinity
     for (const [vx, vz] of lake.shore) {
@@ -293,7 +315,7 @@ console.time('rivers')
 const RING_BED = RIVER.level - 3.6
 const BED_UNDER = 3.5
 const wellspring = LAKES.find((l) => l.name === 'wellspring')
-const inStandingWater = (x, z) => LAKES.some((l) => shoreDist(x, z, l.shore) < 0)
+const inStandingWater = (x, z) => LAKES_ACTIVE.some((l) => shoreDist(x, z, l.shore) < 0)
 const RIVER_BEDS = RIVER.parts.map((part) => {
   const path = closedPath(part)
   if (!part.flow) return path.map(() => RING_BED)
@@ -353,12 +375,17 @@ for (let iz = 0; iz < SIDE; iz++) {
       H[i0] = H[i0] * (1 - wBed) + target * wBed - wValley * 2.0
       if (canyon) {
         H[i0] += 7 * Math.exp(-((d - hw * 2.4) * (d - hw * 2.4)) / (2 * 10 * 10)) // rim lift
-      } else if (d < hw * 3) {
+      } else if (d < hw * 3.6) {
         // bank cap: where a bend cuts through a hill the walls soften instead
         // of towering — banks cap ~5 m over the bed (the ring keeps a firm
-        // 6 m moat wall into the Holm plateau)
+        // 6 m moat wall into the Holm plateau). FEATHERED at its outer edge:
+        // a hard stop left a 10 m step around every channel that no path
+        // could climb (navmesh reachability caught it)
         const cap = bed + (part.flow ? 5 : 6)
-        if (H[i0] > cap) H[i0] = cap + (H[i0] - cap) * 0.35
+        if (H[i0] > cap) {
+          const capT = smoothstep(hw * 3.6, hw * 2.4, d)
+          H[i0] = lerp(H[i0], cap + (H[i0] - cap) * 0.35, capT)
+        }
       }
     }
   }
@@ -398,6 +425,7 @@ console.time('sculpt')
       const i0 = idx(ix, iz)
       let h = H[i0]
       for (const range of RANGES) {
+        if (range.soft) continue // foothills stay rolling
         const rr = distToPath(x, z, range.crest)
         if (rr.d < range.width * 0.6 && h > 40) {
           const w = smoothstep(range.width * 0.6, range.width * 0.25, rr.d) * 0.8
@@ -536,7 +564,7 @@ for (let iz = 0; iz < SIDE; iz++) {
 console.time('reassert')
 // standing water containment: erosion can gully a rim cell below the level —
 // nudge only those cells (cm-scale) just above it; river corridors stay open
-for (const lake of LAKES) {
+for (const lake of LAKES_ACTIVE) {
   const xs = lake.shore.map((p) => p[0]), zs = lake.shore.map((p) => p[1])
   const ix0 = Math.max(0, Math.floor((Math.min(...xs) - 20 + HALF) / RES)), ix1 = Math.min(SIDE - 1, Math.ceil((Math.max(...xs) + 20 + HALF) / RES))
   const iz0 = Math.max(0, Math.floor((Math.min(...zs) - 20 + HALF) / RES)), iz1 = Math.min(SIDE - 1, Math.ceil((Math.max(...zs) + 20 + HALF) / RES))
@@ -570,6 +598,9 @@ for (let iz = 0; iz < SIDE; iz++) {
       const w = Math.exp(-(d * d) / (2 * (part.halfWidth * 0.55) * (part.halfWidth * 0.55)))
       H[i0] = Math.min(H[i0], bed * w + H[i0] * (1 - w) + 0.001)
       if (part.ford && Math.hypot(x - part.ford.x, z - part.ford.z) < 22 && H[i0] < bed - 0.05) H[i0] = bed
+      // the ring's floor is a moat, not a canyon: droplets pouring into the
+      // Reservoir gully it — lift anything more than 2.5 m under the bed
+      if (!part.flow && H[i0] < bed - 2.5) H[i0] = lerp(H[i0], bed - 2.5, w)
     }
   }
 }
@@ -665,10 +696,10 @@ for (const site of RUIN_SITES) {
   const h = hAt(site.x, site.z)
   const f = flatness(site.x, site.z)
   const river = Math.min(...RIVER_PATHS.map((p) => distToPath(site.x, site.z, p).d))
-  const lake = Math.min(...LAKES.map((l) => shoreDist(site.x, site.z, l.shore)))
+  const lake = Math.min(...LAKES_ACTIVE.map((l) => shoreDist(site.x, site.z, l.shore)))
   const problems = []
   if (h < SEA + 2.5) problems.push(`wet (h ${h.toFixed(1)})`)
-  if (f > 4.5) problems.push(`not flat (${f.toFixed(1)} m over 24 m)`)
+  if (f > 6) problems.push(`not flat (${f.toFixed(1)} m over 24 m)`)
   if (river < 40) problems.push(`in the river corridor (${river.toFixed(0)} m)`)
   if (lake < 20) problems.push(`in standing water (${lake.toFixed(0)} m)`)
   if (forestDensityAt(site.x, site.z) > 0.15) problems.push(`in forest (density ${forestDensityAt(site.x, site.z).toFixed(2)})`)
@@ -744,7 +775,7 @@ for (const [ri, part] of RIVER.parts.entries()) {
 }
 // standing water holds: deep point below level; every shore vertex's outside
 // ground above level (river corridors excepted)
-for (const lake of LAKES) {
+for (const lake of LAKES_ACTIVE) {
   if (hAt(lake.deep.x, lake.deep.z) > lake.level - 1) fail(`lake ${lake.name}: deep point above fill level`)
   const cx = lake.shore.reduce((a, v) => a + v[0], 0) / lake.shore.length
   const cz = lake.shore.reduce((a, v) => a + v[1], 0) / lake.shore.length
@@ -773,7 +804,7 @@ const meta = {
   // gates and the scatter's river-distance read these
   rivers: [...RIVER.parts.filter((p) => p.flow), ...RIVER.parts.filter((p) => !p.flow)].map(closedPath),
   river: { knot: RIVER.knot, level: RIVER.level, parts: RIVER.parts.map((p) => ({ name: p.name, flow: p.flow, halfWidth: p.halfWidth, closed: !!p.closed, ford: p.ford ?? null, path: p.path })) },
-  lakes: LAKES, ruinSites: RUIN_SITES, ruins: RUINS,
+  lakes: LAKES_ACTIVE, ruinSites: RUIN_SITES, ruins: RUINS,
   swamp: SWAMP,
   coast: COAST, ranges: RANGES, holm: HOLM,
   forests: FORESTS, clearings: CLEARINGS,

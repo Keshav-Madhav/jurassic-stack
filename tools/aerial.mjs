@@ -17,6 +17,9 @@ const shots = [
   ['wellspring', 1330, 240, -1000, 0.75, -0.42, 0.5], // the gorge mouth on the NE coast
   ['inflow-valley', 1050, 380, -300, 0.6, -0.45, 0.5], // the inflow leg below the East Range
   ['west-range', -650, 420, -100, 1.57, -0.2, 0.55], // the West Range from the interior
+  ['lake-aster', -600, 300, 600, 0.9, -0.5, 0.5], // Lake Aster against the range's foot
+  ['tarn', -1100, 330, 500, 1.2, -0.35, 0.5], // the Alpine Tarn on its bench
+  ['foothills', -700, 220, -900, 0.6, -0.3, 0.5], // west foothills + the Horns
   ['volcano-south', 0, 260, -200, 0, -0.08, 0.5], // the caldera approach
   ['estuary', 1050, 380, 1600, 0.25, -0.5, 0.5], // the outflow's mouth in Estuary Bay
   ['spawn-eye', 0, 1.7, 1560, 0, 0.04, 0.5], // what you wake up to

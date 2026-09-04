@@ -58,7 +58,9 @@ if (!success) {
 }
 
 // ---------- reachability validation ----------
-const query = new NavMeshQuery(navMesh)
+// 4 km paths need a deep A* node pool: the default ran out mid-island and
+// reported reachable sites as "stops short"
+const query = new NavMeshQuery(navMesh, { maxNodes: 65535 })
 const HALF_EXT = { x: 8, y: 30, z: 8 }
 const start = { x: meta.spawn.x, y: 3, z: meta.spawn.z }
 let failed = false
@@ -77,7 +79,7 @@ for (const t of targets) {
   const end = path[path.length - 1]
   const gap = Math.hypot(end.x - t.x, end.z - t.z)
   if (gap > 20) {
-    console.error(`REACHABILITY FAIL: path to ${t.name} stops ${gap.toFixed(0)}m short`)
+    console.error(`REACHABILITY FAIL: path to ${t.name} stops ${gap.toFixed(0)}m short, at (${end.x.toFixed(0)},${end.z.toFixed(0)})`)
     failed = true
   } else {
     console.log(`PASS spawn → ${t.name}: ${path.length} waypoints`)

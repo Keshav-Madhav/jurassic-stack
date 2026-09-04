@@ -118,15 +118,16 @@ const SPECS: Record<NodeKind, PlaceSpec> = {
   // the line; elders stand only in the old-growth cores of broadleaf woods.
   tree: {
     cell: 9, chance: 0.82, sMin: 11, sMax: 17, cap: 80000, seed: 101, woodland: true,
-    habitat: (h, _ny, f, _rd, k) => f > -0.4 && h > 3.2 && (k === FOREST_KIND.BROADLEAF || k === FOREST_KIND.MIXED),
+    // altitude caps: broadleaf to ~130 m, pines to ~210 m; above is alpine rock
+    habitat: (h, _ny, f, _rd, k) => f > -0.4 && h > 3.2 && h < 130 && (k === FOREST_KIND.BROADLEAF || k === FOREST_KIND.MIXED),
   },
   elder: {
     cell: 36, chance: 0.62, sMin: 36, sMax: 52, cap: 2400, seed: 121,
-    habitat: (h, _ny, f, _rd, k) => f > 0.5 && h > 4 && k === FOREST_KIND.BROADLEAF,
+    habitat: (h, _ny, f, _rd, k) => f > 0.5 && h > 4 && h < 100 && k === FOREST_KIND.BROADLEAF,
   },
   pine: {
     cell: 7, chance: 0.78, sMin: 10, sMax: 20, cap: 64000, seed: 202, woodland: true,
-    habitat: (h, _ny, f, _rd, k) => f > -0.45 && h > 6 && (k === FOREST_KIND.PINE || k === FOREST_KIND.MIXED),
+    habitat: (h, _ny, f, _rd, k) => f > -0.45 && h > 6 && h < 210 && (k === FOREST_KIND.PINE || k === FOREST_KIND.MIXED),
   },
   // dead trees: the dry open country outside the wood line (and the swamp)
   deadtree: { cell: 64, chance: 0.28, sMin: 4, sMax: 8, cap: 2000, seed: 707, habitat: (h, _ny, f) => f < -0.7 && h > 4 },
@@ -158,7 +159,7 @@ const COVER_DRAW_DIST = 340
 /** Tree LOD bands per supercell (viewer distance to cell centre): built
  *  trees swap to 20-tri leaf masses beyond FAR, and every tree kind becomes
  *  a ~40-tri trunk-and-blob beyond DOT (a few pixels tall in the haze). */
-const TREE_LOD_FAR = 240
+const TREE_LOD_FAR = 180
 const TREE_LOD_DOT = 900
 const DOT_KINDS: Partial<Record<NodeKind, 'canopy' | 'elder' | 'pine' | 'palm' | 'bare'>> = {
   tree: 'canopy', elder: 'elder', pine: 'pine', palm: 'palm', deadtree: 'bare', willow: 'canopy',

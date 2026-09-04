@@ -23,6 +23,7 @@ import { saveGame, loadGame, SAVE_VERSION, type SaveFile } from './save'
 import { heightAt, loadHeightmap, worldMeta, SPAWN } from './heightmap'
 import { loadNavmesh, findPath } from './navmesh'
 import { WaterSystem } from './water'
+import { wildPopulation } from './population'
 
 const SWING_COOLDOWN = 0.45
 const REACH = 3.2
@@ -149,22 +150,10 @@ async function boot(): Promise<void> {
       d.state = 'tamed'
     }
   }
-  {
-    // wild roster (fresh every load): packs + herds across the south half,
-    // apexes in the north
-    const WILD: [string, number, number][] = [
-      ['raptor', SPAWN.x + 26, SPAWN.z - 30], ['raptor', SPAWN.x - 40, SPAWN.z - 55],
-      ['raptor', SPAWN.x + 90, SPAWN.z - 120], ['raptor', SPAWN.x - 120, SPAWN.z - 160],
-      ['raptor', 60, 80], ['raptor', 75, 95], ['raptor', -320, -60], ['raptor', -338, -48],
-      ['raptor', 420, -180], ['raptor', -150, 520], ['raptor', 250, 550], ['raptor', -60, 300],
-      ['trike', 150, 430], ['trike', 190, 460], ['trike', 170, 405], ['trike', -480, 330],
-      ['trike', -80, 620], ['trike', -110, 650],
-      ['stego', -220, 280], ['stego', -195, 255], ['stego', 330, 170], ['stego', 520, 420],
-      ['stego', 100, 200],
-      ['trex', 40, -280], ['trex', -260, -380],
-    ]
-    for (const [sp, x, z] of WILD) spawnDino(sp, x, z)
-  }
+  // wild roster (fresh every load): ~200 across the island by habitat —
+  // packs in the woods, herds on the open ground, rexes in the north. Far
+  // ones sleep (Dino.dormant), so the count costs nothing until you arrive.
+  for (const w of wildPopulation()) spawnDino(w.species, w.x, w.z)
 
   const hud = new Hud(document.getElementById('hud')!, inventory, (id) => {
     if (inventory.craftById(id)) hud.toast(`Crafted ${ITEMS[id].name}`)
@@ -800,7 +789,7 @@ async function boot(): Promise<void> {
     for (const d of dinos) {
       if (d.state !== 'aggro' || !d.object.visible) continue
       for (const o of dinos) {
-        if (o === d || o.state === 'tamed' || o.state === 'ko' || !o.object.visible) continue
+        if (o === d || o.state === 'tamed' || o.state === 'ko' || !o.object.visible || o.dormant) continue
         if (o.species.id === d.species.id && o.object.position.distanceTo(d.object.position) < d.species.packRange) {
           o.joinPack()
         }
@@ -809,9 +798,10 @@ async function boot(): Promise<void> {
     // dino-dino separation + player-dino body push (soft, gameplay-level)
     for (let i = 0; i < dinos.length; i++) {
       const a = dinos[i]
-      if (!a.object.visible) continue
+      if (!a.object.visible || a.dormant) continue
       for (let j = i + 1; j < dinos.length; j++) {
         const b = dinos[j]
+        if (b.dormant) continue
         if (!b.object.visible) continue
         const dx = b.object.position.x - a.object.position.x
         const dz = b.object.position.z - a.object.position.z
