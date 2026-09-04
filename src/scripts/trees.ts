@@ -405,3 +405,80 @@ export function buildReeds(seed: number): THREE.Group {
   }
   return finish(parts, `Reeds_${seed}`)
 }
+
+// ---------- ground clutter + rock (mandate items 5 and 7) ----------
+const STONE = new THREE.Color(0x5e5b56)
+const STONE_LIT = new THREE.Color(0x8a867e)
+const STONE_WARM = new THREE.Color(0x6e6254)
+/** A lumpy stone, squashed; `r` in the unit prop's own scale. */
+function stone(cx: number, cy: number, cz: number, r: number, rand: () => number, detail = 0): THREE.BufferGeometry {
+  const save = massDetail
+  massDetail = detail
+  const g = leafMass(cx, cy, cz, r * (0.8 + rand() * 0.5), r * (0.45 + rand() * 0.3), r * (0.8 + rand() * 0.5), _c.copy(STONE).lerp(rand() < 0.5 ? STONE_LIT : STONE_WARM, rand() * 0.7), rand)
+  massDetail = save
+  return g
+}
+
+/** Pebbles: a handful of small stones in a spill, unit ~0.4 m. ~100 tris. */
+export function buildPebbles(seed: number): THREE.Group {
+  const rand = mulberry32(seed)
+  const parts: THREE.BufferGeometry[] = []
+  const n = 4 + Math.floor(rand() * 4)
+  for (let i = 0; i < n; i++) {
+    const r = 0.12 + rand() * 0.18
+    parts.push(stone((rand() - 0.5) * 1.6, r * 0.35, (rand() - 0.5) * 1.6, r, rand))
+  }
+  return finish(parts, `Pebbles_${seed}`)
+}
+
+/** Stones: two or three knee-high rocks together, unit ~1 m. ~250 tris. */
+export function buildStones(seed: number): THREE.Group {
+  const rand = mulberry32(seed)
+  const parts: THREE.BufferGeometry[] = []
+  const n = 2 + Math.floor(rand() * 2)
+  for (let i = 0; i < n; i++) {
+    const r = 0.3 + rand() * 0.35
+    parts.push(stone((rand() - 0.5) * 1.1, r * 0.4, (rand() - 0.5) * 1.1, r, rand, 1))
+  }
+  return finish(parts, `Stones_${seed}`)
+}
+
+/** Sticks: fallen branches lying on the ground, unit ~0.3 m tall. ~40 tris. */
+export function buildSticks(seed: number): THREE.Group {
+  const rand = mulberry32(seed)
+  const parts: THREE.BufferGeometry[] = []
+  const n = 2 + Math.floor(rand() * 2)
+  for (let i = 0; i < n; i++) {
+    const ang = rand() * Math.PI * 2
+    const len = 0.8 + rand() * 1.2
+    const a = new THREE.Vector3(Math.cos(ang) * -len / 2, 0.05, Math.sin(ang) * -len / 2)
+    const b = new THREE.Vector3(Math.cos(ang) * len / 2, 0.05 + rand() * 0.25, Math.sin(ang) * len / 2)
+    const st = limb(a, b, 0.05 + rand() * 0.03, 0.025, 4, rand)
+    paint(st, _c.copy(BARK).lerp(TWIG, rand() * 0.6), 0.12, rand); parts.push(st)
+    if (rand() < 0.6) {
+      const m = a.clone().lerp(b, 0.4 + rand() * 0.3)
+      const tip = new THREE.Vector3(m.x + (rand() - 0.5) * 0.6, m.y + 0.1 + rand() * 0.2, m.z + (rand() - 0.5) * 0.6)
+      const br = limb(m, tip, 0.025, 0.008, 3, rand)
+      paint(br, TWIG, 0.1, rand); parts.push(br)
+    }
+  }
+  return finish(parts, `Sticks_${seed}`)
+}
+
+/**
+ * An outcrop: a formation of four to six boulders leaning together, unit
+ * height (place at 5-14 m) — the rock the hills and cliffs were missing.
+ */
+export function buildOutcrop(seed: number, far = false): THREE.Group {
+  const rand = mulberry32(seed)
+  const parts: THREE.BufferGeometry[] = []
+  const n = 4 + Math.floor(rand() * 3)
+  for (let i = 0; i < n; i++) {
+    const r = 0.28 + rand() * 0.3
+    const ang = rand() * Math.PI * 2
+    const rad = rand() * 0.35
+    parts.push(stone(Math.cos(ang) * rad, r * 0.55 + rand() * 0.2, Math.sin(ang) * rad, r, rand, far ? 0 : 1))
+  }
+  parts.push(stone(0, 0.62, 0, 0.42, rand, far ? 0 : 1)) // the crown stone
+  return finish(parts, `Outcrop_${seed}${far ? '_far' : ''}`)
+}

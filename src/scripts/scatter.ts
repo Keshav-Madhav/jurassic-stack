@@ -13,7 +13,7 @@ import RAPIER from '@dimforge/rapier3d-compat'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import { heightAt, lodFloorAt, normalAt, forestMaskAt, forestKindAt, biomeAt, shoreDist, BIOME, FOREST_KIND, SEA_LEVEL, HALF_SIZE, SPAWN, VOLCANO, worldMeta } from './heightmap'
-import { buildCanopyTree, buildElderTree, buildDotTree, buildFarPine, buildMushroom, buildRedwood, buildMangrove, buildDriedBush, buildCactus, buildReeds } from './trees'
+import { buildCanopyTree, buildElderTree, buildDotTree, buildFarPine, buildMushroom, buildRedwood, buildMangrove, buildDriedBush, buildCactus, buildReeds, buildPebbles, buildStones, buildSticks, buildOutcrop } from './trees'
 import { CHUNK_SIZE, CHUNKS_PER_SIDE } from './terrain'
 import { addObstacle } from './obstacles'
 import type { Physics } from './physics'
@@ -23,6 +23,7 @@ export type NodeKind =
   | 'tree' | 'elder' | 'redwood' | 'pine' | 'deadtree' | 'palm' | 'willow' | 'mangrove'
   | 'rock' | 'log' | 'bush' | 'fern' | 'flower' | 'grass' | 'mushroom'
   | 'driedbush' | 'cactus' | 'reeds'
+  | 'pebbles' | 'stones' | 'sticks' | 'boulder' | 'outcrop'
 
 export interface ScatterNode {
   id: number
@@ -58,10 +59,15 @@ const NODE_DEFS: Record<NodeKind, { hp: number; yields: Partial<Record<ItemId, [
   driedbush: { hp: 1, yields: { wood: [1, 1], fiber: [1, 2] } },
   cactus: { hp: 2, yields: { fiber: [1, 2], berry: [0, 1] } },
   reeds: { hp: 1, yields: { fiber: [2, 3] } },
+  pebbles: { hp: 1, yields: { stone: [1, 2], flint: [0, 1] } },
+  stones: { hp: 2, yields: { stone: [2, 3], flint: [0, 1] } },
+  sticks: { hp: 1, yields: { wood: [1, 2] } },
+  boulder: { hp: 5, yields: { stone: [4, 7], flint: [1, 2] } },
+  outcrop: { hp: 8, yields: { stone: [6, 10], flint: [1, 3] } },
 }
 
 /** Kinds whose trunks get physics cylinders (rocks: squat cylinders too). */
-const TRUNK_KINDS = new Set<NodeKind>(['tree', 'elder', 'redwood', 'pine', 'palm', 'deadtree', 'willow', 'rock', 'mangrove', 'cactus'])
+const TRUNK_KINDS = new Set<NodeKind>(['tree', 'elder', 'redwood', 'pine', 'palm', 'deadtree', 'willow', 'rock', 'mangrove', 'cactus', 'boulder', 'outcrop'])
 /** Single-trunk canopy kinds: wide crowns in the air, so slope under the
  *  footprint doesn't matter (the flatness guard is for merged groves). */
 const CANOPY_KINDS = new Set<NodeKind>(['tree', 'elder', 'redwood', 'mangrove'])
@@ -72,7 +78,7 @@ interface ModelRef {
   /** optional named sub-node to extract (variant packs) */
   node?: string
   /** … or a tree built in code (trees.ts), deterministic per seed */
-  gen?: 'canopy' | 'elder' | 'mushroom' | 'redwood' | 'mangrove' | 'driedbush' | 'cactus' | 'reeds'
+  gen?: 'canopy' | 'elder' | 'mushroom' | 'redwood' | 'mangrove' | 'driedbush' | 'cactus' | 'reeds' | 'pebbles' | 'stones' | 'sticks' | 'outcrop'
   seed?: number
 }
 
@@ -105,6 +111,13 @@ const KIND_MODELS: Record<NodeKind, ModelRef[]> = {
   driedbush: [{ gen: 'driedbush', seed: 61 }, { gen: 'driedbush', seed: 62 }],
   cactus: [{ gen: 'cactus', seed: 71 }, { gen: 'cactus', seed: 72 }],
   reeds: [{ gen: 'reeds', seed: 81 }],
+  // the ground: what a real forest floor and hillside are littered with
+  pebbles: [{ gen: 'pebbles', seed: 91 }, { gen: 'pebbles', seed: 92 }],
+  stones: [{ gen: 'stones', seed: 93 }, { gen: 'stones', seed: 94 }],
+  sticks: [{ gen: 'sticks', seed: 95 }, { gen: 'sticks', seed: 96 }],
+  // the rock: boulders (the Quaternius rocks, big) and built outcrops
+  boulder: [{ file: 'Rock1' }, { file: 'Rock2' }],
+  outcrop: [{ gen: 'outcrop', seed: 97 }, { gen: 'outcrop', seed: 98 }],
 }
 
 /** cell size, base chance, scale range, cap, seed, habitat rule */
@@ -167,6 +180,15 @@ const SPECS: Record<NodeKind, PlaceSpec> = {
   // THE DESERT: cacti and dried bushes over the dune flats
   driedbush: { cell: 10, chance: 0.55, sMin: 1, sMax: 2, cap: 12000, seed: 666, habitat: (h) => h > 3 },
   cactus: { cell: 18, chance: 0.5, sMin: 2.5, sMax: 5, cap: 3000, seed: 777, habitat: (h) => h > 4 },
+  // GROUND CLUTTER (mandate item 5): pebbles everywhere, sticks under trees,
+  // stones on open and rising ground — all cover, culled close
+  pebbles: { cell: 9, chance: 0.5, sMin: 0.3, sMax: 0.6, cap: 60000, seed: 888, habitat: (h) => h > 2 },
+  sticks: { cell: 11, chance: 0.55, sMin: 0.25, sMax: 0.45, cap: 40000, seed: 999, habitat: (h, _ny, f) => f > -0.4 && h > 3 },
+  stones: { cell: 20, chance: 0.45, sMin: 0.7, sMax: 1.4, cap: 16000, seed: 1010, habitat: (h) => h > 3 },
+  // ROCK (mandate item 7): boulders on slopes and hills, outcrops where the
+  // ground rises hard — cliffs, foothill crests, the ranges' feet
+  boulder: { cell: 34, chance: 0.45, sMin: 3, sMax: 8, cap: 6000, seed: 1111, habitat: (h, ny) => h > 6 && (ny < 0.94 || h > 40) },
+  outcrop: { cell: 58, chance: 0.5, sMin: 5, sMax: 14, cap: 2400, seed: 1212, habitat: (h, ny) => h > 12 && ny < 0.9 },
 }
 
 const RESPAWN_MS = 240_000
@@ -176,7 +198,9 @@ const RESPAWN_MS = 240_000
  *  Distance tests use the cell's bounding box, not its centre. */
 const SUPER = 256
 /** Ground-cover kinds: no shadow casting, distance-culled. */
-const GROUND_COVER = new Set<NodeKind>(['grass', 'fern', 'flower', 'mushroom', 'log', 'bush', 'driedbush', 'reeds'])
+const GROUND_COVER = new Set<NodeKind>(['grass', 'fern', 'flower', 'mushroom', 'log', 'bush', 'driedbush', 'reeds', 'pebbles', 'sticks', 'stones'])
+/** small clutter vanishes sooner than bushes — a pebble is nothing at 100 m */
+const COVER_DIST_OVERRIDE: Partial<Record<NodeKind, number>> = { pebbles: 110, sticks: 120, stones: 200, mushroom: 150, flower: 200 }
 /** Cover cells beyond this range from the player are hidden entirely. */
 const COVER_DRAW_DIST = 290
 /** Tree LOD bands per supercell (viewer distance to cell centre): built
@@ -190,7 +214,9 @@ const DOT_KINDS: Partial<Record<NodeKind, 'canopy' | 'elder' | 'pine' | 'palm' |
 /** Small solid props (boulders, logs) vanish beyond this — a 2 m rock is a
  *  pixel at 600 m, but 2,000 of them at full geometry are not free. */
 const SMALL_SOLID_DRAW_DIST = 600
-const SMALL_SOLID = new Set<NodeKind>(['rock'])
+const SMALL_SOLID = new Set<NodeKind>(['rock', 'boulder'])
+const SMALL_SOLID_DIST: Partial<Record<NodeKind, number>> = { rock: 600, boulder: 1000 }
+/** outcrops keep their far twin (coarse stones) to the horizon */
 
 function mulberry32(seed: number): () => number {
   let a = seed >>> 0
@@ -408,12 +434,12 @@ export class Scatter {
       if (!ref.gen) continue
       const key = `${ref.gen}:${ref.seed}`
       if (built.has(key)) continue
-      if (ref.gen === 'mushroom' || ref.gen === 'driedbush' || ref.gen === 'cactus' || ref.gen === 'reeds') {
-        const small = { mushroom: buildMushroom, driedbush: buildDriedBush, cactus: buildCactus, reeds: buildReeds }[ref.gen]
+      if (ref.gen === 'mushroom' || ref.gen === 'driedbush' || ref.gen === 'cactus' || ref.gen === 'reeds' || ref.gen === 'pebbles' || ref.gen === 'stones' || ref.gen === 'sticks') {
+        const small = { mushroom: buildMushroom, driedbush: buildDriedBush, cactus: buildCactus, reeds: buildReeds, pebbles: buildPebbles, stones: buildStones, sticks: buildSticks }[ref.gen]
         built.set(key, small(ref.seed ?? 1))
         continue
       }
-      const make = ref.gen === 'elder' ? buildElderTree : ref.gen === 'redwood' ? buildRedwood : ref.gen === 'mangrove' ? buildMangrove : buildCanopyTree
+      const make = ref.gen === 'elder' ? buildElderTree : ref.gen === 'redwood' ? buildRedwood : ref.gen === 'mangrove' ? buildMangrove : ref.gen === 'outcrop' ? buildOutcrop : buildCanopyTree
       built.set(key, make(ref.seed ?? 1))
       built.set(key + ':far', make(ref.seed ?? 1, true))
     }
@@ -453,10 +479,13 @@ export class Scatter {
       const root = rootOf(KIND_MODELS[kind][variant])
       // rocks weather to gray (the ARK reference: stone is gray, not clay)
       const recolor =
-        kind === 'rock'
+        kind === 'rock' || kind === 'boulder'
           ? (mat: THREE.MeshStandardMaterial) => {
+              // stone is gray: drop the clay-orange texture Rock2 ships with
+              // and cap the lightness (Rock1 read as white chalk in the sun)
+              if (mat.map) { mat.map = null; mat.color.setScalar(0.4); mat.needsUpdate = true }
               const lum = mat.color.r * 0.3 + mat.color.g * 0.6 + mat.color.b * 0.1
-              mat.color.setScalar(THREE.MathUtils.clamp(lum * 0.85 + 0.12, 0.18, 0.5))
+              mat.color.setRGB(1, 1.02, 1.06).multiplyScalar(THREE.MathUtils.clamp(lum * 0.8 + 0.1, 0.16, 0.36))
             }
           : kind === 'bush'
             ? (mat: THREE.MeshStandardMaterial) => {
@@ -559,12 +588,12 @@ export class Scatter {
       const ddz = Math.max(meta.minZ - z, 0, z - meta.maxZ)
       const d = Math.hypot(ddx, ddz)
       if (meta.cover) {
-        const visible = d < COVER_DRAW_DIST
+        const visible = d < (COVER_DIST_OVERRIDE[parseGroupKey(key).kind] ?? COVER_DRAW_DIST)
         for (const m of this.props.get(key)!.meshes) m.visible = visible
         continue
       }
       if (meta.small) {
-        const visible = d < SMALL_SOLID_DRAW_DIST
+        const visible = d < (SMALL_SOLID_DIST[parseGroupKey(key).kind] ?? SMALL_SOLID_DRAW_DIST)
         for (const m of this.props.get(key)!.meshes) m.visible = visible
         continue
       }
@@ -611,9 +640,9 @@ export class Scatter {
         }
         if (drowned) continue
         const ny = normalAt(x, z, this.tmpN).y
-        if (ny < (kind === 'rock' ? 0.55 : 0.72)) continue
+        if (ny < (kind === 'rock' || kind === 'boulder' || kind === 'outcrop' ? 0.5 : 0.72)) continue
         const dv = Math.hypot(x - VOLCANO.x, z - VOLCANO.z)
-        if (kind !== 'rock' && kind !== 'deadtree' && dv < 300) continue
+        if (kind !== 'rock' && kind !== 'boulder' && kind !== 'outcrop' && kind !== 'deadtree' && dv < 300) continue
         if (Math.hypot(x - SPAWN.x, z - SPAWN.z) < 14) continue
         const riverD = riverDistAt(x, z)
         if (riverD < 13 && kind !== 'willow') continue // keep channels clear
@@ -636,7 +665,7 @@ export class Scatter {
           if (kind === 'reeds' && (h > table + 0.5 || h < table - 0.4)) continue
           if (kind === 'driedbush' && h < table + 1.2) continue
         } else if (biome === BIOME.DESERT) {
-          if (!(kind === 'rock' || kind === 'deadtree' || kind === 'cactus' || kind === 'driedbush' || (kind === 'grass' && rand() < 0.15) || (kind === 'bush' && rand() < 0.08))) continue
+          if (!(kind === 'rock' || kind === 'boulder' || kind === 'outcrop' || kind === 'pebbles' || kind === 'stones' || kind === 'deadtree' || kind === 'cactus' || kind === 'driedbush' || (kind === 'grass' && rand() < 0.15) || (kind === 'bush' && rand() < 0.08))) continue
         } else {
           // swamp and desert flora stay in their biomes (reeds may line any lake shore)
           if (kind === 'mangrove' || kind === 'cactus' || kind === 'driedbush') continue
@@ -661,7 +690,8 @@ export class Scatter {
         // plains mega-bushes (the depth mandate); giants are their own kind now
         let scaleMul = 1
         if (kind === 'bush' && biome === BIOME.PLAINS) scaleMul = 1.3
-        if (footprintAspect > 0.8 && !CANOPY_KINDS.has(kind)) {
+        // (rock sits on any slope — that's where rock is)
+        if (footprintAspect > 0.8 && !CANOPY_KINDS.has(kind) && kind !== 'boulder' && kind !== 'outcrop' && kind !== 'stones') {
           // wide prop: its footprint must sit on near-level ground
           const r = scale * footprintAspect * 0.35
           const hs = [heightAt(x + r, z), heightAt(x - r, z), heightAt(x, z + r), heightAt(x, z - r)]
@@ -684,7 +714,7 @@ export class Scatter {
         const key = groupKeyOf(kind, variant, x, z)
         if (!this.order.has(key)) this.order.set(key, [])
         this.order.get(key)!.push(id)
-        if (TRUNK_KINDS.has(kind)) addObstacle(x, z, kind === 'rock' ? scale * 0.42 : kind === 'elder' ? scale * 0.05 : kind === 'redwood' ? scale * 0.04 : 0.4)
+        if (TRUNK_KINDS.has(kind)) addObstacle(x, z, kind === 'rock' || kind === 'boulder' ? scale * 0.42 : kind === 'outcrop' ? scale * 0.3 : kind === 'elder' ? scale * 0.05 : kind === 'redwood' ? scale * 0.04 : 0.4)
         count++
       }
     }
@@ -798,9 +828,9 @@ export class Scatter {
     for (const n of this.nodes) {
       if (!TRUNK_KINDS.has(n.kind) || !n.alive) continue
       if (!this.activeChunks.has(this.chunkKeyOf(n)) || this.treeColliders.has(n.id)) continue
-      const rock = n.kind === 'rock'
+      const rock = n.kind === 'rock' || n.kind === 'boulder' || n.kind === 'outcrop'
       const half = rock ? n.scale * 0.32 : n.scale * 0.5
-      const radius = rock ? n.scale * 0.42 : n.kind === 'elder' ? n.scale * 0.05 : n.kind === 'redwood' ? n.scale * 0.04 : Math.max(0.3, n.scale * 0.045)
+      const radius = n.kind === 'outcrop' ? n.scale * 0.3 : rock ? n.scale * 0.42 : n.kind === 'elder' ? n.scale * 0.05 : n.kind === 'redwood' ? n.scale * 0.04 : Math.max(0.3, n.scale * 0.045)
       const col = physics.world.createCollider(
         RAPIER.ColliderDesc.cylinder(half, radius).setTranslation(n.x, n.y + half, n.z),
       )

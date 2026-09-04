@@ -338,8 +338,8 @@ Story in PLAN.md → "The island v2 — the Lasso". One round each, gates + scre
 - [x] **M10d — forests retraced + the Holm redwoods.** DONE (forests in M10b; redwoods below)
 - [x] **M10e — ruins hand-placed; caldera gate visible.** DONE (below)
 - [x] **M10f — swamp flora + desert flora.** DONE (below)
-- [ ] **M10g — ground clutter** (sticks, pebbles, stones, ground foliage) (mandate item 5)
-- [ ] **M10h — boulders / outcrops as placed meshes** (mandate item 7)
+- [x] **M10g — ground clutter.** DONE (below)
+- [x] **M10h — boulders / outcrops.** DONE (below)
 
 ### M10a — THE 4 KM CANVAS + THE LASSO (the island v2's spine)
 - [x] Canvas: HALF 2048, 2049² @ 2 m (int16 scale 0.02 for 400 m peaks), 32×32 chunks + 8×8 untextured far super-chunks (1024 far draw calls → 64); camera far 6000 / near 0.6 (the 0.1 near z-fought the sea through far beaches); fog scaled to 4 km; row-delta heightmap encoding (brotli 3.2 → 2.3 MB); navmesh 4 MB at cs 1.2 (1.6 broke reachability)
@@ -378,3 +378,10 @@ Story in PLAN.md → "The island v2 — the Lasso". One round each, gates + scre
 - [x] Built in `trees.ts`: MANGROVES (stilt roots to the water, low broad olive crowns, far twin), REEDS (tall blade clumps), DRIED BUSHES (fans of bare twigs), CACTI (ribbed saguaro columns with arms)
 - [x] Where they grow: mangroves on the swamp's wet floor within 2.2 m of the water table, reeds right at the table (and along every lake shore), dried bushes on the drier hummocks and across the desert with the cacti; swamp/desert flora never leaves its biome. ~870 mangroves, ~3,000 dried bushes, ~500 cacti, ~500 reed clumps
 - [x] Eye level: the Writhing Flats read as a mangrove swamp, the Dune Country as a saguaro desert (screenshot-verified), 73/73
+
+### M10g + M10h — GROUND CLUTTER AND ROCK (mandate items 5 and 7)
+- [x] Built clutter (`trees.ts`): PEBBLES (spills of small stones, ~51K), STICKS (fallen branches under the trees, ~18K), STONES (knee-high pairs, ~9K) — all ground cover with short draw distances (110/120/200 m; mushrooms and flowers pulled in too)
+- [x] Rock: BOULDERS (the Quaternius rocks at 3–8 m on slopes and high ground, ~1,800, hidden past 1 km) and built OUTCROPS (four to six leaning stones + a crown stone, 5–14 m, where the ground rises hard, ~350, far twin). Stone is gray now: Rock2's clay-orange texture dropped, Rock1's chalk-white lightness capped. Rock sits on any slope (exempt from the merged-grove flatness guard that had left 600 boulders and ONE outcrop)
+- [x] 73/73
+
+**The hand-made mandate list (M9) is complete: 1 rivers · 2 biome edges · 3 forests · 4 swamp/desert flora · 5 ground clutter · 6 the gate · 7 rock.**
