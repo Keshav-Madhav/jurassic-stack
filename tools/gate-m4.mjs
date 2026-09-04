@@ -57,7 +57,7 @@ for (const item of ['hatchet', 'spear', 'foundation', 'wall', 'ceiling', 'saddle
 
 // ---------- build a hut: foundation, wall, ceiling, campfire ----------
 await g('window.__g.setIntent(0,0)')
-await g('window.__g.teleport(30, 700)')
+await g('const sp = window.__g.game.spawn(); window.__g.teleport(sp.x + 30, sp.z - 80)')
 await page.waitForTimeout(300)
 let expected = 0
 for (const item of ['foundation', 'wall', 'ceiling', 'campfire']) {

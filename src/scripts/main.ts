@@ -216,13 +216,15 @@ async function boot(): Promise<void> {
     return aimPoint
   }
 
-  const nearestDino = (range: number, filter: (d: Dino) => boolean): Dino | null => {
+  const nearestDino = (range: number, filter: (d: Dino) => boolean, atX?: number, atZ?: number): Dino | null => {
     const from = feetPos()
     let best: Dino | null = null
     let bd = range
     for (const d of dinos) {
       if (!d.object.visible || d === riding || !filter(d)) continue
-      const dist = d.object.position.distanceTo(from)
+      const dist = atX !== undefined && atZ !== undefined
+        ? Math.hypot(d.object.position.x - atX, d.object.position.z - atZ)
+        : d.object.position.distanceTo(from)
       if (dist < bd) {
         bd = dist
         best = d
@@ -498,7 +500,14 @@ async function boot(): Promise<void> {
     setIntent: (vx: number, vz: number) => { debugIntent = vx || vz ? { vx, vz } : null },
     player: () => ({ ...(riding?.mover ? riding.mover.position : player.mover.position) }),
     groundAt: (x: number, z: number) => heightAt(x, z),
+    /** QA: hide/show whole layers to attribute what's on screen */
+    setLayer: (name: 'water' | 'scatter' | 'terrain', visible: boolean) => {
+      const g = name === 'water' ? water.group : name === 'scatter' ? scatter.group : terrain.group
+      g.visible = visible
+    },
     fps: () => hud.fps,
+    /** ms per frame spent in JS (sim+update) vs the render call — tells CPU-bound from GPU-bound */
+    perf: () => ({ update: +perfUpdate.toFixed(2), render: +perfRender.toFixed(2) }),
     renderInfo: () => ({
       calls: renderer.info.render.calls,
       tris: renderer.info.render.triangles,
@@ -642,7 +651,10 @@ async function boot(): Promise<void> {
         for (const n of scatter.nodes) {
           if (!n.alive || n.kind !== kind) continue
           const d = Math.hypot(n.x - from.x, n.z - from.z)
-          if (d < bd) { bd = d; best = n }
+          if (d >= bd) continue
+          // a dino standing by the node would eat the swings (they take priority)
+          if (nearestDino(REACH + 6, () => true, n.x, n.z)) continue
+          bd = d; best = n
         }
         if (!best) return false
         const px = best.x
@@ -694,6 +706,9 @@ async function boot(): Promise<void> {
         return keystones.collectedCount
       },
       keystoneSites: () => keystones.sites.map((k) => ({ tag: k.tag, x: k.x, z: k.z, collected: k.collected })),
+      /** where the caldera-gate slab stands (gates/QA read the world, not constants) */
+      gateSite: () => ({ x: gateSite.x, z: gateSite.z }),
+      spawn: () => ({ x: SPAWN.x, z: SPAWN.z }),
       flying: () => player.flying,
       poseInfo: () => player.poseInfo(),
       setFlying: (on: boolean) => { player.flying = on },
@@ -714,6 +729,8 @@ async function boot(): Promise<void> {
   let accumulator = 0
   let last = performance.now()
   let frameCount = 0
+  let perfUpdate = 0
+  let perfRender = 0
 
   function frame(now: number): void {
     requestAnimationFrame(frame)
@@ -721,6 +738,7 @@ async function boot(): Promise<void> {
       last = now
       return
     }
+    const t0 = performance.now()
     let dt = (now - last) / 1000
     last = now
     dt = Math.min(dt, 0.1)
@@ -882,7 +900,11 @@ async function boot(): Promise<void> {
     hud.tick(dt, focus.x, focus.y, focus.z, daynight.time, playerHp, (-cam.yaw * 180) / Math.PI)
     frameCount++
     if (frameCount % 3 === 0) renderer.shadowMap.needsUpdate = true
+    const t1 = performance.now()
     renderer.render(scene, cam.camera)
+    const t2 = performance.now()
+    perfUpdate = perfUpdate * 0.95 + (t1 - t0) * 0.05
+    perfRender = perfRender * 0.95 + (t2 - t1) * 0.05
     dbg.ready = true
   }
   requestAnimationFrame(frame)

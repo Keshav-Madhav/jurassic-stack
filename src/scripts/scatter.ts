@@ -13,7 +13,7 @@ import RAPIER from '@dimforge/rapier3d-compat'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import { heightAt, lodFloorAt, normalAt, forestMaskAt, forestKindAt, biomeAt, shoreDist, BIOME, FOREST_KIND, SEA_LEVEL, HALF_SIZE, SPAWN, VOLCANO, worldMeta } from './heightmap'
-import { buildCanopyTree, buildElderTree, buildDotTree, buildFarPine } from './trees'
+import { buildCanopyTree, buildElderTree, buildDotTree, buildFarPine, buildMushroom } from './trees'
 import { CHUNK_SIZE, CHUNKS_PER_SIDE } from './terrain'
 import { addObstacle } from './obstacles'
 import type { Physics } from './physics'
@@ -66,7 +66,7 @@ interface ModelRef {
   /** optional named sub-node to extract (variant packs) */
   node?: string
   /** … or a tree built in code (trees.ts), deterministic per seed */
-  gen?: 'canopy' | 'elder'
+  gen?: 'canopy' | 'elder' | 'mushroom'
   seed?: number
 }
 
@@ -93,7 +93,7 @@ const KIND_MODELS: Record<NodeKind, ModelRef[]> = {
     { file: 'Flower', node: 'Flower_5_Clump' },
   ],
   grass: [{ file: 'Grass1' }],
-  mushroom: [{ file: 'Mushroom', node: 'Mushroom' }],
+  mushroom: [{ gen: 'mushroom', seed: 31 }, { gen: 'mushroom', seed: 32 }],
 }
 
 /** cell size, base chance, scale range, cap, seed, habitat rule */
@@ -104,45 +104,52 @@ interface PlaceSpec {
   sMax: number
   cap: number
   seed: number
-  habitat: (h: number, ny: number, forest: number, riverD: number, fkind: number) => boolean
+  habitat: (h: number, ny: number, forest: number, riverD: number, fkind: number, coastD: number) => boolean
   /** forest kinds: chance also scales with wood fullness (thin at the wood line) */
   woodland?: boolean
 }
 
+// caps are for the 4 km island (4× the 2 km ones): the scan runs north→south,
+// so a cap hit early starves the spawn beach of grass
 const SPECS: Record<NodeKind, PlaceSpec> = {
   // THE WOODS (hand-traced in tools/hand-geometry.mjs, baked to forest.bin):
   // `forest` is fullness in [-1, 1] — -1 open country, 0 the feathered wood
   // line, +1 the deep interior. Trees pack tight (9 m cells) and thin toward
   // the line; elders stand only in the old-growth cores of broadleaf woods.
   tree: {
-    cell: 9, chance: 0.82, sMin: 11, sMax: 17, cap: 20000, seed: 101, woodland: true,
+    cell: 9, chance: 0.82, sMin: 11, sMax: 17, cap: 80000, seed: 101, woodland: true,
     habitat: (h, _ny, f, _rd, k) => f > -0.4 && h > 3.2 && (k === FOREST_KIND.BROADLEAF || k === FOREST_KIND.MIXED),
   },
   elder: {
-    cell: 36, chance: 0.62, sMin: 36, sMax: 52, cap: 600, seed: 121,
+    cell: 36, chance: 0.62, sMin: 36, sMax: 52, cap: 2400, seed: 121,
     habitat: (h, _ny, f, _rd, k) => f > 0.5 && h > 4 && k === FOREST_KIND.BROADLEAF,
   },
   pine: {
-    cell: 7, chance: 0.78, sMin: 10, sMax: 20, cap: 16000, seed: 202, woodland: true,
+    cell: 7, chance: 0.78, sMin: 10, sMax: 20, cap: 64000, seed: 202, woodland: true,
     habitat: (h, _ny, f, _rd, k) => f > -0.45 && h > 6 && (k === FOREST_KIND.PINE || k === FOREST_KIND.MIXED),
   },
   // dead trees: the dry open country outside the wood line (and the swamp)
-  deadtree: { cell: 40, chance: 0.3, sMin: 4, sMax: 8, cap: 700, seed: 707, habitat: (h, _ny, f) => f < -0.7 && h > 4 },
-  palm: { cell: 24, chance: 0.5, sMin: 5, sMax: 9, cap: 600, seed: 808, habitat: (h) => h > 1.1 && h < 4.2 },
-  willow: { cell: 30, chance: 0.55, sMin: 5, sMax: 8.5, cap: 350, seed: 909, habitat: (h, _ny, _f, riverD) => riverD < 34 && riverD > 13 && h > 2 },
-  rock: { cell: 40, chance: 0.4, sMin: 0.8, sMax: 2.4, cap: 1600, seed: 303, habitat: () => true },
-  log: { cell: 40, chance: 0.4, sMin: 1.2, sMax: 2.2, cap: 1000, seed: 606, habitat: (h, _ny, f) => f > -0.3 && h > 3 },
+  deadtree: { cell: 64, chance: 0.28, sMin: 4, sMax: 8, cap: 2000, seed: 707, habitat: (h, _ny, f) => f < -0.7 && h > 4 },
+  // palms: the beach band only (the spawn plain sits at 3 m for 400 m inland
+  // and grew palms like a plantation) — `riverD` slot carries coast distance
+  palm: { cell: 24, chance: 0.5, sMin: 5, sMax: 9, cap: 2400, seed: 808, habitat: (h, _ny, _f, _rd, _k, coastD) => h > 1.1 && h < 4.2 && coastD < 150 },
+  willow: { cell: 30, chance: 0.55, sMin: 5, sMax: 8.5, cap: 1400, seed: 909, habitat: (h, _ny, _f, riverD) => riverD < 34 && riverD > 13 && h > 2 },
+  rock: { cell: 40, chance: 0.4, sMin: 0.8, sMax: 2.4, cap: 6400, seed: 303, habitat: () => true },
+  log: { cell: 40, chance: 0.4, sMin: 1.2, sMax: 2.2, cap: 4000, seed: 606, habitat: (h, _ny, f) => f > -0.3 && h > 3 },
   // the understory: bushes everywhere but thicker under the canopy, ferns and
   // mushrooms on the forest floor, flowers in the open and the glades
-  bush: { cell: 13, chance: 0.6, sMin: 1.1, sMax: 2.9, cap: 9000, seed: 404, habitat: (h) => h > 2.2 },
-  fern: { cell: 10, chance: 0.72, sMin: 0.8, sMax: 1.9, cap: 16000, seed: 505, habitat: (h, _ny, f) => f > -0.5 && h > 3 },
-  flower: { cell: 18, chance: 0.5, sMin: 0.6, sMax: 1.2, cap: 2600, seed: 111, habitat: (h, _ny, f) => f < -0.6 && h > 2.4 },
-  grass: { cell: 7, chance: 0.72, sMin: 0.45, sMax: 1.2, cap: 30000, seed: 555, habitat: (h) => h > 1.6 },
-  mushroom: { cell: 26, chance: 0.45, sMin: 0.35, sMax: 0.8, cap: 900, seed: 222, habitat: (h, _ny, f) => f > 0 && h > 3 },
+  bush: { cell: 13, chance: 0.6, sMin: 1.1, sMax: 2.9, cap: 36000, seed: 404, habitat: (h) => h > 2.2 },
+  fern: { cell: 10, chance: 0.72, sMin: 0.8, sMax: 1.9, cap: 64000, seed: 505, habitat: (h, _ny, f) => f > -0.5 && h > 3 },
+  flower: { cell: 18, chance: 0.5, sMin: 0.6, sMax: 1.2, cap: 10400, seed: 111, habitat: (h, _ny, f) => f < -0.6 && h > 2.4 },
+  grass: { cell: 7, chance: 0.72, sMin: 0.45, sMax: 1.2, cap: 120000, seed: 555, habitat: (h) => h > 1.6 },
+  mushroom: { cell: 26, chance: 0.45, sMin: 0.35, sMax: 0.8, cap: 3600, seed: 222, habitat: (h, _ny, f) => f > 0 && h > 3 },
 }
 
 const RESPAWN_MS = 240_000
-/** Supercell edge (m): instances group per cell so frustum culling works. */
+/** Supercell edge (m): instances group per cell so frustum culling and the
+ *  LOD bands work per cell (512 m cells quadrupled the drawn triangles: every
+ *  tree in a cell whose near edge was close rendered at full detail).
+ *  Distance tests use the cell's bounding box, not its centre. */
 const SUPER = 256
 /** Ground-cover kinds: no shadow casting, distance-culled. */
 const GROUND_COVER = new Set<NodeKind>(['grass', 'fern', 'flower', 'mushroom', 'log', 'bush'])
@@ -151,9 +158,15 @@ const COVER_DRAW_DIST = 340
 /** Tree LOD bands per supercell (viewer distance to cell centre): built
  *  trees swap to 20-tri leaf masses beyond FAR, and every tree kind becomes
  *  a ~40-tri trunk-and-blob beyond DOT (a few pixels tall in the haze). */
-const TREE_LOD_FAR = 300
+const TREE_LOD_FAR = 240
 const TREE_LOD_DOT = 900
-const DOT_KINDS: Partial<Record<NodeKind, 'canopy' | 'elder' | 'pine'>> = { tree: 'canopy', elder: 'elder', pine: 'pine' }
+const DOT_KINDS: Partial<Record<NodeKind, 'canopy' | 'elder' | 'pine' | 'palm' | 'bare'>> = {
+  tree: 'canopy', elder: 'elder', pine: 'pine', palm: 'palm', deadtree: 'bare', willow: 'canopy',
+}
+/** Small solid props (boulders, logs) vanish beyond this — a 2 m rock is a
+ *  pixel at 600 m, but 2,000 of them at full geometry are not free. */
+const SMALL_SOLID_DRAW_DIST = 600
+const SMALL_SOLID = new Set<NodeKind>(['rock'])
 
 function mulberry32(seed: number): () => number {
   let a = seed >>> 0
@@ -295,6 +308,7 @@ class InstancedProp {
       const im = new THREE.InstancedMesh(geo, mat, capacity)
       im.count = 0
       im.frustumCulled = true // per-supercell now — computeBounds() after fill
+      im.matrixAutoUpdate = false // static: thousands of these, one less matrix multiply each per frame
       im.castShadow = this.castShadowFlag
       im.receiveShadow = true
       this.meshes.push(im)
@@ -342,10 +356,12 @@ export class Scatter {
   private props = new Map<string, InstancedProp>()
   /** far-LOD twins of built-tree groups, same instance slots */
   private farProps = new Map<string, InstancedProp>()
-  /** distant stand-ins for every tree kind, same instance slots */
-  private dotProps = new Map<string, InstancedProp>()
+  /** distant stand-ins: ONE instanced mesh per kind for the whole island
+   *  (a per-cell dot mesh was a draw call each — hundreds of 30-tri draws),
+   *  instances laid out cell by cell so a cell's range flips as one block */
+  private dots = new Map<NodeKind, { prop: InstancedProp; ranges: Map<string, { start: number; count: number; shown: boolean }>; slotOf: Map<number, number> }>()
   private order = new Map<string, number[]>()
-  private propMeta = new Map<string, { cx: number; cz: number; cover: boolean }>()
+  private propMeta = new Map<string, { minX: number; maxX: number; minZ: number; maxZ: number; cover: boolean; small: boolean }>()
   private treeColliders = new Map<number, RAPIER.Collider>()
   private activeChunks = new Set<number>()
   private lastChunkKey = -1
@@ -368,6 +384,10 @@ export class Scatter {
       if (!ref.gen) continue
       const key = `${ref.gen}:${ref.seed}`
       if (built.has(key)) continue
+      if (ref.gen === 'mushroom') {
+        built.set(key, buildMushroom(ref.seed ?? 1))
+        continue
+      }
       const make = ref.gen === 'elder' ? buildElderTree : buildCanopyTree
       built.set(key, make(ref.seed ?? 1))
       built.set(key + ':far', make(ref.seed ?? 1, true))
@@ -441,23 +461,67 @@ export class Scatter {
         for (const m of twin.meshes) m.visible = false
         return twin
       }
-      if (KIND_MODELS[kind][variant].gen) {
+      if (KIND_MODELS[kind][variant].gen && built.has(`${KIND_MODELS[kind][variant].gen}:${KIND_MODELS[kind][variant].seed}:far`)) {
         this.farProps.set(key, fillTwin(new InstancedProp(rootOf(KIND_MODELS[kind][variant], true), Math.max(ids.length, 1), this.group, true)))
       } else if (kind === 'pine') {
         this.farProps.set(key, fillTwin(new InstancedProp(built.get('pine:far')!, Math.max(ids.length, 1), this.group, true)))
+      } else if (kind === 'willow') {
+        // 2K-tri weeping crowns line 5 km of river; past 300 m a coarse
+        // canopy stands in (the droop is under a pixel by then)
+        this.farProps.set(key, fillTwin(new InstancedProp(built.get('canopy:11:far')!, Math.max(ids.length, 1), this.group, true)))
       }
-      const dotKind = DOT_KINDS[kind]
-      if (dotKind) {
-        this.dotProps.set(key, fillTwin(new InstancedProp(buildDotTree(dotKind, variant + 1), Math.max(ids.length, 1), this.group, false)))
-      }
-      // cell center for distance culling
-      let cx = 0
-      let cz = 0
+      // cell bounds for distance culling
+      let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity
       for (const nodeId of ids) {
-        cx += this.nodes[nodeId].x
-        cz += this.nodes[nodeId].z
+        const n = this.nodes[nodeId]
+        minX = Math.min(minX, n.x); maxX = Math.max(maxX, n.x)
+        minZ = Math.min(minZ, n.z); maxZ = Math.max(maxZ, n.z)
       }
-      this.propMeta.set(key, { cx: cx / ids.length, cz: cz / ids.length, cover })
+      this.propMeta.set(key, { minX, maxX, minZ, maxZ, cover, small: SMALL_SOLID.has(kind) })
+    }
+
+    // the dots: per kind, every node of every variant, grouped by cell
+    for (const [kind, dotKind] of Object.entries(DOT_KINDS) as [NodeKind, 'canopy' | 'elder' | 'pine' | 'palm' | 'bare'][]) {
+      const byCell = new Map<string, number[]>()
+      for (const [key, ids] of this.order) {
+        if (parseGroupKey(key).kind !== kind) continue
+        const cell = key.slice(key.lastIndexOf('#') + 1)
+        if (!byCell.has(cell)) byCell.set(cell, [])
+        byCell.get(cell)!.push(...ids)
+      }
+      let total = 0
+      for (const ids of byCell.values()) total += ids.length
+      if (!total) continue
+      const prop = new InstancedProp(buildDotTree(dotKind, 1), total, this.group, false)
+      const ranges = new Map<string, { start: number; count: number; shown: boolean }>()
+      const slotOf = new Map<number, number>()
+      let slot = 0
+      for (const [cell, ids] of byCell) {
+        ranges.set(cell, { start: slot, count: ids.length, shown: false })
+        for (const id of ids) {
+          const n = this.nodes[id]
+          slotOf.set(id, slot)
+          prop.hideInstance(slot, n.x, n.y, n.z) // start hidden; bands reveal
+          slot++
+        }
+      }
+      prop.computeBounds()
+      this.dots.set(kind, { prop, ranges, slotOf })
+    }
+  }
+
+  /** Reveal or hide one cell's block of dots (matrix writes only on a flip). */
+  private setDotRange(kind: NodeKind, cell: string, shown: boolean): void {
+    const d = this.dots.get(kind)
+    if (!d) return
+    const r = d.ranges.get(cell)
+    if (!r || r.shown === shown) return
+    r.shown = shown
+    for (const [id, slot] of d.slotOf) {
+      if (slot < r.start || slot >= r.start + r.count) continue
+      const n = this.nodes[id]
+      if (shown && n.alive) d.prop.setInstance(slot, n.x, n.y, n.z, n.scale, n.rotY, n.tint)
+      else d.prop.hideInstance(slot, n.x, n.y, n.z)
     }
   }
 
@@ -465,21 +529,30 @@ export class Scatter {
    *  flip built-tree cells between full and far LOD. */
   updateVisibility(x: number, z: number): void {
     for (const [key, meta] of this.propMeta) {
-      const d = Math.hypot(meta.cx - x, meta.cz - z)
+      // distance to the cell's bounding box (0 inside it)
+      const ddx = Math.max(meta.minX - x, 0, x - meta.maxX)
+      const ddz = Math.max(meta.minZ - z, 0, z - meta.maxZ)
+      const d = Math.hypot(ddx, ddz)
       if (meta.cover) {
         const visible = d < COVER_DRAW_DIST
         for (const m of this.props.get(key)!.meshes) m.visible = visible
         continue
       }
+      if (meta.small) {
+        const visible = d < SMALL_SOLID_DRAW_DIST
+        for (const m of this.props.get(key)!.meshes) m.visible = visible
+        continue
+      }
       const far = this.farProps.get(key)
-      const dot = this.dotProps.get(key)
-      if (!far && !dot) continue
+      const { kind } = parseGroupKey(key)
+      const hasDot = this.dots.has(kind)
+      if (!far && !hasDot) continue
       const band = d < TREE_LOD_FAR ? 0 : d < TREE_LOD_DOT ? 1 : 2
       // a kind without a far twin keeps its full model through band 1
       const fullVisible = band === 0 || (band === 1 && !far)
       for (const m of this.props.get(key)!.meshes) m.visible = fullVisible
       if (far) for (const m of far.meshes) m.visible = band === 1
-      if (dot) for (const m of dot.meshes) m.visible = band === 2
+      if (hasDot) this.setDotRange(kind, key.slice(key.lastIndexOf('#') + 1), band === 2)
     }
   }
 
@@ -540,7 +613,8 @@ export class Scatter {
         // swamp fauna bypass their usual habitat rules (willows off-river,
         // ferns outside forest, dead trees anywhere wet)
         const swampFlora = biome === BIOME.SWAMP && (kind === 'willow' || kind === 'deadtree' || kind === 'fern' || kind === 'grass' || kind === 'bush' || kind === 'mushroom')
-        if (!swampFlora && !spec.habitat(h, ny, forestHere, riverD, forestKind)) continue
+        const coastD = kind === 'palm' && worldMeta?.coast ? Math.abs(shoreDist(x, z, worldMeta.coast)) : Infinity
+        if (!swampFlora && !spec.habitat(h, ny, forestHere, riverD, forestKind, coastD)) continue
         // plains mega-bushes (the depth mandate); giants are their own kind now
         let scaleMul = 1
         if (kind === 'bush' && biome === BIOME.PLAINS) scaleMul = 1.3
@@ -640,11 +714,20 @@ export class Scatter {
     const key = groupKeyOf(node.kind, node.variant, node.x, node.z)
     const prop = this.props.get(key)!
     const idx = this.order.get(key)!.indexOf(node.id)
-    const twins = [prop, this.farProps.get(key), this.dotProps.get(key)]
+    const twins = [prop, this.farProps.get(key)]
     for (const p of twins) {
       if (!p) continue
       if (visible) p.setInstance(idx, node.x, node.y, node.z, node.scale, node.rotY, node.tint)
       else p.hideInstance(idx, node.x, node.y, node.z)
+    }
+    const d = this.dots.get(node.kind)
+    if (d) {
+      const slot = d.slotOf.get(node.id)
+      const shown = d.ranges.get(key.slice(key.lastIndexOf('#') + 1))?.shown ?? false
+      if (slot !== undefined) {
+        if (visible && shown) d.prop.setInstance(slot, node.x, node.y, node.z, node.scale, node.rotY, node.tint)
+        else d.prop.hideInstance(slot, node.x, node.y, node.z)
+      }
     }
   }
 
@@ -740,7 +823,6 @@ export class Scatter {
     }
     for (const [key, prop] of this.props) {
       const far = this.farProps.get(key)
-      const dot = this.dotProps.get(key)
       out.push({
         key,
         nodes: this.order.get(key)?.length ?? 0,
@@ -748,9 +830,17 @@ export class Scatter {
         drawn: prop.meshes[0]?.count ?? 0,
         // triangles this group submits (visible LOD only; frustum culling
         // then drops whole supercells)
-        tris: trisOf(prop) + (far ? trisOf(far) : 0) + (dot ? trisOf(dot) : 0),
-        visible: [prop, far, dot].some((p) => p?.meshes.some((m) => m.visible)),
+        tris: trisOf(prop) + (far ? trisOf(far) : 0),
+        visible: [prop, far].some((p) => p?.meshes.some((m) => m.visible)),
       })
+    }
+    for (const [kind, d] of this.dots) {
+      // the island-wide dot mesh per kind (hidden slots are zero-scale)
+      let shown = 0
+      for (const r of d.ranges.values()) if (r.shown) shown += r.count
+      const g = d.prop.meshes[0]?.geometry
+      const tri = g ? (g.index ? g.index.count : g.getAttribute('position').count) / 3 : 0
+      out.push({ key: `${kind}#dots`, nodes: d.slotOf.size, submeshes: d.prop.meshes.length, drawn: shown, tris: tri * shown, visible: shown > 0 })
     }
     return out
   }

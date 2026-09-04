@@ -34,12 +34,21 @@ Vercel. **No React, no framework.**
 - Fixed-timestep simulation; pause the loop on `document.hidden`; clamp dt.
 - Verify before claiming done: `npm run build`, then the milestone's gate in CHECKLIST.md.
 - **The hand-made mandate (user, 2026-09-04):** world geometry is traced by hand, every vertex a
-  decision — rivers as paths, lakes/forests/glades as polygons in `tools/hand-geometry.mjs`. No
-  center+radius+noise, no sine meanders; any such shortcut still in the bake (swamp, desert, plains
-  edges) gets replaced on touch. Trace against the planning map (`node tools/map.mjs`, `--region`
-  and `--ppm` to zoom), re-bake (`node tools/bake-island.mjs` → `heightmap.bin`, `biomes.bin`,
-  `forest.bin`, `world-meta.json`, then `node tools/bake-navmesh.mjs`), and let the validators fail
-  loudly. Runtime reads the baked grids (`heightAt`, `biomeAt`, `forestMaskAt`), never the polygons.
+  decision. `tools/hand-geometry.mjs` holds the whole island: the COAST outline, the RANGES' crests
+  (a height per vertex = the skyline), the HOLM plateau, the RIVER (legs + still ring + ford), the
+  LAKES/reservoir shorelines, the FORESTS and glades, and the RUINS' coordinates. No
+  center+radius+noise, no sine meanders; the shortcuts still in the bake (swamp, desert, plains
+  edges) get replaced on touch (M10c). Workflow: trace against the planning map (`node tools/map.mjs`
+  — `--sketch` draws the geometry alone before any bake, `--region`/`--ppm` zoom), re-bake (`node
+  tools/bake-island.mjs` → `heightmap.bin` (row-delta int16), `biomes.bin`, `forest.bin`,
+  `world-meta.json`; then `node tools/bake-navmesh.mjs`), and let the validators fail loudly (uphill
+  river, ring off level, lake below its shore, ruin wet/steep/wooded/unreachable). Runtime reads the
+  baked grids (`heightAt`, `biomeAt`, `forestMaskAt`) and `world-meta.json`, never the polygons.
+- **The canvas is 4×4 km** (HALF_SIZE 2048, 2049² @ 2 m, 32×32 chunks + 8×8 far super-chunks).
+  Gates and QA tools read coordinates from the world (`__g.game.spawn()`, `gateSite()`, meta) — never
+  hardcode a position. Every round re-shoots `tools/aerial.mjs` and `tools/qa-forest.mjs --tris` and
+  keeps the per-view triangle/draw-call/JS-ms numbers honest: culling and LODs are part of the
+  feature, not a follow-up.
 
 ## Dev commands
 

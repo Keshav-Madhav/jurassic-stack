@@ -27,11 +27,13 @@ const fps = await page.evaluate(() => window.__g.fps())
 check(fps >= 55, `fps ${fps} (threshold 55, headless)`)
 
 // --- collision walks: start points × directions, 8 s each at sprint speed ---
+// (the 4 km island: spawn beach at z 1560, the ring round the Holm at ~0..730,
+//  the northern rise toward the volcano at -600, the West Range foot at -900)
 const walks = [
-  { name: 'spawn→north (toward volcano)', x: 0, z: 780, vx: 0, vz: -8 },
-  { name: 'interior→east over hills', x: -300, z: 0, vx: 8, vz: 0 },
-  { name: 'foothills→northwest upslope', x: 120, z: -300, vx: -6, vz: -6 },
-  { name: 'west flats→south', x: -400, z: -200, vx: 0, vz: 8 },
+  { name: 'spawn→north (toward volcano)', x: 0, z: 1560, vx: 0, vz: -8 },
+  { name: 'west lowlands→east toward the ring', x: -800, z: 300, vx: 8, vz: 0 },
+  { name: 'northern rise→northwest upslope', x: 300, z: -600, vx: -6, vz: -6 },
+  { name: 'West Range foot→south', x: -900, z: -300, vx: 0, vz: 8 },
 ]
 for (const w of walks) {
   const result = await page.evaluate(async (s) => {

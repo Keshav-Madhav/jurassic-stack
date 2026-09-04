@@ -332,7 +332,7 @@ TODO (one pick per round):
 
 ### M10 — THE ISLAND v2: THE LASSO (user, 2026-09-04 — "the map is too small for its water; grow it 2×, one river, two lakes, a reservoir")
 Story in PLAN.md → "The island v2 — the Lasso". One round each, gates + screenshots + live check before the next. Culling, LODs and budgets are part of every round ("shit tons of culling and lods and optimizations").
-- [ ] **M10a — the 4 km canvas + the Lasso.** HALF 2048 (2049² grid @ 2 m), 32×32 chunks; hand-traced COASTLINE polygon (the island outline is drawn, not a falloff formula); bigger ranges as crest paths with per-vertex heights; volcano scaled; the river as legs + ring + reservoir + ford (bed profile per part: legs monotonic, ring level, reservoir deep); still ring (`riverFlowAt` null inside); ribbons cut inside the reservoir; gates/aerials re-authored for the new coordinates; bake + navmesh time/size checked; a rough Southwood so the woods don't vanish for a round
+- [x] **M10a — the 4 km canvas + the Lasso.** DONE (below)
 - [ ] **M10b — two lakes.** Lake Aster (lowland, ~9 m) + the Alpine Tarn (West Range, ~230 m); validators: hold water, never touch the river
 - [ ] **M10c — biome edges by hand.** Swamp wraps the Reservoir + outflow delta (~700 m); desert in the SW rain shadow (~1 km); plains south-centre; `warpedDist` deleted (mandate item 2)
 - [ ] **M10d — forests retraced + the Holm redwoods.** Redwood species (60–80 m, bare red trunk, narrow high crown) exclusive to the Holm polygon; canopy woods/pines/glades retraced for the new land (mandate item 3 carried over)
@@ -340,3 +340,13 @@ Story in PLAN.md → "The island v2 — the Lasso". One round each, gates + scre
 - [ ] **M10f — swamp flora (mangrove-type, dried bushes) + desert flora** (mandate item 4)
 - [ ] **M10g — ground clutter** (sticks, pebbles, stones, ground foliage) (mandate item 5)
 - [ ] **M10h — boulders / outcrops as placed meshes** (mandate item 7)
+
+### M10a — THE 4 KM CANVAS + THE LASSO (the island v2's spine)
+- [x] Canvas: HALF 2048, 2049² @ 2 m (int16 scale 0.02 for 400 m peaks), 32×32 chunks + 8×8 untextured far super-chunks (1024 far draw calls → 64); camera far 6000 / near 0.6 (the 0.1 near z-fought the sea through far beaches); fog scaled to 4 km; row-delta heightmap encoding (brotli 3.2 → 2.3 MB); navmesh 4 MB at cs 1.2 (1.6 broke reachability)
+- [x] `tools/hand-geometry.mjs` now holds the WHOLE island: COAST (100 vertices: spawn bay between two headlands, Estuary Bay + the Spit, East Cape, the Wellspring cove, NW Bight, a west fjord, Dune Bay), RANGES (crest paths with a height per vertex — each vertex a peak, saddles between), HOLM plateau, RIVER (legs + ring + ford), LAKES (reservoir, wellspring), FORESTS, CLEARINGS, RUINS
+- [x] `tools/map.mjs --sketch`: the geometry alone on a gridded sheet before any bake — the coast was traced and retraced there (the first pass was a compass circle)
+- [x] Bake rewritten around the drawn lines: coast SDF → beach band dipping to the waterline AT the line, sea profile capped after erosion (880K droplets built beaches 100 m out), ranges = massif + exponential ridge on the crest with saddle dips and slow lateral warp (spurs, not slabs), volcano scaled (rim 290 m), the Holm held at 20 m so the ring is a carve
+- [x] THE LASSO: inflow (Wellspring pool 38 m → slot canyon → the Knot), ring (dead water at 14 m, closed Catmull-Rom, no foam/current, `riverFlowAt` null inside), outflow (Knot → swamp at the marsh's water table → Estuary Bay), the Reservoir (11 m deep basin where four arms meet), the Ford (knee-deep bar on the ring's west side). Bed profiles per part (legs monotonic, inflow bent onto the ring's bed, ring level); validators for each
+- [x] Ruins hand-placed and asserted (flat/dry/open/off-river) + navmesh reachability 6/6 — the seeded search was retired after it perched the vault on a shoulder no path climbed
+- [x] Culling/LOD for the 4× world: caps ×4 (the north→south scan starved the beach of grass), island-wide dot meshes per tree kind (per-cell dots were hundreds of draw calls; island view 659 → 213 calls, JS render 14.7 → 3.6 ms), far twins for willows, dots for palms/dead trees, rocks hidden past 600 m, palms only on the beach band, Grass1 155 → 62 tris, the 6K-tri Quaternius "Mushroom" (a mushroom CREATURE with eyes, 670 of them in the woods) replaced by a built 60-tri cluster, ocean ripple fades with distance (killed the moiré), `__g.perf()` splits JS update/render ms
+- [x] Gates re-pointed at the world (spawn(), gateSite(), meta) — 73/73; aerials + qa-forest re-authored for v2

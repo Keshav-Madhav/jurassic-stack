@@ -2,21 +2,27 @@
 // with every piece of hand geometry drawn on it — the sheet you trace new
 // polygons against (forest lines, swamp edge, clearings…), then re-run to see
 // them in place.
-//   node tools/map.mjs [out.png] [--region x0,z0,x1,z1] [--ppm 1]
+//   node tools/map.mjs [out.png] [--region x0,z0,x1,z1] [--ppm 1] [--sketch]
 //     --region  world-metre window (default whole island)
-//     --ppm     pixels per metre (default 1 → 2048 px wide; use 2-3 for zooms)
+//     --ppm     pixels per metre (default 0.5 → 2048 px for the 4 km canvas; 2-3 for zooms)
+//     --sketch  draw only the hand geometry on a blank grid (no bake needed)
 // Output PNG via sips (macOS). Grid every 100 m, heavy every 500 m, labelled.
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { execSync } from 'node:child_process'
-import { FORESTS, CLEARINGS, shoreDist } from './hand-geometry.mjs'
+import { FORESTS, CLEARINGS, COAST, RANGES, HOLM, RIVER, LAKES, SPAWN, VOLCANO, HALF as HAND_HALF, shoreDist, closedPath } from './hand-geometry.mjs'
+import { readWorld } from './world-io.mjs'
 
 const args = process.argv.slice(2)
 const out = args.find((a) => !a.startsWith('--')) ?? 'shots/planning-map.png'
 const regionArg = args[args.indexOf('--region') + 1]
-const ppm = args.includes('--ppm') ? Number(args[args.indexOf('--ppm') + 1]) : 1
-const meta = JSON.parse(readFileSync('public/world/world-meta.json', 'utf8'))
-const H = new Int16Array(readFileSync('public/world/heightmap.bin').buffer.slice(0))
-const B = new Uint8Array(readFileSync('public/world/biomes.bin').buffer.slice(0))
+const sketch = args.includes('--sketch') || !existsSync('public/world/heightmap.bin')
+const ppm = args.includes('--ppm') ? Number(args[args.indexOf('--ppm') + 1]) : 0.5
+const world = sketch ? null : readWorld()
+const meta = sketch
+  ? { side: 0, res: 2, scale: 0.02, half: HAND_HALF, sea: 0, spawn: SPAWN, volcano: VOLCANO, lakes: LAKES, rivers: RIVER.parts.map(closedPath), ruinSites: [] }
+  : world.meta
+const H = sketch ? null : world.grid
+const B = sketch ? null : new Uint8Array(readFileSync('public/world/biomes.bin').buffer.slice(0))
 const { side, res, scale, half, sea } = meta
 const [x0, z0, x1, z1] = regionArg && args.includes('--region') ? regionArg.split(',').map(Number) : [-half, -half, half, half]
 const W = Math.round((x1 - x0) * ppm)
@@ -49,9 +55,15 @@ const toPx = (x, z) => [Math.round((x - x0) * ppm), Math.round((z - z0) * ppm)]
 const lerp = (a, b, t) => a + (b - a) * t
 
 // terrain: hypsometric tint × hillshade, water, sand line, biome tint
+// (sketch mode: sea outside the traced coast, parchment inside)
 for (let j = 0; j < Hh; j++) {
   for (let i = 0; i < W; i++) {
     const x = x0 + i / ppm, z = z0 + j / ppm
+    if (sketch) {
+      const inland = shoreDist(x, z, COAST) < 0
+      put(i, j, inland ? 214 : 120, inland ? 205 : 170, inland ? 170 : 210)
+      continue
+    }
     const h = hAt(x, z)
     let r, g, b
     if (h < sea) {
@@ -138,24 +150,41 @@ for (const c of CLEARINGS) {
   fillPoly(c, 235, 225, 120, 0.55)
   outline(c, 160, 130, 20, 2)
 }
+// the coast line, the Holm plateau line, the range crests with their heights
+outline(COAST, 40, 30, 20, 3)
+outline(HOLM, 120, 80, 20, 2)
+for (const r of RANGES) {
+  for (let i = 0; i < r.crest.length - 1; i++) line(r.crest[i].x, r.crest[i].z, r.crest[i + 1].x, r.crest[i + 1].z, 90, 40, 40, 4)
+  for (const v of r.crest) {
+    dot(v.x, v.z, 90, 40, 40, 5)
+    const [i, j] = toPx(v.x, v.z)
+    text(i + 8, j - 6, v.h, 60, 20, 20, Math.max(2, Math.round(ppm * 3)))
+  }
+}
 // lakes + rivers
 for (const lake of meta.lakes) {
   fillPoly(lake.shore, 70, 140, 220, 0.9)
   outline(lake.shore, 20, 60, 140, 2)
 }
-for (const path of meta.rivers) for (let i = 0; i < path.length - 1; i++) line(path[i].x, path[i].z, path[i + 1].x, path[i + 1].z, 60, 120, 230, Math.max(3, 4 * ppm))
+for (const part of RIVER.parts) {
+  const path = closedPath(part)
+  const w = Math.max(3, part.halfWidth * 2 * ppm)
+  for (let i = 0; i < path.length - 1; i++) line(path[i].x, path[i].z, path[i + 1].x, path[i + 1].z, part.flow ? 60 : 90, part.flow ? 120 : 150, 230, w)
+  for (const p of part.path) dot(p.x, p.z, 20, 60, 140, 3)
+  if (part.ford) dot(part.ford.x, part.ford.z, 230, 200, 90, 6)
+}
 // grid
 for (let g = Math.ceil(x0 / 100) * 100; g <= x1; g += 100) {
   const heavy = g % 500 === 0
   line(g, z0, g, z1, 0, 0, 0, heavy ? 2 : 1, heavy ? 0.55 : 0.22)
   const [i] = toPx(g, 0)
-  text(i + 3, 3, g, 0, 0, 0, Math.max(2, Math.round(ppm * 1.5)))
+  text(i + 3, 3, g, 0, 0, 0, Math.max(2, Math.round(ppm * 3)))
 }
 for (let g = Math.ceil(z0 / 100) * 100; g <= z1; g += 100) {
   const heavy = g % 500 === 0
   line(x0, g, x1, g, 0, 0, 0, heavy ? 2 : 1, heavy ? 0.55 : 0.22)
   const [, j] = toPx(0, g)
-  text(3, j + 3, g, 0, 0, 0, Math.max(2, Math.round(ppm * 1.5)))
+  text(3, j + 3, g, 0, 0, 0, Math.max(2, Math.round(ppm * 3)))
 }
 // markers
 dot(meta.spawn.x, meta.spawn.z, 255, 0, 200, 6)

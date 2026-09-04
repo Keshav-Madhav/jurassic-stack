@@ -8,7 +8,7 @@
 import * as THREE from 'three'
 
 /** Island half-size in meters (world spans -SIZE..+SIZE on x and z). */
-export const HALF_SIZE = 1024
+export const HALF_SIZE = 2048
 /** Sea level (world y). */
 export const SEA_LEVEL = 0
 /** Volcano center — the arc's landmark. Filled from world-meta on load. */
@@ -20,6 +20,7 @@ export interface RiverPoint { x: number; z: number }
 export interface LakeDef {
   name: string
   level: number
+  depth?: number
   deep: { x: number; z: number }
   /** hand-traced shoreline polygon, [x,z] pairs */
   shore: [number, number][]
@@ -41,6 +42,17 @@ export function shoreDist(px: number, pz: number, shore: [number, number][]): nu
   return inside ? -minD : minD
 }
 export interface RuinSite { tag: string; x: number; z: number; y: number }
+/** One part of the river: a flowing leg or the dead-water ring. */
+export interface RiverPart {
+  name: string
+  /** 1 = current runs start→end along the path; 0 = still water at `river.level` */
+  flow: number
+  halfWidth: number
+  closed: boolean
+  ford: { x: number; z: number } | null
+  path: RiverPoint[]
+}
+export interface RiverDef { knot: { x: number; z: number }; level: number; parts: RiverPart[] }
 export interface SwampDef { x: number; z: number; r: number; level: number }
 export interface WorldMeta {
   side: number
@@ -48,12 +60,16 @@ export interface WorldMeta {
   scale: number
   half: number
   sea: number
+  encoding?: 'row-delta'
   spawn: { x: number; z: number }
   volcano: { x: number; z: number }
+  /** every part as a plain polyline (closed ones wrapped), flowing legs first */
   rivers: RiverPoint[][]
+  river?: RiverDef
   lakes: LakeDef[]
   ruinSites: RuinSite[]
   swamp?: SwampDef
+  coast?: [number, number][]
   forests?: { name: string; kind: 'broadleaf' | 'pine' | 'mixed'; density: number; edge?: number; shore: [number, number][] }[]
   clearings?: [number, number][][]
 }
@@ -81,6 +97,14 @@ export async function loadHeightmap(base = ''): Promise<void> {
   res = worldMeta.res
   scale = worldMeta.scale
   grid = new Int16Array(await binRes.arrayBuffer())
+  // row-delta int16 (tools/world-io.mjs): each cell stores its difference
+  // from its western neighbour — ~30% smaller over the wire than raw heights
+  if (worldMeta.encoding === 'row-delta') {
+    for (let z = 0; z < side; z++) {
+      const row = z * side
+      for (let x = 1; x < side; x++) grid[row + x] = (grid[row + x] + grid[row + x - 1]) | 0
+    }
+  }
   SPAWN.x = worldMeta.spawn.x
   SPAWN.z = worldMeta.spawn.z
   VOLCANO.x = worldMeta.volcano.x

@@ -27,7 +27,7 @@ const probe = await page.evaluate(async () => {
     lake: meta.lakes[0],
     wlRiver: g.game.waterLevelAt(mid.x, mid.z),
     flowRiver: g.game.riverFlowAt(mid.x, mid.z),
-    wlOcean: g.game.waterLevelAt(0, 1010),
+    wlOcean: g.game.waterLevelAt(meta.spawn.x, meta.spawn.z + 130), // off the spawn beach
     wlLake: g.game.waterLevelAt(meta.lakes[0].deep.x, meta.lakes[0].deep.z),
     wlDryLand: g.game.waterLevelAt(meta.spawn.x, meta.spawn.z),
   }
@@ -63,7 +63,8 @@ if (wlHere !== null) {
 // --- ocean swim: buoyancy holds at sea level ---
 await page.evaluate(() => {
   const g = window.__g
-  g.teleport(0, 1005)
+  const sp = g.game.spawn()
+  g.teleport(sp.x, sp.z + 130) // just off the beach: shallow, so buoyancy has 2.5 s to surface
   g.setIntent(0, 0)
 })
 await page.waitForTimeout(2500)
@@ -74,7 +75,8 @@ check(ocean.p.y > -1.6 && ocean.p.y < 1.6, `buoyant at sea level (y=${ocean.p.y.
 // --- back on land: walking resumes ---
 await page.evaluate(() => {
   const g = window.__g
-  g.teleport(0, 780)
+  const sp = g.game.spawn()
+  g.teleport(sp.x, sp.z)
   g.setIntent(0, -4)
 })
 await page.waitForTimeout(1500)

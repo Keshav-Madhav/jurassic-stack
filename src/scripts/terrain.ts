@@ -15,7 +15,12 @@ const LOD_QUADS = [64, 32, 16, 8]
 const LOD_DISTANCE = [0, 260, 520, 1000]
 /** Skirt depth grows with LOD coarseness — 4m skirts couldn't cover mesa
  *  walls where a coarse chunk borders a fine one (backlog #8: LOD holes). */
-const skirtDepthFor = (quads: number) => 5 + (64 / quads) * 3 // LOD0 8m … LOD3 29m
+const skirtDepthForStep = (step: number) => 5 + (step / 2) * 3 // 2 m step → 8 m … 16 m step → 29 m
+/** Far terrain merges 4×4 chunks into one 512 m super-chunk at LOD3 resolution:
+ *  the 4 km island is 1024 chunks, and a thousand 128-tri draw calls of the
+ *  splat shader cost more than the triangles they carried. */
+const SUPER = 4
+const SUPER_SIZE = CHUNK_SIZE * SUPER
 
 interface Chunk {
   cx: number
@@ -32,7 +37,12 @@ interface Chunk {
 export class Terrain {
   readonly group = new THREE.Group()
   private chunks: Chunk[] = []
+  private supers: { sx: number; sz: number; mesh: THREE.Mesh; geo: THREE.BufferGeometry | null; active: boolean }[] = []
   private material: THREE.MeshStandardMaterial
+  /** far super-chunks: vertex colour only — the ground textures tile at
+   *  metres and are sub-pixel past a kilometre, so their four taps per pixel
+   *  over half the screen bought nothing */
+  private farMaterial = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, metalness: 0 })
 
   constructor() {
     // Splat-textured ground: four CC0 tiling albedos (grass/dirt/rock/sand)
@@ -117,6 +127,16 @@ export class Terrain {
         this.group.add(mesh)
       }
     }
+    for (let sz = 0; sz < CHUNKS_PER_SIDE / SUPER; sz++) {
+      for (let sx = 0; sx < CHUNKS_PER_SIDE / SUPER; sx++) {
+        const mesh = new THREE.Mesh(undefined, this.farMaterial)
+        mesh.frustumCulled = true
+        mesh.receiveShadow = false // beyond the shadow camera anyway
+        mesh.visible = false
+        this.supers.push({ sx, sz, mesh, geo: null, active: false })
+        this.group.add(mesh)
+      }
+    }
   }
 
   /** Re-pick LODs around a focus point; swaps geometry only when a level changes. */
@@ -133,6 +153,29 @@ export class Terrain {
         c.lod = lod
         const geo = (c.cache[lod] ??= buildChunkGeometry(c.originX, c.originZ, LOD_QUADS[lod]))
         c.mesh.geometry = geo
+      }
+    }
+    // super-chunks take over wherever all 16 sub-chunks sit at the coarsest LOD
+    const farLod = LOD_DISTANCE.length - 1
+    for (const s of this.supers) {
+      let allFar = true
+      for (let dz = 0; dz < SUPER && allFar; dz++) {
+        for (let dx = 0; dx < SUPER; dx++) {
+          if (this.chunks[(s.sz * SUPER + dz) * CHUNKS_PER_SIDE + s.sx * SUPER + dx].lod !== farLod) { allFar = false; break }
+        }
+      }
+      if (allFar !== s.active) {
+        s.active = allFar
+        if (allFar) {
+          s.geo ??= buildChunkGeometry(-HALF_SIZE + s.sx * SUPER_SIZE, -HALF_SIZE + s.sz * SUPER_SIZE, LOD_QUADS[farLod] * SUPER, SUPER_SIZE)
+          s.mesh.geometry = s.geo
+        }
+        s.mesh.visible = allFar
+        for (let dz = 0; dz < SUPER; dz++) {
+          for (let dx = 0; dx < SUPER; dx++) {
+            this.chunks[(s.sz * SUPER + dz) * CHUNKS_PER_SIDE + s.sx * SUPER + dx].mesh.visible = !allFar
+          }
+        }
       }
     }
   }
@@ -348,8 +391,8 @@ function groundColorAt(x: number, z: number, h: number, ny: number, out: THREE.C
   return out
 }
 
-function buildChunkGeometry(originX: number, originZ: number, quads: number): THREE.BufferGeometry {
-  const step = CHUNK_SIZE / quads
+function buildChunkGeometry(originX: number, originZ: number, quads: number, size = CHUNK_SIZE): THREE.BufferGeometry {
+  const step = size / quads
   const side = quads + 1
   const gridCount = side * side
   const skirtCount = side * 4
@@ -400,7 +443,7 @@ function buildChunkGeometry(originX: number, originZ: number, quads: number): TH
       const src = edgeIndex(edge, i) * 3
       const dst = (gridCount + edge * side + i) * 3
       pos[dst] = pos[src]
-      pos[dst + 1] = pos[src + 1] - skirtDepthFor(quads)
+      pos[dst + 1] = pos[src + 1] - skirtDepthForStep(step)
       pos[dst + 2] = pos[src + 2]
       nor[dst] = nor[src]; nor[dst + 1] = nor[src + 1]; nor[dst + 2] = nor[src + 2]
       col[dst] = col[src]; col[dst + 1] = col[src + 1]; col[dst + 2] = col[src + 2]

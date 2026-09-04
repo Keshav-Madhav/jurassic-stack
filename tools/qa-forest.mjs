@@ -20,19 +20,20 @@ const byKind = await page.evaluate(() => {
   return out
 })
 console.log(JSON.stringify(byKind))
+// v2 island (4 km): spawn (0,1560), Southwood z 1210..1580, the Holm wood
+// inside the ring (centre -60,370), north pines around (-450,-500)/(400,-480)
 const shots = [
   // name, cam x y z yaw pitch, time, player x z
-  ['island', 0, 950, 1400, 0, -0.62, 0.5, 0, 780],
-  ['spawn', 0, 1.7, 780, 0, 0.05, 0.5, 0, 780],
-  ['southwood-air', 100, 260, 760, 0, -0.55, 0.5, 100, 520],
-  ['elderwood-air', 60, 220, 420, 0, -0.5, 0.5, 60, 150],
-  ['elderwood-oblique', 40, 60, 330, 0, -0.22, 0.5, 40, 240],
-  ['elderwood-eye', 100, 1.7, 120, 2.6, 0.12, 0.5, 100, 120],
-  ['southwood-eye', 60, 1.7, 690, 0, 0.1, 0.5, 60, 690],
-  ['pines-air', -100, 200, -80, 0, -0.45, 0.5, -100, -250],
-  ['pines-eye', -150, 1.7, -230, 0, 0.1, 0.5, -150, -230],
-  ['glade', 186, 30, 190, 0, -0.35, 0.5, 186, 120],
-  ['elder-eye', 60, 1.7, 200, 0, 0.35, 0.5, 60, 200],
+  ['island', 0, 1800, 2700, 0, -0.6, 0.5, 0, 1560],
+  ['spawn', 0, 1.7, 1560, 0, 0.05, 0.5, 0, 1560],
+  ['southwood-air', 100, 260, 1750, 0, -0.55, 0.5, 100, 1500],
+  ['southwood-eye', 60, 1.7, 1590, 0, 0.1, 0.5, 60, 1590],
+  ['holm-air', -60, 260, 800, 0, -0.55, 0.5, -60, 600],
+  ['holm-oblique', -40, 60, 700, 0, -0.22, 0.5, -40, 620],
+  ['holm-eye', -80, 1.7, 470, 0, 0.12, 0.5, -80, 470],
+  ['glade', -80, 30, 470, 0, -0.35, 0.5, -80, 430],
+  ['pines-air', -450, 200, -250, 0, -0.45, 0.5, -450, -450],
+  ['pines-eye', -450, 1.7, -450, 0, 0.1, 0.5, -450, -450],
 ]
 for (const [name, x, y, z, yaw, pitch, t, px, pz] of shots) {
   await page.evaluate(([xx, yy, zz, ya, pi, tt, ppx, ppz]) => {
@@ -46,7 +47,8 @@ for (const [name, x, y, z, yaw, pitch, t, px, pz] of shots) {
   await page.waitForTimeout(1400)
   const ri = await page.evaluate(() => {
     const r = window.__g.renderInfo()
-    return { tris: r.tris, calls: r.calls, fps: window.__g.fps?.() }
+    const pf = window.__g.perf?.() ?? {}
+    return { tris: r.tris, calls: r.calls, fps: window.__g.fps?.(), jsUpdateMs: pf.update, jsRenderMs: pf.render }
   })
   await page.screenshot({ path: `${prefix}-${name}.png` })
   console.log(`${name}: ${JSON.stringify(ri)}`)

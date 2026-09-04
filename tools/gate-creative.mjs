@@ -32,7 +32,8 @@ await g('window.__g.setIntent(0, -12)') // steer while airborne
 await page.waitForTimeout(1500)
 await g('window.__g.setIntent(0, 0)')
 const p2 = await g('window.__g.player()')
-check(Math.abs(p2.z - 780) > 8, `steered in flight (z=${p2.z.toFixed(0)})`)
+const spawnZ = (await g('window.__g.game.spawn()')).z
+check(Math.abs(p2.z - spawnZ) > 8, `steered in flight (z=${p2.z.toFixed(0)})`)
 await page.keyboard.down('ShiftLeft')
 await page.waitForTimeout(3500)
 await page.keyboard.up('ShiftLeft')
@@ -41,7 +42,7 @@ check(!(await g('window.__g.game.flying()')), 'auto-landed on ground contact')
 // one-hit harvest (select an EMPTY slot first: the creative kit auto-slots
 // placeables into slot 0, and swinging a placeable places instead of harvesting)
 await g('window.__g.game.select(8)')
-await g('window.__g.teleport(-450, 500)') // far from all dino spawns (swing prioritizes dinos)
+await g('window.__g.teleport(-700, 1000)') // the desert: far from all dino spawns (swing prioritizes dinos)
 await page.waitForTimeout(400)
 await g('window.__g.game.gotoNearest("tree")')
 await page.waitForTimeout(400) // camera snap needs a rendered frame before the aim ray is valid

@@ -41,8 +41,11 @@ check(after.find((s) => s.tag === 'beach-statue').collected === true, 'correct s
 
 // --- the caldera door ---
 check(!(await g('window.__g.game.doorOpen()')), 'door sealed initially')
-const gate = { x: 396, z: -549 }
-await page.evaluate((gt) => window.__g.teleport(gt.x, gt.z), gate)
+// stand 7 m south of the caldera-gate slab, wherever the bake put it
+await page.evaluate(() => {
+  const gt = window.__g.game.gateSite()
+  window.__g.teleport(gt.x, gt.z + 7)
+})
 await page.waitForTimeout(400)
 await g('window.__g.game.interact()')
 check(!(await g('window.__g.game.doorOpen()')), 'door refuses with missing keystones')

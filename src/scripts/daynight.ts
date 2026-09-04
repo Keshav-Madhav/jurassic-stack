@@ -31,7 +31,7 @@ interface Grade {
 const NOON: Grade = {
   exposure: 0.52, // dark, contrasty (user: real-leaf greens, strong shadows)
   fog: new THREE.Color(0x8fb2cf),
-  fogNear: 260, fogFar: 2450,
+  fogNear: 420, fogFar: 5200, // 4 km island: the far coast is haze, not absent
   hemiSky: new THREE.Color(0x8fb6dc),
   hemiGround: new THREE.Color(0x1d2719),
   hemiIntensity: 0.3, // ARK reference: canopy shadow pools go properly dark
@@ -45,7 +45,7 @@ const NOON: Grade = {
 const GOLDEN: Grade = {
   exposure: 0.6,
   fog: new THREE.Color(0xe8884e),
-  fogNear: 240, fogFar: 1900,
+  fogNear: 380, fogFar: 4200,
   hemiSky: new THREE.Color(0xffa858),
   hemiGround: new THREE.Color(0x2c3a26),
   hemiIntensity: 1.05,
@@ -59,7 +59,7 @@ const GOLDEN: Grade = {
 const NIGHT: Grade = {
   exposure: 0.5,
   fog: new THREE.Color(0x141c2c),
-  fogNear: 160, fogFar: 1300,
+  fogNear: 260, fogFar: 2800,
   hemiSky: new THREE.Color(0x2a3a5a),
   hemiGround: new THREE.Color(0x141c14),
   hemiIntensity: 0.4,
@@ -73,7 +73,7 @@ const NIGHT: Grade = {
 const scratch: Grade = {
   exposure: 1,
   fog: new THREE.Color(),
-  fogNear: 100, fogFar: 1000,
+  fogNear: 160, fogFar: 2000,
   hemiSky: new THREE.Color(),
   hemiGround: new THREE.Color(),
   hemiIntensity: 1,
@@ -140,7 +140,7 @@ export class DayNight {
     // normalBias is in WORLD METERS — 1.6 erased every caster thinner than
     // 1.6 m (trunks, the player). ~2× texel size (170 m / 2048 ≈ 8 cm) is right.
     sc.normalBias = 0.18
-    scene.fog = new THREE.Fog(0x87b5d9, 350, 2450)
+    scene.fog = new THREE.Fog(0x87b5d9, 420, 5200)
     // the Sky PMREM is HDR-bright; at full strength it washes every material
     // to pastel. IBL is a subtle fill here, the direct lights carry the look.
     scene.environmentIntensity = 0.13

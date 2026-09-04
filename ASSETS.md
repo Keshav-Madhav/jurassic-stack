@@ -101,6 +101,8 @@ originals untouched in `_raw/nature/`, turntable-verified:
 | DeadTree (5 variants) | 15,464 tris | 4,327 | `--ratio 0.28 --error 0.004` |
 | Palm | 3,134 | 940 | `--ratio 0.3 --error 0.02` |
 | Willow | 2,056 | 2,056 (simplifier no-op; left as is) | — |
+| Grass1 | 155 | 62 | `--ratio 0.4 --error 0.02` (M10a: 117K tufts on the 4 km island) |
+| Mushroom | 6,044 | retired | it was a mushroom *creature* (eyes, arms); replaced by a built 60-tri cluster (`trees.ts`) |
 
 Built trees (`src/scripts/trees.ts`, not assets): canopy ≈ 850 tris full / ≈ 250 far LOD;
 elder ≈ 1,500 / ≈ 450.

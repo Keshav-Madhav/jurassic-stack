@@ -7,6 +7,7 @@
 // vertex swell on the ocean.
 import * as THREE from 'three'
 import { heightAt, biomeAt, shoreDist, BIOME, SEA_LEVEL, HALF_SIZE, worldMeta } from './heightmap'
+import type { RiverPart } from './heightmap'
 
 const RIVER_HALF_WIDTH = 11
 /** water surface height above the carved bed — deep enough to actually swim */
@@ -27,6 +28,9 @@ interface RiverSample {
  *  while the query floated the player a meter above it). */
 interface RiverRuntime {
   samples: RiverSample[]
+  /** 1 flowing leg · 0 the dead-water ring (no current, level surface) */
+  flow: number
+  halfWidth: number
 }
 
 export class WaterSystem {
@@ -131,14 +135,18 @@ export class WaterSystem {
       this.group.add(mesh)
     }
 
-    // --- rivers: ribbon along a Catmull-Rom of the baked path ---
-    for (const path of meta.rivers) {
-      const pts = path.map((p) => new THREE.Vector3(p.x, 0, p.z))
-      const curve = new THREE.CatmullRomCurve3(pts, false, 'centripetal', 0.5)
-      const SEGS = 120
-      // one sample array: xz from the smooth curve, y from the LOCAL carved
+    // --- the river: one ribbon per part along a Catmull-Rom of its path ---
+    // (legacy metas without `river` get every path treated as a flowing leg)
+    const parts: RiverPart[] = meta.river?.parts ?? meta.rivers.map((path, i) => ({ name: `river${i}`, flow: 1, halfWidth: RIVER_HALF_WIDTH, closed: false, ford: null, path }))
+    for (const part of parts) {
+      const pts = part.path.map((p) => new THREE.Vector3(p.x, 0, p.z))
+      const curve = new THREE.CatmullRomCurve3(pts, part.closed, 'centripetal', 0.5)
+      const SEGS = Math.max(60, Math.round(curve.getLength() / 12))
+      const hw = part.halfWidth
+      // one sample array: xz from the smooth curve; y from the LOCAL carved
       // bed (+surface offset), softly monotonic downstream but always floored
-      // just above the bed so the ribbon can never sink under a bank
+      // just above the bed so the ribbon can never sink under a bank. The
+      // ring is dead water: its surface is the Knot's level everywhere.
       const samples: RiverSample[] = []
       let prev = Infinity
       for (let i = 0; i <= SEGS; i++) {
@@ -146,8 +154,13 @@ export class WaterSystem {
         const c = curve.getPoint(t)
         const tan = curve.getTangent(t)
         const bed = heightAt(c.x, c.z)
-        let y = Math.min(bed + RIVER_SURFACE_ABOVE_BED, prev)
-        y = Math.max(y, bed + 0.4, SEA_LEVEL + 0.05)
+        let y: number
+        if (part.flow) {
+          y = Math.min(bed + RIVER_SURFACE_ABOVE_BED, prev)
+          y = Math.max(y, bed + 0.4, SEA_LEVEL + 0.05)
+        } else {
+          y = meta.river?.level ?? bed + RIVER_SURFACE_ABOVE_BED
+        }
         samples.push({ x: c.x, z: c.z, y, tx: tan.x, tz: tan.z })
         prev = y
       }
@@ -162,7 +175,7 @@ export class WaterSystem {
         const s = samples[i]
         const nx = -s.tz
         const nz = s.tx
-        const maxW = RIVER_HALF_WIDTH * (0.7 + 0.5 * t)
+        const maxW = part.flow ? hw * (0.7 + 0.5 * t) : hw
         let wL = maxW
         while (wL > 3 && heightAt(s.x + nx * wL, s.z + nz * wL) > s.y - 0.3) wL -= 1
         let wR = maxW
@@ -175,16 +188,15 @@ export class WaterSystem {
           pos[o + 1] = ys[c]
           pos[o + 2] = s.z + nz * xs[c]
           uv[(i * COLS + c) * 2] = c / (COLS - 1)
-          uv[(i * COLS + c) * 2 + 1] = t * 40
+          uv[(i * COLS + c) * 2 + 1] = t * (SEGS / 3)
         }
       }
-      // cut the ribbon where it crosses standing water — a river band slicing
-      // through a lake read as two overlapping waters (player screenshot);
-      // the current still flows across via riverFlowAt, only the mesh yields
+      // cut the ribbon where it crosses standing water (the Reservoir, the
+      // Wellspring) — a river band slicing through a pool read as two
+      // overlapping waters; the current still flows across via riverFlowAt,
+      // only the mesh yields — and past the coast, where the river IS the sea
       const inStanding = (i: number): boolean => {
         const smp = samples[i]
-        // past the coast the river IS the sea — the hand paths run out into
-        // the bay so the mouth carves, but the ribbon must end at the shore
         if (heightAt(smp.x, smp.z) < SEA_LEVEL - 1.2) return true
         for (const lake of meta.lakes) {
           if (shoreDist(smp.x, smp.z, lake.shore) < -4) return true
@@ -222,11 +234,17 @@ export class WaterSystem {
         }
       }
       geo.setAttribute('color', new THREE.BufferAttribute(colors, 3))
-      const mesh = new THREE.Mesh(geo, this.makeWaterMat(0x4a90c0, 0.85, new THREE.Vector2(0, -2.6), 0, true))
+      // the ring is dead water: no current scroll, no foam, a calmer sheet
+      const mesh = new THREE.Mesh(
+        geo,
+        part.flow
+          ? this.makeWaterMat(0x4a90c0, 0.85, new THREE.Vector2(0, -2.6), 0, true)
+          : this.makeWaterMat(0x3f7fae, 0.9, new THREE.Vector2(0, 0), 0, false),
+      )
       mesh.renderOrder = 4 // rivers sit above every standing sheet they cross
       this.group.add(mesh)
 
-      this.rivers.push({ samples })
+      this.rivers.push({ samples, flow: part.flow, halfWidth: hw })
     }
   }
 
@@ -279,7 +297,11 @@ export class WaterSystem {
             vec2 p = vWaterWorld.xz + uFlow * uTime * 2.0;
             float nx = sin(p.x * 0.9 + uTime * 1.7) * 0.5 + sin(p.x * 0.37 - uTime * 1.1 + p.y * 0.2) * 0.5;
             float nz = sin(p.y * 0.8 - uTime * 1.3) * 0.5 + sin(p.y * 0.41 + uTime * 0.9 + p.x * 0.23) * 0.5;
-            normal = normalize(normal + vec3(nx, 0.0, nz) * 0.22);
+            // the ripple's wavelength is ~7 m: past a few hundred metres it
+            // is under a pixel and aliases into a screen-door moiré over the
+            // whole sea (aerial review) — fade it out with distance
+            float ripple = 0.22 * (1.0 - smoothstep(120.0, 700.0, length(vWaterWorld - cameraPosition)));
+            normal = normalize(normal + vec3(nx, 0.0, nz) * ripple);
           }`,
         )
         .replace(
@@ -325,17 +347,19 @@ export class WaterSystem {
     }
     for (const r of this.rivers) {
       const hit = nearestSample(x, z, r.samples)
-      if (hit.d > RIVER_HALF_WIDTH * 1.35) continue
+      if (hit.d > r.halfWidth * 1.35) continue
       if (heightAt(x, z) < hit.y - 0.25) level = Math.max(level ?? -Infinity, hit.y)
     }
     return level
   }
 
-  /** Downstream flow direction (unit XZ) if inside a river channel. */
+  /** Downstream flow direction (unit XZ) if inside a FLOWING channel — the
+   *  ring is dead water: inside it there is no current at all. */
   riverFlowAt(x: number, z: number): { x: number; z: number } | null {
     for (const r of this.rivers) {
       const hit = nearestSample(x, z, r.samples)
-      if (hit.d > RIVER_HALF_WIDTH * 1.35) continue
+      if (hit.d > r.halfWidth * 1.35) continue
+      if (!r.flow) return null
       const len = Math.hypot(hit.tx, hit.tz) || 1
       return { x: hit.tx / len, z: hit.tz / len }
     }

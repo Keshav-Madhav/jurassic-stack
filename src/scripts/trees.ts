@@ -177,11 +177,20 @@ export function buildElderTree(seed: number, far = false): THREE.Group {
  * or two coarse masses matching the kind's silhouette and leaf colour. Pines
  * get a dark cone. ~30-50 tris.
  */
-export function buildDotTree(kind: 'canopy' | 'elder' | 'pine', seed: number): THREE.Group {
+export function buildDotTree(kind: 'canopy' | 'elder' | 'pine' | 'palm' | 'bare', seed: number): THREE.Group {
   massDetail = 0
   const rand = mulberry32(seed)
   const parts: THREE.BufferGeometry[] = []
-  if (kind === 'pine') {
+  if (kind === 'palm') {
+    // a leaning trunk and one flat frond mass, palm-green
+    parts.push(limb(new THREE.Vector3(0, -0.02, 0), new THREE.Vector3(0.08, 0.78, 0.04), 0.045, 0.03, 5, rand))
+    parts.push(leafMass(0.08, 0.84, 0.04, 0.42, 0.14, 0.42, new THREE.Color(0x3f7a2c), rand))
+  } else if (kind === 'bare') {
+    // a dead tree from afar: trunk and two forks, no leaves
+    parts.push(limb(new THREE.Vector3(0, -0.02, 0), new THREE.Vector3(0, 0.55, 0), 0.05, 0.03, 5, rand))
+    parts.push(limb(new THREE.Vector3(0, 0.5, 0), new THREE.Vector3(0.28, 0.95, 0.1), 0.03, 0.01, 4, rand))
+    parts.push(limb(new THREE.Vector3(0, 0.55, 0), new THREE.Vector3(-0.24, 0.9, -0.14), 0.03, 0.01, 4, rand))
+  } else if (kind === 'pine') {
     parts.push(limb(new THREE.Vector3(0, -0.02, 0), new THREE.Vector3(0, 0.3, 0), 0.03, 0.02, 5, rand))
     const cone = new THREE.CylinderGeometry(0.01, 0.22, 0.78, 7, 1, true).toNonIndexed()
     cone.translate(0, 0.61, 0)
@@ -217,4 +226,30 @@ export function buildFarPine(leaf: THREE.Color, bark: THREE.Color, seed: number)
     parts.push(cone)
   }
   return finish(parts, `FarPine_${seed}`)
+}
+
+/**
+ * A forest-floor mushroom cluster: three caps on stems, ~60 tris. (The
+ * Quaternius "Mushroom" GLB turned out to be a 6K-tri mushroom CREATURE with
+ * eyes and arms — 670 of them stood in the woods at knee height.)
+ */
+export function buildMushroom(seed: number): THREE.Group {
+  massDetail = 0
+  const rand = mulberry32(seed)
+  const parts: THREE.BufferGeometry[] = []
+  const stemC = new THREE.Color(0xd8cdb0)
+  const caps = [new THREE.Color(0x8a3a24), new THREE.Color(0xb0602a), new THREE.Color(0x6e4a2a)]
+  const n = 2 + Math.floor(rand() * 2)
+  for (let i = 0; i < n; i++) {
+    const x = (rand() - 0.5) * 0.7
+    const z = (rand() - 0.5) * 0.7
+    const hgt = 0.45 + rand() * 0.55
+    const stem = new THREE.CylinderGeometry(0.05, 0.07, hgt, 5, 1, true).toNonIndexed()
+    stem.translate(x, hgt / 2 - 0.02, z)
+    paint(stem, stemC, 0.08, rand)
+    parts.push(stem)
+    const r = 0.14 + rand() * 0.12
+    parts.push(leafMass(x, hgt - r * 0.15, z, r, r * 0.55, r, caps[i % caps.length], rand))
+  }
+  return finish(parts, `Mushroom_${seed}`)
 }

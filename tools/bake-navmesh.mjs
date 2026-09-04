@@ -8,8 +8,8 @@ import { generateTiledNavMesh } from '@recast-navigation/generators'
 
 await initRecast()
 
-const meta = JSON.parse(readFileSync('public/world/world-meta.json', 'utf8'))
-const grid = new Int16Array(readFileSync('public/world/heightmap.bin').buffer)
+import { readWorld } from './world-io.mjs'
+const { meta, grid } = readWorld()
 const { side, res, scale, half, sea } = meta
 
 // terrain mesh at bake resolution (2 m) — same data the game renders/collides
