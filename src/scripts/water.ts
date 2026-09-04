@@ -6,7 +6,7 @@
 // perturbation injected into MeshStandardMaterial, plus small Gerstner-ish
 // vertex swell on the ocean.
 import * as THREE from 'three'
-import { heightAt, biomeAt, BIOME, SEA_LEVEL, HALF_SIZE, worldMeta } from './heightmap'
+import { heightAt, biomeAt, shoreDist, BIOME, SEA_LEVEL, HALF_SIZE, worldMeta } from './heightmap'
 
 const RIVER_HALF_WIDTH = 11
 /** water surface height above the carved bed — deep enough to actually swim */
@@ -101,15 +101,32 @@ export class WaterSystem {
       this.group.add(mesh)
     }
 
-    // --- lakes ---
+    // --- lakes: sheet = fan over the hand-traced shoreline polygon, grown
+    // 6m outward so edges tuck under the banks ---
     for (const lake of meta.lakes) {
-      // slightly inside the carved basin so the rim never overhangs lower
-      // terrain outside it (the "floating infinity pool" edge)
-      // oversized disc: the warped BASIN defines the visible shoreline; the
-      // disc edge stays hidden under the raised shore ring
-      const geo = new THREE.CircleGeometry(lake.r * 1.35, 48).rotateX(-Math.PI / 2)
+      const cx = lake.shore.reduce((a, v) => a + v[0], 0) / lake.shore.length
+      const cz = lake.shore.reduce((a, v) => a + v[1], 0) / lake.shore.length
+      const pos: number[] = [cx, 0, cz]
+      const uv: number[] = [cx * 0.02, cz * 0.02]
+      for (const [vx, vz] of lake.shore) {
+        const dx = vx - cx
+        const dz = vz - cz
+        const len = Math.hypot(dx, dz) || 1
+        const ox = vx + (dx / len) * 6
+        const oz = vz + (dz / len) * 6
+        pos.push(ox, 0, oz)
+        uv.push(ox * 0.02, oz * 0.02)
+      }
+      const indices: number[] = []
+      const n = lake.shore.length
+      for (let i = 1; i <= n; i++) indices.push(0, i, (i % n) + 1)
+      const geo = new THREE.BufferGeometry()
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3))
+      geo.setAttribute('uv', new THREE.Float32BufferAttribute(uv, 2))
+      geo.setIndex(indices)
+      geo.computeVertexNormals()
       const mesh = new THREE.Mesh(geo, this.makeWaterMat(0x3878b0, 0.88, new THREE.Vector2(0.12, 0.06), 0))
-      mesh.position.set(lake.x, lake.level, lake.z)
+      mesh.position.y = lake.level
       mesh.renderOrder = 3 + lake.level * 0.01 // higher lakes draw later
       this.group.add(mesh)
     }
@@ -285,7 +302,7 @@ export class WaterSystem {
     // ocean wherever the terrain is below sea level
     if (heightAt(x, z) < SEA_LEVEL) level = SEA_LEVEL
     for (const lake of meta.lakes) {
-      if (Math.hypot(x - lake.x, z - lake.z) < lake.r * 1.4 && heightAt(x, z) < lake.level - 0.2) {
+      if (shoreDist(x, z, lake.shore) < 4 && heightAt(x, z) < lake.level - 0.2) {
         level = Math.max(level ?? -Infinity, lake.level)
       }
     }

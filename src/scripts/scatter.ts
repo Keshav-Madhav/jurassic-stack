@@ -12,7 +12,7 @@ import * as THREE from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
-import { heightAt, lodFloorAt, normalAt, forestMaskAt, biomeAt, BIOME, SEA_LEVEL, HALF_SIZE, SPAWN, VOLCANO, worldMeta } from './heightmap'
+import { heightAt, lodFloorAt, normalAt, forestMaskAt, biomeAt, shoreDist, BIOME, SEA_LEVEL, HALF_SIZE, SPAWN, VOLCANO, worldMeta } from './heightmap'
 import { CHUNK_SIZE, CHUNKS_PER_SIDE } from './terrain'
 import { addObstacle } from './obstacles'
 import type { Physics } from './physics'
@@ -155,7 +155,7 @@ function riverDistAt(x: number, z: number): number {
     }
   }
   for (const lake of meta.lakes) {
-    best = Math.min(best, Math.abs(Math.hypot(x - lake.x, z - lake.z) - lake.r))
+    best = Math.min(best, Math.abs(shoreDist(x, z, lake.shore)))
   }
   return best
 }
@@ -410,7 +410,7 @@ export class Scatter {
         // never under lake water (backlog #10: trees inside lakes)
         let drowned = false
         for (const lake of worldMeta?.lakes ?? []) {
-          if (Math.hypot(x - lake.x, z - lake.z) < lake.r * 1.2 && h < lake.level + 0.6) {
+          if (shoreDist(x, z, lake.shore) < 3 && h < lake.level + 0.6) {
             drowned = true
             break
           }

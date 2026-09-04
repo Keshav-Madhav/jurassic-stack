@@ -84,10 +84,56 @@ const RIVERS = [
   // west river: west flank → lake basin → southwest coast
   [{ x: -160, z: -440 }, { x: -340, z: -240 }, { x: -430, z: 20 }, { x: -460, z: 60 }, { x: -520, z: 340 }, { x: -640, z: 560 }],
 ]
+// HAND-TRACED lakes: each shoreline is an explicit polygon, drawn vertex by
+// vertex like tracing a map — no center/radius/noise formula anywhere.
+// (x,z) pairs, counterclockwise. `level` is chosen against the surrounding
+// terrain and asserted by the validator; `deep` is the hand-picked deepest spot.
 const LAKES = [
-  { x: -430, z: 20, r: 90, level: 14 }, // west river widens into a highland lake
-  { x: 300, z: 300, r: 70, level: 6 },  // lowland lake east of center
+  {
+    // WEST LAKE — elongated highland lake the west river flows through.
+    // Design: wide southern basin, narrowing north neck where the river
+    // enters, a peninsula pinching the east side, a small west bay.
+    name: 'west',
+    level: 8.2,
+    deep: { x: -445, z: 55 },
+    shore: [
+      [-390, -95], [-355, -60], [-345, -15], [-360, 20],   // NE inlet neck (river enters)
+      [-385, 40], [-395, 75], [-380, 105],                 // east shore → peninsula root
+      [-410, 120], [-450, 150], [-490, 165],               // peninsula pinch + south bulge
+      [-525, 150], [-545, 115], [-540, 75],                // SW shore (river exits ~here)
+      [-560, 45], [-555, 5], [-530, -25],                  // west bay
+      [-495, -40], [-470, -70], [-435, -95], [-405, -105], // NW shore back to inlet
+    ],
+  },
+  {
+    // EAST LAKE — smaller lowland lake with a marshy south end and one bay.
+    name: 'east',
+    level: 5.4,
+    deep: { x: 310, z: 290 },
+    shore: [
+      [255, 240], [290, 225], [330, 230], [355, 250],  // north shore
+      [370, 280], [360, 315], [372, 345],              // east + SE bay notch
+      [345, 370], [305, 380], [270, 365],              // south (marshy)
+      [245, 335], [238, 295], [242, 262],              // west shore
+    ],
+  },
 ]
+
+/** Signed distance to a hand-traced shoreline: negative inside. */
+function shoreDist(px, pz, shore) {
+  let inside = false
+  let minD = Infinity
+  for (let i = 0, j = shore.length - 1; i < shore.length; j = i++) {
+    const [xi, zi] = shore[i]
+    const [xj, zj] = shore[j]
+    if (zi > pz !== zj > pz && px < ((xj - xi) * (pz - zi)) / (zj - zi) + xi) inside = !inside
+    const dx = xj - xi
+    const dz = zj - zi
+    const t = Math.max(0, Math.min(1, ((px - xi) * dx + (pz - zi) * dz) / (dx * dx + dz * dz)))
+    minD = Math.min(minD, Math.hypot(px - (xi + dx * t), pz - (zi + dz * t)))
+  }
+  return inside ? -minD : minD
+}
 
 // Meander: densify each river's control polyline and push points sideways
 // with two superimposed sine waves over arc length (amplitude grows down-
@@ -260,23 +306,41 @@ for (let iz = 0; iz < SIDE; iz++) {
       if (w > 0.01) h = h * (1 - w) + (7 + 1.4 * fbm(x * 0.01 - 7, z * 0.01 + 2, 3)) * w
     }
 
-    // lake basins: uniformly DEEP inside the waterline, with noise-warped
-    // boundaries — the terrain-vs-level intersection IS the visible shoreline,
-    // so warping the basin field grows bays and headlands (aerial review:
-    // perfect circles read as compass-drawn)
-    for (const [li, lake] of LAKES.entries()) {
-      const d = warpedDist(x, z, lake.x, lake.z, lake.r, li * 7 + 3)
-      // wide transition band: the terrain crosses the waterline on a gentle
-      // slope (a hard basin→ring step quantized the shoreline into grid
-      // staircases — aerial iteration 2)
-      const w = smoothstep(lake.r * 1.12, lake.r * 0.68, d)
-      h = h * (1 - w) + (lake.level - 4.5) * w
-    }
-
     H[idx(ix, iz)] = h
   }
 }
 console.timeEnd('compose')
+
+// ---------- lakes: carve the hand-traced basins ----------
+// Depth follows distance from the drawn shore toward the hand-picked deep
+// point; banks slope in over a 14m band outside the shoreline. Carve-only:
+// ground is never raised, so the lake sits IN the land (no donut).
+console.time('lakes')
+for (const lake of LAKES) {
+  for (let iz = 0; iz < SIDE; iz++) {
+    for (let ix = 0; ix < SIDE; ix++) {
+      const x = worldX(ix), z = worldZ(iz)
+      const sd = shoreDist(x, z, lake.shore)
+      if (sd > 14) continue
+      const i0 = idx(ix, iz)
+      if (sd > 0) {
+        // bank: ease existing ground down toward shore level
+        const t = 1 - sd / 14
+        const bankTarget = lake.level + 0.4 + sd * 0.35
+        if (H[i0] > bankTarget) H[i0] = H[i0] * (1 - t * 0.85) + bankTarget * (t * 0.85)
+      } else {
+        // interior: depth grows from shore toward the deep point
+        const dDeep = Math.hypot(x - lake.deep.x, z - lake.deep.z)
+        const shoreT = Math.min(1, -sd / 26) // 0 at shore → 1 by 26m in
+        const deepT = Math.max(0, 1 - dDeep / 120)
+        const depth = 1.2 + shoreT * 3.2 + deepT * 1.6
+        const target = lake.level - depth
+        if (H[i0] > target) H[i0] = target
+      }
+    }
+  }
+}
+console.timeEnd('lakes')
 
 // ---------- river carve pass (after base terrain exists) ----------
 // The bed follows a MONOTONIC downstream profile derived from the terrain at
@@ -523,34 +587,21 @@ for (let iz = 0; iz < SIDE; iz++) {
   }
 }
 
-// lake shore ring: terrain just outside each basin must sit ABOVE the fill
-// level, or the water disc edge hangs over lower ground ("infinity pool" rim
-// seen edge-on — caught on the M5b screenshots)
-for (let iz = 0; iz < SIDE; iz++) {
-  for (let ix = 0; ix < SIDE; ix++) {
-    const x = worldX(ix), z = worldZ(iz)
-    for (const [li, lake] of LAKES.entries()) {
-      // raise everything under the water DISC (geometric) that the warped
-      // basin doesn't claim — mixed frames here left below-level ground under
-      // the disc edge (floating waterline)
-      const dGeo = Math.hypot(x - lake.x, z - lake.z)
-      const d = warpedDist(x, z, lake.x, lake.z, lake.r, li * 7 + 3)
-      if (dGeo > lake.r * 1.5 || d < lake.r * 0.95) continue
-      // rivers cut through the shore — leave their corridors as inlets/outlets
-      let riverGap = false
+// containment touch-up: erosion can gully a rim cell below the level — nudge
+// only those cells (cm-scale) just above it; river corridors stay open
+for (const lake of LAKES) {
+  for (let iz = 0; iz < SIDE; iz++) {
+    for (let ix = 0; ix < SIDE; ix++) {
+      const x = worldX(ix), z = worldZ(iz)
+      const sd = shoreDist(x, z, lake.shore)
+      if (sd < 1 || sd > 16) continue
+      let nearRiver = false
       for (const path of RIVERS_DENSE) {
-        if (distToPath(x, z, path).d < 26) {
-          riverGap = true
-          break
-        }
+        if (distToPath(x, z, path).d < 26) { nearRiver = true; break }
       }
-      if (riverGap) continue
+      if (nearRiver) continue
       const i0 = idx(ix, iz)
-      const need = lake.level + 0.55
-      if (H[i0] < need) {
-        const t = 1 - Math.abs(d - lake.r * 1.05) / (lake.r * 0.5)
-        H[i0] = Math.max(H[i0], need + Math.max(0, t) * 0.6)
-      }
+      if (H[i0] < lake.level + 0.25) H[i0] = lake.level + 0.25
     }
   }
 }
@@ -676,21 +727,22 @@ for (const [ri, path] of RIVERS_DENSE.entries()) {
     prev = Math.max(prev, h)
   }
 }
-// lakes hold water: basin floor below fill level, shore above it — sampled
-// just OUTSIDE the warped boundary (walk each ray until the warped field
-// exits the ring)
-for (const [li, lake] of LAKES.entries()) {
-  if (hAt(lake.x, lake.z) > lake.level - 1) fail(`lake at (${lake.x},${lake.z}) floor above fill level`)
-  // the disc edge (geometric 1.32r) must sit on ground above the fill level
-  // wherever the warped basin doesn't claim it as open water
-  for (let a = 0; a < Math.PI * 2; a += 0.25) {
-    const sx = lake.x + Math.cos(a) * lake.r * 1.32
-    const sz = lake.z + Math.sin(a) * lake.r * 1.32
-    const wd = warpedDist(sx, sz, lake.x, lake.z, lake.r, li * 7 + 3)
-    if (wd < lake.r * 1.02) continue // legitimately water (warp bay)
-    const nearRiver = RIVERS_DENSE.some((p) => distToPath(sx, sz, p).d < 30)
-    if (!nearRiver && hAt(sx, sz) < lake.level + 0.2) {
-      fail(`lake at (${lake.x},${lake.z}) shore below fill level at angle ${a.toFixed(1)}`)
+// lakes hold water: deep point below level; every shore vertex's outside
+// ground above level (river corridors excepted)
+for (const lake of LAKES) {
+  if (hAt(lake.deep.x, lake.deep.z) > lake.level - 1) fail(`lake ${lake.name}: deep point above fill level`)
+  for (const [vx, vz] of lake.shore) {
+    // sample 6m outside the shoreline at this vertex
+    const cx = lake.shore.reduce((a, v) => a + v[0], 0) / lake.shore.length
+    const cz = lake.shore.reduce((a, v) => a + v[1], 0) / lake.shore.length
+    const dx = vx - cx
+    const dz = vz - cz
+    const len = Math.hypot(dx, dz) || 1
+    const sx = vx + (dx / len) * 6
+    const sz = vz + (dz / len) * 6
+    const nearRiver = RIVERS_DENSE.some((pp) => distToPath(sx, sz, pp).d < 28)
+    if (!nearRiver && hAt(sx, sz) < lake.level + 0.1) {
+      fail(`lake ${lake.name}: shore below level near (${vx},${vz})`)
       break
     }
   }

@@ -17,7 +17,29 @@ export const VOLCANO = { x: 0, z: -620 }
 export const SPAWN = { x: 0, z: 780 }
 
 export interface RiverPoint { x: number; z: number }
-export interface LakeDef { x: number; z: number; r: number; level: number }
+export interface LakeDef {
+  name: string
+  level: number
+  deep: { x: number; z: number }
+  /** hand-traced shoreline polygon, [x,z] pairs */
+  shore: [number, number][]
+}
+
+/** Signed distance to a shoreline polygon: negative inside. */
+export function shoreDist(px: number, pz: number, shore: [number, number][]): number {
+  let inside = false
+  let minD = Infinity
+  for (let i = 0, j = shore.length - 1; i < shore.length; j = i++) {
+    const [xi, zi] = shore[i]
+    const [xj, zj] = shore[j]
+    if (zi > pz !== zj > pz && px < ((xj - xi) * (pz - zi)) / (zj - zi) + xi) inside = !inside
+    const dx = xj - xi
+    const dz = zj - zi
+    const t = Math.max(0, Math.min(1, ((px - xi) * dx + (pz - zi) * dz) / (dx * dx + dz * dz)))
+    minD = Math.min(minD, Math.hypot(px - (xi + dx * t), pz - (zi + dz * t)))
+  }
+  return inside ? -minD : minD
+}
 export interface RuinSite { tag: string; x: number; z: number; y: number }
 export interface SwampDef { x: number; z: number; r: number; level: number }
 export interface WorldMeta {

@@ -294,3 +294,10 @@ Process change (user): free-camera aerial QA tool (`tools/aerial.mjs` + `setFree
 - [x] Fix: deterministic renderOrder by surface elevation (ocean 1 → swamp 2 → lakes 3+level → rivers 4); far-over-near is now impossible among water sheets
 - [x] Two follow-on iterations at the same vantage: swamp sea-clip loosened to ground > -0.5 (the 0.6m clip left checkerboard holes over the flooded strip); marsh roughness 0.65 + slower drift (grazing-angle sun glint striped the sheet white — stagnant water shouldn't mirror)
 - [x] Ground-level swamp verification: calm matte marsh, dead trees, river threading past — approved. Gates 73/73
+
+### M9e — HAND-MADE LAKES (user: "why formulas? hand-make it" — the process correction)
+- [x] The donut root cause was the formula itself: center+radius+noise forced arbitrary water levels onto lower terrain, requiring raised containment rings. All lake formulas DELETED.
+- [x] Lakes are now hand-traced shoreline POLYGONS — every vertex a deliberate decision: the west lake (20 vertices) is an elongated highland waterbody with a river inlet neck, an east peninsula pinch, a west bay, and a hand-picked deep point; the east lake (12 vertices) is a small lowland pool with a marshy south end and an SE bay notch
+- [x] Depth = distance-from-drawn-shore toward the deep point; banks ease down over a 14m band; carve-only (ground never raised); levels chosen against surrounding terrain and validator-asserted at every shore vertex
+- [x] Runtime rebuilt on polygons: lake sheet = fan over the traced shore (+6m tuck), waterLevelAt/scatter/terrain colors all use shared shoreDist point-in-polygon
+- [x] Aerial + ground verification: both lakes sit IN the land, river flows through the west lake, oasis shoreline at ground level. Gates 73/73

@@ -6,7 +6,7 @@
 // through heightmap.ts. LOD0 vertex data doubles as the physics collider mesh
 // (physics.ts asks for it via chunkGridData).
 import * as THREE from 'three'
-import { heightAt, normalAt, forestMaskAt, biomeAt, BIOME, worldMeta, HALF_SIZE, SEA_LEVEL } from './heightmap'
+import { heightAt, normalAt, forestMaskAt, biomeAt, shoreDist, BIOME, worldMeta, HALF_SIZE, SEA_LEVEL } from './heightmap'
 
 export const CHUNK_SIZE = 128
 export const CHUNKS_PER_SIDE = (HALF_SIZE * 2) / CHUNK_SIZE // 16
@@ -209,7 +209,7 @@ function waterEdgeDist(x: number, z: number): number {
     }
   }
   for (const lake of meta.lakes) {
-    best = Math.min(best, Math.abs(Math.hypot(x - lake.x, z - lake.z) - lake.r * 0.95))
+    best = Math.min(best, Math.abs(shoreDist(x, z, lake.shore)))
   }
   return best
 }
@@ -297,7 +297,7 @@ function groundColorAt(x: number, z: number, h: number, ny: number, out: THREE.C
   }
   // under a lake's fill level → bed color, never lawn
   for (const lake of worldMeta?.lakes ?? []) {
-    if (Math.hypot(x - lake.x, z - lake.z) < lake.r * 1.05 && h < lake.level - 0.2) {
+    if (shoreDist(x, z, lake.shore) < 2 && h < lake.level - 0.2) {
       return out.copy(C_DEEP).lerp(C_MUD, THREE.MathUtils.clamp((h - (lake.level - 5)) / 5, 0, 1) * 0.6)
     }
   }

@@ -28,7 +28,7 @@ const probe = await page.evaluate(async () => {
     wlRiver: g.game.waterLevelAt(mid.x, mid.z),
     flowRiver: g.game.riverFlowAt(mid.x, mid.z),
     wlOcean: g.game.waterLevelAt(0, 1010),
-    wlLake: g.game.waterLevelAt(meta.lakes[0].x, meta.lakes[0].z),
+    wlLake: g.game.waterLevelAt(meta.lakes[0].deep.x, meta.lakes[0].deep.z),
     wlDryLand: g.game.waterLevelAt(meta.spawn.x, meta.spawn.z),
   }
 })
