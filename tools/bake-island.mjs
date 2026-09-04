@@ -15,7 +15,7 @@
 // river path becomes a bed, and then lets erosion age it.
 import { writeFileSync, mkdirSync } from 'node:fs'
 import {
-  HALF, SPAWN, VOLCANO, COAST, RANGES, HOLM, SHELVES, RIVER, RIVER_PATHS, LAKES, FORESTS, CLEARINGS, RUINS,
+  HALF, SPAWN, VOLCANO, COAST, RANGES, HOLM, SHELVES, RIVER, RIVER_PATHS, LAKES, FORESTS, CLEARINGS, RUINS, BIOMES,
   shoreDist, distToPath, closedPath,
 } from './hand-geometry.mjs'
 import { encodeRowDelta } from './world-io.mjs'
@@ -109,15 +109,10 @@ const coastSD = sdfField(COAST, 8)
 const holmSD = sdfField(HOLM, 8)
 console.timeEnd('sdf')
 
-// ---- biome regions — still centre+radius+noise, retraced by hand in M10c ----
-const SWAMP = { x: 640, z: 660, r: 330, level: 4.2 } // in the Reservoir's lee, the outflow's delta
-const DESERT = { x: -950, z: 1050, r: 480 } // the south-west rain shadow behind the West Range
-const PLAINS = { x: -150, z: 950, r: 300 } // open ground between the Southwood and the ring
-function warpedDist(x, z, cx, cz, r, seed, amp = 0.42) {
-  const d = Math.hypot(x - cx, z - cz)
-  const wob = fbm((x + seed * 137) * 0.003, (z - seed * 91) * 0.003, 2)
-  return d + wob * r * amp
-}
+// ---- biomes: traced polygons (tools/hand-geometry.mjs); sampled through
+// coarse SDF fields like the coast ----
+const SWAMP = BIOMES.find((b) => b.name === 'swamp')
+const biomeSD = BIOMES.map((b) => sdfField(b.shore, 8))
 
 // ---------- composition ----------
 console.time('compose')
@@ -221,28 +216,24 @@ for (let iz = 0; iz < SIDE; iz++) {
       }
     }
 
-    // biome floors (formula regions until M10c)
-    {
-      const d = warpedDist(x, z, SWAMP.x, SWAMP.z, SWAMP.r, 55)
-      // the marsh never climbs onto the Holm plateau (the ring's moat wall
-      // must stand above the ring's water)
-      const w = smoothstep(SWAMP.r * 1.05, SWAMP.r * 0.5, d) * smoothstep(-20, 140, holmSD(x, z))
-      if (w > 0.01) {
-        const pool = Math.max(0, fbm(x * 0.02 + 11, z * 0.02 - 5, 3)) * 2.6
-        h = h * (1 - w) + (5.5 - pool) * w
-      }
-    }
-    // (flats never cut into a range: the desert's disc reached the West
-    // Range's southern end and sliced it into a 100 m orange wall)
-    {
-      const d = Math.hypot(x - DESERT.x, z - DESERT.z)
-      const w = smoothstep(DESERT.r, DESERT.r * 0.5, d) * smoothstep(90, 45, h)
-      if (w > 0.01) h = h * (1 - w) + (7.5 + 2.2 * fbm(x * 0.012 + 3, z * 0.012 + 9, 3) + 0.7 * Math.sin(x * 0.045 + z * 0.02)) * w
-    }
-    {
-      const d = Math.hypot(x - PLAINS.x, z - PLAINS.z)
-      const w = smoothstep(PLAINS.r, PLAINS.r * 0.5, d) * smoothstep(90, 45, h)
-      if (w > 0.01) h = h * (1 - w) + (7 + 1.4 * fbm(x * 0.01 - 7, z * 0.01 + 2, 3)) * w
+    // BIOME FLOORS: inside each traced edge the ground eases to the biome's
+    // floor over `edge` metres — the swamp a low wet basin with pools, the
+    // desert a dune flat, the plain a grassy shelf. Never cuts into a range
+    // (the old desert disc sliced the West Range into a wall), never climbs
+    // onto the Holm.
+    for (let bi = 0; bi < BIOMES.length; bi++) {
+      const b = BIOMES[bi]
+      if (b.floor === null) continue
+      const sd = biomeSD[bi](x, z)
+      if (sd > 0) continue
+      let w = smoothstep(0, -b.edge, sd) * smoothstep(90, 45, h)
+      if (b.name === 'swamp') w *= smoothstep(-20, 140, holmSD(x, z))
+      if (w <= 0.01) continue
+      let floor = b.floor
+      if (b.name === 'swamp') floor -= Math.max(0, fbm(x * 0.02 + 11, z * 0.02 - 5, 3)) * 2.6 // pools under the table
+      else if (b.name === 'desert') floor += 2.2 * fbm(x * 0.012 + 3, z * 0.012 + 9, 3) + 0.7 * Math.sin(x * 0.045 + z * 0.02) // dunes
+      else floor += 1.4 * fbm(x * 0.01 - 7, z * 0.01 + 2, 3)
+      h = h * (1 - w) + floor * w
     }
 
     // THE SEA: outside the traced coast the ground falls to the sea floor
@@ -329,7 +320,7 @@ const RIVER_BEDS = RIVER.parts.map((part) => {
     let bed = i === 0 ? Math.min(prev, terrain) : Math.min(terrain, prev - 0.5)
     // floor: through the swamp the river runs at the marsh's water table
     // (one sheet, not a trench under it); to the sea it may dig to -2.5
-    const inSwamp = warpedDist(path[i].x, path[i].z, SWAMP.x, SWAMP.z, SWAMP.r, 55) < SWAMP.r * 1.05
+    const inSwamp = SWAMP && shoreDist(path[i].x, path[i].z, SWAMP.shore) < 60
     bed = Math.max(bed, inSwamp ? SWAMP.level - 1.25 : -2.5)
     bed = Math.min(bed, prev)
     beds.push(bed)
@@ -805,7 +796,8 @@ const meta = {
   rivers: [...RIVER.parts.filter((p) => p.flow), ...RIVER.parts.filter((p) => !p.flow)].map(closedPath),
   river: { knot: RIVER.knot, level: RIVER.level, parts: RIVER.parts.map((p) => ({ name: p.name, flow: p.flow, halfWidth: p.halfWidth, closed: !!p.closed, ford: p.ford ?? null, path: p.path })) },
   lakes: LAKES_ACTIVE, ruinSites: RUIN_SITES, ruins: RUINS,
-  swamp: SWAMP,
+  swamp: SWAMP ? { level: SWAMP.level, shore: SWAMP.shore } : null,
+  biomes: BIOMES,
   coast: COAST, ranges: RANGES, holm: HOLM,
   forests: FORESTS, clearings: CLEARINGS,
   bakedAt: new Date().toISOString(),
@@ -813,7 +805,7 @@ const meta = {
 writeFileSync('public/world/world-meta.json', JSON.stringify(meta, null, 2))
 writeFileSync('public/world/forest.bin', Buffer.from(forest.buffer))
 
-// biome map (formula regions until M10c; alpine is altitude)
+// biome map: the traced polygons (alpine is altitude)
 {
   const biomes = new Uint8Array(SIDE * SIDE)
   for (let iz = 0; iz < SIDE; iz++) {
@@ -821,10 +813,8 @@ writeFileSync('public/world/forest.bin', Buffer.from(forest.buffer))
       const x = worldX(ix), z = worldZ(iz)
       const h = H[idx(ix, iz)]
       let b = 0
-      if (warpedDist(x, z, SWAMP.x, SWAMP.z, SWAMP.r, 55) < SWAMP.r) b = 1
-      else if (warpedDist(x, z, DESERT.x, DESERT.z, DESERT.r, 77) < DESERT.r) b = 2
-      else if (warpedDist(x, z, PLAINS.x, PLAINS.z, PLAINS.r, 99) < PLAINS.r) b = 3
-      else if (h > 120) b = 4
+      for (let bi = 0; bi < BIOMES.length && !b; bi++) if (biomeSD[bi](x, z) < 0) b = BIOMES[bi].id
+      if (!b && h > 120) b = 4
       biomes[idx(ix, iz)] = b
     }
   }

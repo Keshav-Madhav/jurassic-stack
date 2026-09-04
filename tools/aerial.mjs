@@ -22,6 +22,8 @@ const shots = [
   ['foothills', -700, 220, -900, 0.6, -0.3, 0.5], // west foothills + the Horns
   ['volcano-south', 0, 260, -200, 0, -0.08, 0.5], // the caldera approach
   ['estuary', 1050, 380, 1600, 0.25, -0.5, 0.5], // the outflow's mouth in Estuary Bay
+  ['swamp', 780, 220, 1050, 0.1, -0.55, 0.5], // the Writhing Flats round the outflow
+  ['desert', -900, 320, 1500, 0.15, -0.5, 0.5], // the Dune Country from the south
   ['spawn-eye', 0, 1.7, 1560, 0, 0.04, 0.5], // what you wake up to
 ]
 

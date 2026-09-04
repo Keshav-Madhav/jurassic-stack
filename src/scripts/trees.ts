@@ -104,8 +104,8 @@ export function buildCanopyTree(seed: number, far = false): THREE.Group {
   parts.push(limb(new THREE.Vector3(lean * 0.2, 0.06, lean * 0.1), trunkTop, 0.036, 0.024, 7, rand))
 
   const crownY = 0.66 + rand() * 0.04
-  // the ring: five or six masses around the crown's waist, each on a limb
-  const n = 5 + Math.floor(rand() * 2)
+  // the ring: five masses around the crown's waist, each on a limb
+  const n = 5
   const a0 = rand() * Math.PI * 2
   for (let i = 0; i < n; i++) {
     const ang = a0 + (i / n) * Math.PI * 2 + (rand() - 0.5) * 0.5
@@ -118,19 +118,13 @@ export function buildCanopyTree(seed: number, far = false): THREE.Group {
   }
   // the heart: one big mass over the trunk
   parts.push(leafMass(trunkTop.x, crownY + 0.02, trunkTop.z, 0.3, 0.22, 0.3, LEAF, rand))
-  // the crown top: two or three sunlit masses
-  const top = 2 + Math.floor(rand() * 2)
+  // the crown top: two sunlit masses
+  const top = 2
   for (let i = 0; i < top; i++) {
     const ang = rand() * Math.PI * 2
     const rad = 0.06 + rand() * 0.1
     const r = 0.13 + rand() * 0.05
     parts.push(leafMass(Math.cos(ang) * rad, 0.8 + rand() * 0.06, Math.sin(ang) * rad, r, r * 0.8, r, _c.copy(LEAF).lerp(LEAF_SUN, 0.35 + rand() * 0.4), rand))
-  }
-  // one low hanger — the skirt that hides the trunk from a distance
-  {
-    const ang = rand() * Math.PI * 2
-    const r = 0.13 + rand() * 0.04
-    parts.push(leafMass(Math.cos(ang) * 0.28, crownY - 0.2, Math.sin(ang) * 0.28, r, r * 0.7, r, _c.copy(LEAF).lerp(LEAF_DEEP, 0.6), rand))
   }
   return finish(parts, `CanopyTree_${seed}${far ? '_far' : ''}`)
 }

@@ -63,9 +63,12 @@ export class WaterSystem {
       const indices: number[] = []
       const uvs: number[] = []
       let vi = 0
-      const R = sw.r * 1.6
-      for (let z0 = sw.z - R; z0 < sw.z + R; z0 += CELL) {
-        for (let x0 = sw.x - R; x0 < sw.x + R; x0 += CELL) {
+      const xs = sw.shore.map((p) => p[0])
+      const zs = sw.shore.map((p) => p[1])
+      const bx0 = Math.min(...xs) - 40, bx1 = Math.max(...xs) + 40
+      const bz0 = Math.min(...zs) - 40, bz1 = Math.max(...zs) + 40
+      for (let z0 = bz0; z0 < bz1; z0 += CELL) {
+        for (let x0 = bx0; x0 < bx1; x0 += CELL) {
           // include a cell if any corner is swampy-and-submerged
           let wet = false
           for (const [ox, oz] of [[0, 0], [CELL, 0], [0, CELL], [CELL, CELL], [CELL / 2, CELL / 2]]) {

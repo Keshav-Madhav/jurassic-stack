@@ -334,7 +334,7 @@ TODO (one pick per round):
 Story in PLAN.md → "The island v2 — the Lasso". One round each, gates + screenshots + live check before the next. Culling, LODs and budgets are part of every round ("shit tons of culling and lods and optimizations").
 - [x] **M10a — the 4 km canvas + the Lasso.** DONE (below)
 - [x] **M10b — two lakes + the terrain body.** DONE (below)
-- [ ] **M10c — biome edges by hand.** Swamp wraps the Reservoir + outflow delta (~700 m); desert in the SW rain shadow (~1 km); plains south-centre; `warpedDist` deleted (mandate item 2)
+- [x] **M10c — biome edges by hand.** DONE (below)
 - [~] **M10d — forests retraced + the Holm redwoods.** Forests retraced island-wide in M10b (below); the redwood species for the Holm still to come
 - [ ] **M10e — ruins hand-placed; caldera gate visible** at the volcano's south foot (mandate item 6)
 - [ ] **M10f — swamp flora (mangrove-type, dried bushes) + desert flora** (mandate item 4)
@@ -359,3 +359,8 @@ Story in PLAN.md → "The island v2 — the Lasso". One round each, gates + scre
 - [x] **200 dinos** (`population.ts`): habitat-placed packs/herds/apexes by forest mask + biome, deterministic per seed; **dormancy** in `Dino` — wild idle/wander dinos beyond 680 m freeze and hide (no AI, no mixer, no draw), wake inside 600 m; n² pack/separation loops skip dormant ones. Spawn-beach raptors spread out (a tight pack of three killed the new player)
 - [x] Bank cap FEATHERED at its edge (a hard stop left a 10 m step around every channel — reachability caught it); navmesh validator given a 65K-node A* pool (the default pool ran out mid-island on 4 km paths and reported reachable ruins as "stops short"); ruins re-sited by probing for flat, open ground
 - [x] Perf: full-LOD tree band 300 → 180 m; spawn 5.4M tris / 56–60 fps headless, gates 73/73
+
+### M10c — BIOME EDGES BY HAND (mandate item 2 — the last formula regions are gone)
+- [x] `BIOMES` in hand-geometry: the Writhing Flats (swamp, wraps the outflow's upper course in the Reservoir's lee, lobes to the east foothills; floor 4.8 with pools under a 4.2 water table), the Dune Country (desert in the West Range's rain shadow down to Dune Bay, floor 9 with dunes), the South Plain (floor 14, a grassy shelf on the way down to the beach). Each a traced polygon with a floor the ground eases to over `edge` metres; `warpedDist` and the three discs deleted; `biomes.bin` and the swamp sheet read the polygons
+- [x] Biome floors never cut into a range (h > 45 m untouched) and the swamp never climbs the Holm
+- [x] Spawn meadow widened (wood line 1480 → 1430) and the canopy tree trimmed to 8 leaf masses (~720 tris); dot LOD from 600 m; the m3 fps gate now samples steady state (12 s after ready, best of 3) — the first ten seconds are 200 rigs cloning and 100K instance buffers uploading. 73/73

@@ -255,7 +255,7 @@ export const FORESTS = [
     shore: [
       [-600, 1440], [-560, 1290], [-500, 1150], [-440, 1020], [-330, 930], [-200, 890],
       [0, 880], [200, 860], [380, 880], [520, 940], [620, 1050], [680, 1180], [700, 1320],
-      [660, 1440], [540, 1500], [300, 1480], [60, 1470], [-160, 1480], [-370, 1500], [-500, 1480],
+      [660, 1400], [540, 1450], [300, 1430], [60, 1420], [-160, 1430], [-370, 1450], [-500, 1440],
     ],
   },
   {
@@ -372,6 +372,44 @@ export const FORESTS = [
     // THE EAST COAST WOOD — the strip under the East Range's seaward side
     name: 'east-coast', kind: 'broadleaf', density: 0.75, edge: 40,
     shore: [[1420, 450], [1520, 500], [1540, 700], [1480, 880], [1400, 800], [1380, 600]],
+  },
+]
+
+// ---------- BIOMES: traced edges ----------
+// The last formula regions are gone: each biome is a polygon with a floor
+// height the ground eases to (feathered over `edge` metres inside the line)
+// and a level (the swamp's water table). `floor` null = leave the ground.
+export const BIOMES = [
+  {
+    // THE WRITHING FLATS — the swamp, in the Reservoir's lee: wraps the
+    // outflow's upper course east and south of the Knot, lobes toward the
+    // east foothills, pinches out where the outflow drops to the estuary
+    name: 'swamp', id: 1, floor: 4.8, level: 4.2, edge: 160,
+    shore: [
+      [560, 300], [640, 240], [760, 260], [880, 320], [980, 420], [1040, 540],
+      [1010, 680], [1060, 800], [980, 920], [860, 980], [740, 1010], [640, 940],
+      [600, 820], [520, 760], [480, 640], [500, 500], [540, 400],
+    ],
+  },
+  {
+    // THE DUNE COUNTRY — the desert in the West Range's rain shadow, from the
+    // south-west foothills down to Dune Bay; a long tongue reaches north along
+    // the range's foot
+    name: 'desert', id: 2, floor: 9, level: null, edge: 160,
+    shore: [
+      [-1080, 820], [-960, 780], [-840, 840], [-720, 900], [-600, 1000], [-520, 1120],
+      [-560, 1260], [-680, 1380], [-820, 1480], [-1000, 1440], [-1160, 1320], [-1280, 1200],
+      [-1380, 1080], [-1300, 940], [-1180, 880],
+    ],
+  },
+  {
+    // THE SOUTH PLAIN — open grass between the Southwood and the ring, herds
+    // and bush seas; a lower shelf on the way down to the beach
+    name: 'plains', id: 3, floor: 14, level: null, edge: 120,
+    shore: [
+      [-520, 760], [-380, 700], [-200, 720], [-40, 800], [40, 920], [-20, 1060],
+      [-140, 1150], [-320, 1180], [-460, 1100], [-540, 960], [-560, 850],
+    ],
   },
 ]
 

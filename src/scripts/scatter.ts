@@ -160,7 +160,7 @@ const COVER_DRAW_DIST = 340
  *  trees swap to 20-tri leaf masses beyond FAR, and every tree kind becomes
  *  a ~40-tri trunk-and-blob beyond DOT (a few pixels tall in the haze). */
 const TREE_LOD_FAR = 180
-const TREE_LOD_DOT = 900
+const TREE_LOD_DOT = 600
 const DOT_KINDS: Partial<Record<NodeKind, 'canopy' | 'elder' | 'pine' | 'palm' | 'bare'>> = {
   tree: 'canopy', elder: 'elder', pine: 'pine', palm: 'palm', deadtree: 'bare', willow: 'canopy',
 }

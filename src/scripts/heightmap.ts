@@ -53,7 +53,7 @@ export interface RiverPart {
   path: RiverPoint[]
 }
 export interface RiverDef { knot: { x: number; z: number }; level: number; parts: RiverPart[] }
-export interface SwampDef { x: number; z: number; r: number; level: number }
+export interface SwampDef { level: number; shore: [number, number][] }
 export interface WorldMeta {
   side: number
   res: number
@@ -68,7 +68,7 @@ export interface WorldMeta {
   river?: RiverDef
   lakes: LakeDef[]
   ruinSites: RuinSite[]
-  swamp?: SwampDef
+  swamp?: SwampDef | null
   coast?: [number, number][]
   forests?: { name: string; kind: 'broadleaf' | 'pine' | 'mixed'; density: number; edge?: number; shore: [number, number][] }[]
   clearings?: [number, number][][]
