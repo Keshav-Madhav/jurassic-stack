@@ -13,15 +13,16 @@ import RAPIER from '@dimforge/rapier3d-compat'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import { heightAt, lodFloorAt, normalAt, forestMaskAt, forestKindAt, biomeAt, shoreDist, BIOME, FOREST_KIND, SEA_LEVEL, HALF_SIZE, SPAWN, VOLCANO, worldMeta } from './heightmap'
-import { buildCanopyTree, buildElderTree, buildDotTree, buildFarPine, buildMushroom, buildRedwood } from './trees'
+import { buildCanopyTree, buildElderTree, buildDotTree, buildFarPine, buildMushroom, buildRedwood, buildMangrove, buildDriedBush, buildCactus, buildReeds } from './trees'
 import { CHUNK_SIZE, CHUNKS_PER_SIDE } from './terrain'
 import { addObstacle } from './obstacles'
 import type { Physics } from './physics'
 import type { ItemId } from './items'
 
 export type NodeKind =
-  | 'tree' | 'elder' | 'redwood' | 'pine' | 'deadtree' | 'palm' | 'willow'
+  | 'tree' | 'elder' | 'redwood' | 'pine' | 'deadtree' | 'palm' | 'willow' | 'mangrove'
   | 'rock' | 'log' | 'bush' | 'fern' | 'flower' | 'grass' | 'mushroom'
+  | 'driedbush' | 'cactus' | 'reeds'
 
 export interface ScatterNode {
   id: number
@@ -53,13 +54,17 @@ const NODE_DEFS: Record<NodeKind, { hp: number; yields: Partial<Record<ItemId, [
   flower: { hp: 1, yields: { fiber: [1, 1] } },
   grass: { hp: 1, yields: { fiber: [1, 2] } },
   mushroom: { hp: 1, yields: { berry: [1, 1] } },
+  mangrove: { hp: 3, yields: { wood: [2, 3], fiber: [1, 2] } },
+  driedbush: { hp: 1, yields: { wood: [1, 1], fiber: [1, 2] } },
+  cactus: { hp: 2, yields: { fiber: [1, 2], berry: [0, 1] } },
+  reeds: { hp: 1, yields: { fiber: [2, 3] } },
 }
 
 /** Kinds whose trunks get physics cylinders (rocks: squat cylinders too). */
-const TRUNK_KINDS = new Set<NodeKind>(['tree', 'elder', 'redwood', 'pine', 'palm', 'deadtree', 'willow', 'rock'])
+const TRUNK_KINDS = new Set<NodeKind>(['tree', 'elder', 'redwood', 'pine', 'palm', 'deadtree', 'willow', 'rock', 'mangrove', 'cactus'])
 /** Single-trunk canopy kinds: wide crowns in the air, so slope under the
  *  footprint doesn't matter (the flatness guard is for merged groves). */
-const CANOPY_KINDS = new Set<NodeKind>(['tree', 'elder', 'redwood'])
+const CANOPY_KINDS = new Set<NodeKind>(['tree', 'elder', 'redwood', 'mangrove'])
 
 interface ModelRef {
   /** GLB in models/props/ … */
@@ -67,7 +72,7 @@ interface ModelRef {
   /** optional named sub-node to extract (variant packs) */
   node?: string
   /** … or a tree built in code (trees.ts), deterministic per seed */
-  gen?: 'canopy' | 'elder' | 'mushroom' | 'redwood'
+  gen?: 'canopy' | 'elder' | 'mushroom' | 'redwood' | 'mangrove' | 'driedbush' | 'cactus' | 'reeds'
   seed?: number
 }
 
@@ -96,6 +101,10 @@ const KIND_MODELS: Record<NodeKind, ModelRef[]> = {
   ],
   grass: [{ file: 'Grass1' }],
   mushroom: [{ gen: 'mushroom', seed: 31 }, { gen: 'mushroom', seed: 32 }],
+  mangrove: [{ gen: 'mangrove', seed: 51 }, { gen: 'mangrove', seed: 52 }],
+  driedbush: [{ gen: 'driedbush', seed: 61 }, { gen: 'driedbush', seed: 62 }],
+  cactus: [{ gen: 'cactus', seed: 71 }, { gen: 'cactus', seed: 72 }],
+  reeds: [{ gen: 'reeds', seed: 81 }],
 }
 
 /** cell size, base chance, scale range, cap, seed, habitat rule */
@@ -151,6 +160,13 @@ const SPECS: Record<NodeKind, PlaceSpec> = {
   flower: { cell: 18, chance: 0.5, sMin: 0.6, sMax: 1.2, cap: 10400, seed: 111, habitat: (h, _ny, f) => f < -0.6 && h > 2.4 },
   grass: { cell: 7, chance: 0.72, sMin: 0.45, sMax: 1.2, cap: 120000, seed: 555, habitat: (h) => h > 1.6 },
   mushroom: { cell: 26, chance: 0.45, sMin: 0.35, sMax: 0.8, cap: 3600, seed: 222, habitat: (h, _ny, f) => f > 0 && h > 3 },
+  // THE SWAMP: mangroves on the wet ground, reeds at the water's edge, dried
+  // bushes on the drier hummocks (biome gates below decide where these go)
+  mangrove: { cell: 11, chance: 0.7, sMin: 7, sMax: 12, cap: 6000, seed: 333, habitat: (h) => h > 3.2 },
+  reeds: { cell: 6, chance: 0.6, sMin: 1.5, sMax: 2.6, cap: 12000, seed: 444, habitat: (h) => h > 2.6 },
+  // THE DESERT: cacti and dried bushes over the dune flats
+  driedbush: { cell: 10, chance: 0.55, sMin: 1, sMax: 2, cap: 12000, seed: 666, habitat: (h) => h > 3 },
+  cactus: { cell: 18, chance: 0.5, sMin: 2.5, sMax: 5, cap: 3000, seed: 777, habitat: (h) => h > 4 },
 }
 
 const RESPAWN_MS = 240_000
@@ -160,7 +176,7 @@ const RESPAWN_MS = 240_000
  *  Distance tests use the cell's bounding box, not its centre. */
 const SUPER = 256
 /** Ground-cover kinds: no shadow casting, distance-culled. */
-const GROUND_COVER = new Set<NodeKind>(['grass', 'fern', 'flower', 'mushroom', 'log', 'bush'])
+const GROUND_COVER = new Set<NodeKind>(['grass', 'fern', 'flower', 'mushroom', 'log', 'bush', 'driedbush', 'reeds'])
 /** Cover cells beyond this range from the player are hidden entirely. */
 const COVER_DRAW_DIST = 290
 /** Tree LOD bands per supercell (viewer distance to cell centre): built
@@ -169,7 +185,7 @@ const COVER_DRAW_DIST = 290
 const TREE_LOD_FAR = 180
 const TREE_LOD_DOT = 600
 const DOT_KINDS: Partial<Record<NodeKind, 'canopy' | 'elder' | 'pine' | 'palm' | 'bare' | 'redwood'>> = {
-  tree: 'canopy', elder: 'elder', redwood: 'redwood', pine: 'pine', palm: 'palm', deadtree: 'bare', willow: 'canopy',
+  tree: 'canopy', elder: 'elder', redwood: 'redwood', pine: 'pine', palm: 'palm', deadtree: 'bare', willow: 'canopy', mangrove: 'canopy',
 }
 /** Small solid props (boulders, logs) vanish beyond this — a 2 m rock is a
  *  pixel at 600 m, but 2,000 of them at full geometry are not free. */
@@ -392,11 +408,12 @@ export class Scatter {
       if (!ref.gen) continue
       const key = `${ref.gen}:${ref.seed}`
       if (built.has(key)) continue
-      if (ref.gen === 'mushroom') {
-        built.set(key, buildMushroom(ref.seed ?? 1))
+      if (ref.gen === 'mushroom' || ref.gen === 'driedbush' || ref.gen === 'cactus' || ref.gen === 'reeds') {
+        const small = { mushroom: buildMushroom, driedbush: buildDriedBush, cactus: buildCactus, reeds: buildReeds }[ref.gen]
+        built.set(key, small(ref.seed ?? 1))
         continue
       }
-      const make = ref.gen === 'elder' ? buildElderTree : ref.gen === 'redwood' ? buildRedwood : buildCanopyTree
+      const make = ref.gen === 'elder' ? buildElderTree : ref.gen === 'redwood' ? buildRedwood : ref.gen === 'mangrove' ? buildMangrove : buildCanopyTree
       built.set(key, make(ref.seed ?? 1))
       built.set(key + ':far', make(ref.seed ?? 1, true))
     }
@@ -610,17 +627,35 @@ export class Scatter {
         // tree/fern marsh; deserts are near-barren rock+deadwood; plains are
         // open bush-and-grass seas with the odd lone tree
         if (biome === BIOME.SWAMP) {
-          if (kind === 'tree' || kind === 'elder' || kind === 'redwood' || kind === 'pine' || kind === 'palm' || kind === 'flower') continue
+          if (kind === 'tree' || kind === 'elder' || kind === 'redwood' || kind === 'pine' || kind === 'palm' || kind === 'flower' || kind === 'cactus') continue
           if (kind === 'willow' && rand() > 0.9) { /* willows thrive: bypass river rule below */ }
+          // the wet floor: mangroves where the table is near, reeds right at it,
+          // dried bushes only on the drier hummocks
+          const table = worldMeta?.swamp?.level ?? 4.2
+          if (kind === 'mangrove' && h > table + 2.2) continue
+          if (kind === 'reeds' && (h > table + 0.5 || h < table - 0.4)) continue
+          if (kind === 'driedbush' && h < table + 1.2) continue
         } else if (biome === BIOME.DESERT) {
-          if (!(kind === 'rock' || kind === 'deadtree' || (kind === 'grass' && rand() < 0.15) || (kind === 'bush' && rand() < 0.08))) continue
-        } else if (biome === BIOME.PLAINS) {
+          if (!(kind === 'rock' || kind === 'deadtree' || kind === 'cactus' || kind === 'driedbush' || (kind === 'grass' && rand() < 0.15) || (kind === 'bush' && rand() < 0.08))) continue
+        } else {
+          // swamp and desert flora stay in their biomes (reeds may line any lake shore)
+          if (kind === 'mangrove' || kind === 'cactus' || kind === 'driedbush') continue
+          if (kind === 'reeds') {
+            let lakeEdge = false
+            for (const lake of worldMeta?.lakes ?? []) {
+              const sd = shoreDist(x, z, lake.shore)
+              if (sd > -2 && sd < 10 && h < lake.level + 0.6) { lakeEdge = true; break }
+            }
+            if (!lakeEdge) continue
+          }
+        }
+        if (biome === BIOME.PLAINS) {
           if (kind === 'tree' || kind === 'pine' || kind === 'elder' || kind === 'redwood') { if (rand() > 0.06) continue }
           if (kind === 'fern' || kind === 'mushroom') continue
         }
         // swamp fauna bypass their usual habitat rules (willows off-river,
         // ferns outside forest, dead trees anywhere wet)
-        const swampFlora = biome === BIOME.SWAMP && (kind === 'willow' || kind === 'deadtree' || kind === 'fern' || kind === 'grass' || kind === 'bush' || kind === 'mushroom')
+        const swampFlora = biome === BIOME.SWAMP && (kind === 'willow' || kind === 'deadtree' || kind === 'fern' || kind === 'grass' || kind === 'bush' || kind === 'mushroom' || kind === 'mangrove' || kind === 'reeds' || kind === 'driedbush')
         const coastD = kind === 'palm' && worldMeta?.coast ? Math.abs(shoreDist(x, z, worldMeta.coast)) : Infinity
         if (!swampFlora && !spec.habitat(h, ny, forestHere, riverD, forestKind, coastD)) continue
         // plains mega-bushes (the depth mandate); giants are their own kind now

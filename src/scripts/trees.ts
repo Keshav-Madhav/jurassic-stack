@@ -300,3 +300,108 @@ export function buildRedwood(seed: number, far = false): THREE.Group {
   parts.push(leafMass(0.012, 0.985, 0.006, 0.045, 0.06, 0.045, _c.copy(LEAF).lerp(LEAF_SUN, 0.4), rand)) // the spire
   return finish(parts, `Redwood_${seed}${far ? '_far' : ''}`)
 }
+
+// ---------- swamp + desert flora (mandate item 4) ----------
+const MANGROVE_LEAF = new THREE.Color(0x3d5a1e)
+const MANGROVE_BARK = new THREE.Color(0x4a3a2a)
+/**
+ * Mangrove-type swamp tree, unit height (place at 7-12 m): a short trunk on
+ * a splay of stilt roots that reach the water, a low broad olive crown.
+ */
+export function buildMangrove(seed: number, far = false): THREE.Group {
+  massDetail = far ? 0 : 1
+  const rand = mulberry32(seed)
+  const parts: THREE.BufferGeometry[] = []
+  const trunkBase = new THREE.Vector3(0, 0.22, 0)
+  const trunkTop = new THREE.Vector3(0.02, 0.5, 0.01)
+  // stilt roots: from the trunk's foot down and out to the ground
+  const n = 5 + Math.floor(rand() * 3)
+  const a0 = rand() * Math.PI * 2
+  for (let i = 0; i < n; i++) {
+    const ang = a0 + (i / n) * Math.PI * 2 + (rand() - 0.5) * 0.6
+    const rad = 0.16 + rand() * 0.12
+    const foot = new THREE.Vector3(Math.cos(ang) * rad, -0.03, Math.sin(ang) * rad)
+    const root = limb(trunkBase, foot, 0.022, 0.012, 4, rand)
+    paint(root, MANGROVE_BARK, 0.12, rand); parts.push(root)
+  }
+  const trunk = limb(new THREE.Vector3(0, 0.2, 0), trunkTop, 0.032, 0.022, 6, rand)
+  paint(trunk, MANGROVE_BARK, 0.1, rand); parts.push(trunk)
+  // crown: a low, broad spread of masses
+  const m = 5 + Math.floor(rand() * 2)
+  const b0 = rand() * Math.PI * 2
+  for (let i = 0; i < m; i++) {
+    const ang = b0 + (i / m) * Math.PI * 2 + (rand() - 0.5) * 0.5
+    const rad = 0.2 + rand() * 0.14
+    const c = new THREE.Vector3(Math.cos(ang) * rad, 0.58 + rand() * 0.12, Math.sin(ang) * rad)
+    const lb = limb(trunkTop, c, 0.014, 0.006, 4, rand)
+    paint(lb, MANGROVE_BARK, 0.1, rand); parts.push(lb)
+    const r = 0.17 + rand() * 0.07
+    parts.push(leafMass(c.x, c.y, c.z, r, r * 0.6, r, _c.copy(MANGROVE_LEAF).lerp(LEAF_DEEP, rand() * 0.4), rand))
+  }
+  parts.push(leafMass(trunkTop.x, 0.72, trunkTop.z, 0.26, 0.16, 0.26, MANGROVE_LEAF, rand))
+  return finish(parts, `Mangrove_${seed}${far ? '_far' : ''}`)
+}
+
+const TWIG = new THREE.Color(0x6b5a3a)
+/** A dead, dried bush: a fan of bare twigs, unit height (place at 1-2 m). ~120 tris. */
+export function buildDriedBush(seed: number): THREE.Group {
+  const rand = mulberry32(seed)
+  const parts: THREE.BufferGeometry[] = []
+  const n = 10 + Math.floor(rand() * 5)
+  for (let i = 0; i < n; i++) {
+    const ang = rand() * Math.PI * 2
+    const spread = 0.25 + rand() * 0.35
+    const top = new THREE.Vector3(Math.cos(ang) * spread, 0.55 + rand() * 0.45, Math.sin(ang) * spread)
+    const tw = limb(new THREE.Vector3((rand() - 0.5) * 0.08, -0.02, (rand() - 0.5) * 0.08), top, 0.018, 0.004, 3, rand)
+    paint(tw, _c.copy(TWIG).lerp(new THREE.Color(0x8a7a5a), rand() * 0.5), 0.1, rand); parts.push(tw)
+    // a fork on most twigs
+    if (rand() < 0.7) {
+      const fork = new THREE.Vector3(top.x + (rand() - 0.5) * 0.3, top.y + 0.15 + rand() * 0.15, top.z + (rand() - 0.5) * 0.3)
+      const f = limb(new THREE.Vector3(top.x * 0.7, top.y * 0.7, top.z * 0.7), fork, 0.01, 0.003, 3, rand)
+      paint(f, TWIG, 0.1, rand); parts.push(f)
+    }
+  }
+  return finish(parts, `DriedBush_${seed}`)
+}
+
+const CACTUS = new THREE.Color(0x3f7a3a)
+/** A saguaro-type cactus, unit height (place at 2.5-5 m): a ribbed column and one or two arms. */
+export function buildCactus(seed: number): THREE.Group {
+  massDetail = 0
+  const rand = mulberry32(seed)
+  const parts: THREE.BufferGeometry[] = []
+  const col = limb(new THREE.Vector3(0, -0.02, 0), new THREE.Vector3(0, 0.95, 0), 0.075, 0.055, 8, rand)
+  paint(col, CACTUS, 0.14, rand); parts.push(col)
+  parts.push(leafMass(0, 0.95, 0, 0.06, 0.05, 0.06, CACTUS, rand)) // the cap
+  const arms = 1 + Math.floor(rand() * 2)
+  const a0 = rand() * Math.PI * 2
+  for (let i = 0; i < arms; i++) {
+    const ang = a0 + i * Math.PI * (0.8 + rand() * 0.4)
+    const y0 = 0.35 + rand() * 0.25
+    const elbow = new THREE.Vector3(Math.cos(ang) * 0.17, y0 + 0.02, Math.sin(ang) * 0.17)
+    const tip = new THREE.Vector3(elbow.x, y0 + 0.3 + rand() * 0.15, elbow.z)
+    const a1 = limb(new THREE.Vector3(0, y0, 0), elbow, 0.05, 0.045, 7, rand)
+    paint(a1, CACTUS, 0.14, rand); parts.push(a1)
+    const a2 = limb(elbow, tip, 0.045, 0.04, 7, rand)
+    paint(a2, CACTUS, 0.14, rand); parts.push(a2)
+    parts.push(leafMass(tip.x, tip.y, tip.z, 0.045, 0.04, 0.045, CACTUS, rand))
+  }
+  return finish(parts, `Cactus_${seed}`)
+}
+
+const REED = new THREE.Color(0x6a7a3a)
+/** A clump of reeds, unit height (place at 1.5-2.6 m): tall thin blades. ~50 tris. */
+export function buildReeds(seed: number): THREE.Group {
+  const rand = mulberry32(seed)
+  const parts: THREE.BufferGeometry[] = []
+  const n = 7 + Math.floor(rand() * 4)
+  for (let i = 0; i < n; i++) {
+    const ang = rand() * Math.PI * 2
+    const r0 = rand() * 0.1
+    const lean = 0.08 + rand() * 0.12
+    const top = new THREE.Vector3(Math.cos(ang) * (r0 + lean), 0.7 + rand() * 0.3, Math.sin(ang) * (r0 + lean))
+    const blade = limb(new THREE.Vector3(Math.cos(ang) * r0, -0.02, Math.sin(ang) * r0), top, 0.014, 0.002, 3, rand)
+    paint(blade, _c.copy(REED).lerp(new THREE.Color(0x9a8a4a), rand() * 0.5), 0.1, rand); parts.push(blade)
+  }
+  return finish(parts, `Reeds_${seed}`)
+}

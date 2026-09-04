@@ -337,7 +337,7 @@ Story in PLAN.md → "The island v2 — the Lasso". One round each, gates + scre
 - [x] **M10c — biome edges by hand.** DONE (below)
 - [x] **M10d — forests retraced + the Holm redwoods.** DONE (forests in M10b; redwoods below)
 - [x] **M10e — ruins hand-placed; caldera gate visible.** DONE (below)
-- [ ] **M10f — swamp flora (mangrove-type, dried bushes) + desert flora** (mandate item 4)
+- [x] **M10f — swamp flora + desert flora.** DONE (below)
 - [ ] **M10g — ground clutter** (sticks, pebbles, stones, ground foliage) (mandate item 5)
 - [ ] **M10h — boulders / outcrops as placed meshes** (mandate item 7)
 
@@ -373,3 +373,8 @@ Story in PLAN.md → "The island v2 — the Lasso". One round each, gates + scre
 ### M10e — THE CALDERA GATE READS FROM THE APPROACH (mandate item 6)
 - [x] Ruins are hand-placed coordinates in hand-geometry (since M10a) — the gate stands at the volcano's south foot on the open approach corridor the pines leave clear
 - [x] The gate made monumental: a 15 m arch with its 12 × 15.5 m slab (door + collider resized, drop animation deeper/faster), two 7 m guardian statues facing the approach, a 70 m causeway of columns — visible as a monument from 270 m down the corridor with the volcano behind it (screenshot-verified), 73/73
+
+### M10f — SWAMP AND DESERT FLORA (mandate item 4 — the empty biomes)
+- [x] Built in `trees.ts`: MANGROVES (stilt roots to the water, low broad olive crowns, far twin), REEDS (tall blade clumps), DRIED BUSHES (fans of bare twigs), CACTI (ribbed saguaro columns with arms)
+- [x] Where they grow: mangroves on the swamp's wet floor within 2.2 m of the water table, reeds right at the table (and along every lake shore), dried bushes on the drier hummocks and across the desert with the cacti; swamp/desert flora never leaves its biome. ~870 mangroves, ~3,000 dried bushes, ~500 cacti, ~500 reed clumps
+- [x] Eye level: the Writhing Flats read as a mangrove swamp, the Dune Country as a saguaro desert (screenshot-verified), 73/73
