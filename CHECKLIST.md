@@ -312,3 +312,10 @@ TODO (one pick per round):
 5. Ground clutter everywhere: sticks, pebbles, small rocks, scattered stones, ground foliage — world too clean/empty
 6. Volcano gate not visible — caldera-gate ruin/door placement needs relocation/visibility pass (arc must read on approach)
 7. Rocks: boulders/outcrops as placed meshes (still missing after mesa deletion)
+
+### M9f — HAND-MADE RIVERS (mandate item 1)
+- [x] Sine-meander formula DELETED; both rivers are hand-traced paths (24/22 waypoints, every bend placed), RIVERS_DENSE = the hand path
+- [x] Natural sources: two spring TARNS (hand-traced 8-vertex pools) on the volcano's SE/highland shoulders — rivers visibly flow OUT of standing water instead of starting abruptly mid-slope (screenshots 11-12)
+- [x] River ribbon CUT where it crosses a lake (shoreDist < -4) — no more river band slicing through the lake's sheet; the current still flows across via riverFlowAt, only the mesh yields; west river now runs the length of the west lake (inlet neck → south bay) as intended
+- [x] Tarn levels iterated against a pre-carve shore-terrain probe (east 24.5, west 14 — under their shore minima); canyon frac range retuned for the new waypoint count
+- [x] Aerial verification: east river flows from its tarn down through forest; west river enters/crosses/exits the lake cleanly. Gates 73/73, navmesh revalidated

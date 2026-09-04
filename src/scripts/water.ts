@@ -178,8 +178,19 @@ export class WaterSystem {
           uv[(i * COLS + c) * 2 + 1] = t * 40
         }
       }
+      // cut the ribbon where it crosses standing water — a river band slicing
+      // through a lake read as two overlapping waters (player screenshot);
+      // the current still flows across via riverFlowAt, only the mesh yields
+      const inStanding = (i: number): boolean => {
+        const smp = samples[i]
+        for (const lake of meta.lakes) {
+          if (shoreDist(smp.x, smp.z, lake.shore) < -4) return true
+        }
+        return false
+      }
       const indices: number[] = []
       for (let i = 0; i < SEGS; i++) {
+        if (inStanding(i) && inStanding(i + 1)) continue
         for (let c = 0; c < COLS - 1; c++) {
           const a = i * COLS + c
           const b = a + 1

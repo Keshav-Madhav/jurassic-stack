@@ -76,13 +76,34 @@ const idx = (ix, iz) => iz * SIDE + ix
 const worldX = (ix) => -HALF + ix * RES
 const worldZ = (iz) => -HALF + iz * RES
 
-// river paths: control points from the volcano flanks to the sea (carved now,
-// wet at M5b). Stored in meta for the water pass.
+// HAND-TRACED river paths — every bend a decision (meander formula deleted).
+// Each river rises from a spring tarn (see LAKES) and runs to the sea.
 const RIVERS = [
-  // east river: volcano east flank → curls southeast → east coast
-  [{ x: 120, z: -480 }, { x: 320, z: -320 }, { x: 430, z: -60 }, { x: 520, z: 220 }, { x: 640, z: 460 }, { x: 760, z: 640 }],
-  // west river: west flank → lake basin → southwest coast
-  [{ x: -160, z: -440 }, { x: -340, z: -240 }, { x: -430, z: 20 }, { x: -460, z: 60 }, { x: -520, z: 340 }, { x: -640, z: 560 }],
+  // EAST RIVER: born in a tarn on the volcano's SE shoulder, cuts the canyon,
+  // crosses the flats in lazy S-bends, deltas through the swamp to the sea
+  [
+    { x: 148, z: -438 }, { x: 185, z: -408 }, { x: 228, z: -372 },
+    { x: 272, z: -338 }, { x: 312, z: -296 }, { x: 344, z: -248 },
+    { x: 372, z: -198 }, { x: 398, z: -152 }, { x: 424, z: -108 },
+    { x: 442, z: -62 }, { x: 448, z: -14 }, { x: 440, z: 34 },
+    { x: 452, z: 82 }, { x: 478, z: 124 }, { x: 502, z: 168 },
+    { x: 512, z: 218 }, { x: 522, z: 272 }, { x: 540, z: 328 },
+    { x: 558, z: 388 }, { x: 582, z: 448 }, { x: 606, z: 508 },
+    { x: 634, z: 566 }, { x: 668, z: 622 }, { x: 712, z: 672 }, { x: 758, z: 716 },
+  ],
+  // WEST RIVER: born in a highland tarn, runs down the west slopes, flows the
+  // LENGTH of the west lake (inlet neck → south bay), then crosses the desert
+  // as its oasis line and reaches the SW coast
+  [
+    { x: -202, z: -392 }, { x: -238, z: -352 }, { x: -278, z: -312 },
+    { x: -318, z: -268 }, { x: -352, z: -222 }, { x: -378, z: -172 },
+    { x: -398, z: -124 }, { x: -408, z: -76 }, { x: -398, z: -30 }, // approach the inlet neck
+    { x: -412, z: 8 }, { x: -438, z: 48 }, { x: -458, z: 92 }, { x: -478, z: 130 }, // through the lake
+    { x: -505, z: 158 }, // exit the south bay
+    { x: -532, z: 206 }, { x: -552, z: 258 }, { x: -576, z: 312 },
+    { x: -598, z: 368 }, { x: -622, z: 428 }, { x: -640, z: 486 },
+    { x: -654, z: 540 }, { x: -664, z: 592 },
+  ],
 ]
 // HAND-TRACED lakes: each shoreline is an explicit polygon, drawn vertex by
 // vertex like tracing a map — no center/radius/noise formula anywhere.
@@ -117,6 +138,27 @@ const LAKES = [
       [245, 335], [238, 295], [242, 262],              // west shore
     ],
   },
+  {
+    // EAST SPRING TARN — the east river's source pool on the volcano's SE
+    // shoulder; the river visibly flows OUT of standing water
+    name: 'east-tarn',
+    level: 24.5, // iterated: shore min 25.2 (low side is the outlet)
+    deep: { x: 140, z: -452 },
+    shore: [
+      [112, -470], [132, -482], [158, -478], [172, -460],
+      [168, -438], [150, -424], [126, -428], [110, -448],
+    ],
+  },
+  {
+    // WEST SPRING TARN — the west river's highland source pool
+    name: 'west-tarn',
+    level: 14, // iterated: shore min 14.6
+    deep: { x: -212, z: -408 },
+    shore: [
+      [-238, -424], [-216, -436], [-192, -428], [-182, -406],
+      [-192, -386], [-216, -380], [-236, -392], [-244, -410],
+    ],
+  },
 ]
 
 /** Signed distance to a hand-traced shoreline: negative inside. */
@@ -135,42 +177,8 @@ function shoreDist(px, pz, shore) {
   return inside ? -minD : minD
 }
 
-// Meander: densify each river's control polyline and push points sideways
-// with two superimposed sine waves over arc length (amplitude grows down-
-// stream, pinned at source and mouth). Rivers stop being ruler-straight
-// (backlog #2: "no twisty turney").
-function meander(path, seed) {
-  const pts = []
-  for (let i = 0; i < path.length - 1; i++) {
-    const a = path[i]
-    const b = path[i + 1]
-    const steps = Math.max(4, Math.round(Math.hypot(b.x - a.x, b.z - a.z) / 26))
-    for (let st = 0; st < steps; st++) {
-      const t = st / steps
-      pts.push({ x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t })
-    }
-  }
-  pts.push(path[path.length - 1])
-  const out = []
-  let arc = 0
-  for (let i = 0; i < pts.length; i++) {
-    if (i > 0) arc += Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z)
-    const prev = pts[Math.max(0, i - 1)]
-    const next = pts[Math.min(pts.length - 1, i + 1)]
-    const dx = next.x - prev.x
-    const dz = next.z - prev.z
-    const len = Math.hypot(dx, dz) || 1
-    const t = i / (pts.length - 1)
-    const pin = smoothstep(0, 0.12, t) * (1 - smoothstep(0.88, 1, t))
-    // downstream amp capped: 30m meanders over low coastal ground carved a
-    // bay through the southwest coast on first bake
-    const amp = (13 + 14 * t) * pin
-    const off = Math.sin(arc * 0.022 + seed) * 0.62 + Math.sin(arc * 0.0093 - seed * 0.7) * 0.38
-    out.push({ x: pts[i].x + (-dz / len) * off * amp, z: pts[i].z + (dx / len) * off * amp })
-  }
-  return out
-}
-const RIVERS_DENSE = RIVERS.map((p, i) => meander(p, i * 3.7 + 1.2))
+// hand paths ARE the dense paths — no post-processing
+const RIVERS_DENSE = RIVERS
 
 // ---- biome regions (the depth mandate: distinct traversable lands) ----
 const SWAMP = { x: 560, z: 330, r: 170, level: 4.2 } // east-coast marsh, the canyon river deltas through it
@@ -317,6 +325,19 @@ console.timeEnd('compose')
 // ground is never raised, so the lake sits IN the land (no donut).
 console.time('lakes')
 for (const lake of LAKES) {
+  {
+    const hAtL = (x, z) => {
+      const ix = Math.max(0, Math.min(SIDE - 2, Math.round((x + HALF) / RES)))
+      const iz = Math.max(0, Math.min(SIDE - 2, Math.round((z + HALF) / RES)))
+      return H[idx(ix, iz)]
+    }
+    let mn = Infinity, mx = -Infinity
+    for (const [vx, vz] of lake.shore) {
+      const h = hAtL(vx, vz)
+      mn = Math.min(mn, h); mx = Math.max(mx, h)
+    }
+    console.log(`  lake ${lake.name}: shore terrain ${mn.toFixed(1)}..${mx.toFixed(1)} (level ${lake.level})`)
+  }
   for (let iz = 0; iz < SIDE; iz++) {
     for (let ix = 0; ix < SIDE; ix++) {
       const x = worldX(ix), z = worldZ(iz)
@@ -381,7 +402,7 @@ for (let iz = 0; iz < SIDE; iz++) {
       // the east river's mid-course is a canyon: tight channel, steep walls,
       // raised rims; elsewhere a soft valley
       const frac = seg / (RIVERS_DENSE[ri].length - 1)
-      const canyon = ri === 0 && frac > 0.18 && frac < 0.62
+      const canyon = ri === 0 && frac > 0.1 && frac < 0.4
       const sigma = canyon ? 14 : 22
       const wBed = Math.exp(-(d * d) / (2 * sigma * sigma))
       const wValley = (canyon ? 0.15 : 0.35) * Math.exp(-(d * d) / (2 * 65 * 65))
@@ -440,7 +461,7 @@ console.time('sculpt')
       {
         const { d, seg } = distToPath(x, z, RIVERS_DENSE[0])
         const frac = seg / (RIVERS_DENSE[0].length - 1)
-        if (frac > 0.18 && frac < 0.62 && d > 16 && d < 64 && h > 6) {
+        if (frac > 0.1 && frac < 0.4 && d > 16 && d < 64 && h > 6) {
           const w = smoothstep(64, 34, d) * 0.75
           h = h * (1 - w) + terrace(h, 7, 3.4) * w
         }
