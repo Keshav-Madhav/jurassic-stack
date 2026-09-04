@@ -43,8 +43,11 @@ A feature that does none of those is a checklist item wearing a costume, and it 
 
 ## Decisions on record
 
-1. **Full ARK clone out; full ARK loop in.** One dense ~2×2 km island, 15+ species, ~30 items, the
-   complete hunt → tame → ride → build → survive loop. Density beats acreage.
+1. **Full ARK clone out; full ARK loop in.** One dense island — **4×4 km since 2026-09-04** (the
+   2×2 km original was too small to carry its own water story; see "The island v2 — the Lasso") —
+   15+ species, ~30 items, the complete hunt → tame → ride → build → survive loop. Density beats
+   acreage: the bigger canvas exists to give one river, two lakes and a reservoir room to breathe,
+   not to spread the same content thinner.
 2. **The island is handcrafted — authored as code, not randomized.** A composition file places every
    mountain, ridge spline, river, and ruin deliberately; an erosion bake makes it look real; the baked
    heightmap/splatmaps/prop placements are committed one-time artifacts.
@@ -209,8 +212,82 @@ ambientCG (CC0) if realistic wins the art test.
 - **Fill.** Biomes as hand-painted zones (forest, jungle, swamp, snow highlands, beach) driving ground
   palette + foliage set + spawn table. Foliage scattered by painted density masks with a fixed seed.
   Ruins: 5–6 prefabs placed by rules, sunk, partially deleted, overgrown. Caves: portal interiors.
-- **Scale:** ~2×2 km, dense. The composition encodes the arc: gentle spawn coast, danger gradient
-  inland, ruins densifying toward the caldera, volcano sightline from spawn.
+- **Scale:** 4×4 km (was 2×2), dense. The composition encodes the arc: gentle spawn coast, danger
+  gradient inland, ruins densifying toward the caldera, volcano sightline from spawn.
+- **The hand-made mandate (2026-09-04).** World geometry is traced by hand, every vertex a decision:
+  the coastline, the river, lakes, forests, glades, biome edges and ruin sites all live as polygons and
+  paths in `tools/hand-geometry.mjs`, traced against the planning map (`tools/map.mjs`). Formula
+  shortcuts (center+radius+noise, sine meanders, seeded masks) are gone or go on touch. The bake
+  carves what is drawn, erodes it, and its validators fail loudly (uphill river, lake below its
+  shore, ruin standing in trees, ruin unreachable).
+
+## The island v2 — the Lasso (2026-09-04, supersedes the two-river layout)
+
+The 2 km island carried two rivers, three lakes, a swamp and a desert and read as a diorama. The v2
+story is fewer, larger, deliberate features on a 4 km canvas. North is −z; spawn stays on the south
+coast; the volcano stays north-centre, the ending in view from the first beach.
+
+**One river — the Lasso.** It rises at the coast and returns to the coast, and in between it ties a
+knot around an island-within-the-island:
+
+- **The Wellspring.** The river is born at the north-east shore where the East Range meets the sea: a
+  gorge opens onto the ocean and the river pours out of its mouth from a spring pool a few dozen metres
+  up (~36 m) — from the beach it looks like the river comes out of the sea cliffs. That elevation is
+  what gives the inflow leg its gradient and its current.
+- **The inflow leg** runs south-west inland, downhill the whole way, to **the Knot**.
+- **The Knot and the Reservoir.** At the Knot the river crosses itself: four arms of water meet
+  (inflow, outflow, ring-north, ring-south) in one deep, wide basin — the Reservoir, the island's
+  deepest fresh water (~14 m surface, 10+ m deep). The swamp sits in its lee: the extra wetness is why.
+- **The Ring — the waterlock.** From the Knot the river circles a ~700 m island-within-the-island, **the
+  Holm**, and comes back to the Knot. The ring is dead water: level surface at the Knot's elevation, no
+  current at all — `riverFlowAt` returns nothing inside it, swimmers drift nowhere. The current dies
+  where the inflow meets the Reservoir and picks up again where the outflow leaves it.
+- **The outflow leg** runs from the Knot south-east, downhill, deltas through the swamp, and reaches the
+  sea. Gradient: Wellspring 36 m → Knot 14 m → sea 0, over ~1.4 km each way.
+- **The Ford.** One shallow gravel bar on the ring's far (west) side, knee-deep and walkable: the only
+  way onto the Holm without swimming, and the only way a dino gets across. The navmesh reachability
+  validator depends on it.
+- **The Holm.** Old-growth of **redwoods** — the tallest trees on the island (60–80 m, bare red
+  trunks, narrow high crowns), and they grow *nowhere else*. From anywhere on the south half you can
+  see the Holm's canopy standing above every other wood. It holds a ruin.
+
+**Two lakes + the Reservoir.** Neither lake touches the river, and they sit at different heights:
+
+- **Lake Aster** — the big lowland lake in the west (~500 m across, surface ~9 m), traced shoreline with
+  bays and a peninsula; the Westwood on its north shore, the desert's edge on its south.
+- **The Alpine Tarn** — a small lake among the mountains, high in the West Range (~230 m), cold and
+  clear, snow on its rim. A destination, not scenery: a keystone climb ends there.
+
+**Mountains, bigger.** Two ranges as hand-traced crest paths with a height at every vertex: the **West
+Range** (long, N–S along the west side, peaks 350–420 m, the Tarn in its saddle) and the **East Range**
+(NE quadrant, peaks ~340 m; the Wellspring gorge cuts its seaward foot). Snow above ~200 m, terraced
+rock bands on the flanks, real passes where the crest heights dip. **The volcano** grows with the map
+(rim ~320 m); the caldera gate stands at its south foot, visible on approach.
+
+**Biomes by hand, bigger.** The **swamp** (~700 m) wraps the Reservoir's east and south and the
+outflow delta. The **desert** (~1 km) fills the south-west rain shadow behind the West Range, between
+Lake Aster and the south-west coast. **Plains** open the south-centre between the spawn beach and the
+ring — herds, bush seas, the odd lone tree. **Alpine** is altitude. All edges traced polygons, none of
+them round.
+
+**Forests, as dense as v1's M9g.** The Southwood (first forest, a meadow north of the beach), the Holm
+redwoods, the Eastbank along the inflow gorge, pines on both ranges' flanks and the northern rise, the
+Westwood above Lake Aster, the Lakeshore. Glades at every ruin plus two meadows.
+
+**Ruins, hand-placed** along the arc gradient: beach statue → coast shrine → the Holm temple → highland
+arch → foothill vault → caldera gate, each site a chosen coordinate validated flat, dry, reachable.
+
+**Performance is part of the story at 4 km** — the map only grows if it stays 60 fps: 32×32 terrain
+chunks with 4 LODs and frustum culling; scatter in 256 m supercells with distance-culled ground cover
+and three tree LOD bands (full / coarse / blob) per cell; nothing beyond the fog paid for at full
+detail; per-vantage triangle budgets checked by the QA harness; dino updates throttled by distance.
+Any step that breaks the budget is not done.
+
+**Build order (one round each, verified and committed before the next):**
+M10a canvas + coast + landmass + ranges + volcano + the Lasso river (structure, still ring,
+reservoir, ford) · M10b the two lakes · M10c biome edges by hand (swamp, desert, plains) · M10d
+forests retraced + the Holm redwoods · M10e ruins hand-placed + the caldera gate visible · M10f swamp
+and desert flora · M10g ground clutter · M10h boulders and outcrops.
 
 ## The arc: an optional guided path
 

@@ -329,3 +329,14 @@ TODO (one pick per round):
 - [x] Density: trees 1,221 → 3,725 (9 m cells, thinning to the wood line) · pines 1,301 → 1,949 · elders 111 · ferns/bushes thicker under canopy. Aerials read as continuous canopy with glades; eye level is a canopy roof over trunks.
 - [x] Perf so it stays 60: three LOD bands per supercell (full <300 m · coarse masses <900 m · ~40-tri trunk-and-blob beyond; pines get a 3-cone twin painted to match) — island judge view 6.9M → 1.5M tris; DeadTree 15.5K → 4.3K and Palm 3.1K → 0.9K tris decimated; berry bush pulled off neon.
 - [x] `tools/qa-forest.mjs` — wood vantages with per-kind triangle accounting (`--tris`). Gates 73/73 (m4 once flaked on a raptor in the gather line; 3 clean reruns), live-verified.
+
+### M10 — THE ISLAND v2: THE LASSO (user, 2026-09-04 — "the map is too small for its water; grow it 2×, one river, two lakes, a reservoir")
+Story in PLAN.md → "The island v2 — the Lasso". One round each, gates + screenshots + live check before the next. Culling, LODs and budgets are part of every round ("shit tons of culling and lods and optimizations").
+- [ ] **M10a — the 4 km canvas + the Lasso.** HALF 2048 (2049² grid @ 2 m), 32×32 chunks; hand-traced COASTLINE polygon (the island outline is drawn, not a falloff formula); bigger ranges as crest paths with per-vertex heights; volcano scaled; the river as legs + ring + reservoir + ford (bed profile per part: legs monotonic, ring level, reservoir deep); still ring (`riverFlowAt` null inside); ribbons cut inside the reservoir; gates/aerials re-authored for the new coordinates; bake + navmesh time/size checked; a rough Southwood so the woods don't vanish for a round
+- [ ] **M10b — two lakes.** Lake Aster (lowland, ~9 m) + the Alpine Tarn (West Range, ~230 m); validators: hold water, never touch the river
+- [ ] **M10c — biome edges by hand.** Swamp wraps the Reservoir + outflow delta (~700 m); desert in the SW rain shadow (~1 km); plains south-centre; `warpedDist` deleted (mandate item 2)
+- [ ] **M10d — forests retraced + the Holm redwoods.** Redwood species (60–80 m, bare red trunk, narrow high crown) exclusive to the Holm polygon; canopy woods/pines/glades retraced for the new land (mandate item 3 carried over)
+- [ ] **M10e — ruins hand-placed; caldera gate visible** at the volcano's south foot (mandate item 6)
+- [ ] **M10f — swamp flora (mangrove-type, dried bushes) + desert flora** (mandate item 4)
+- [ ] **M10g — ground clutter** (sticks, pebbles, stones, ground foliage) (mandate item 5)
+- [ ] **M10h — boulders / outcrops as placed meshes** (mandate item 7)
