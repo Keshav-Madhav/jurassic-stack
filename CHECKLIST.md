@@ -385,3 +385,10 @@ Story in PLAN.md → "The island v2 — the Lasso". One round each, gates + scre
 - [x] 73/73
 
 **The hand-made mandate list (M9) is complete: 1 rivers · 2 biome edges · 3 forests · 4 swamp/desert flora · 5 ground clutter · 6 the gate · 7 rock.**
+
+### M11 — THE FEEL ROUND (user: "very jittery when moving — the faster the more; performance")
+Findings and fixes, each measured with the new jitter meter (`__g.frameStats()`, `tools/qa-jitter.mjs`: stand / walk / sprint / fly, p95·p99·max·hitches>25 ms):
+- [x] **The jitter itself**: the camera followed the RAW physics position while the player model was interpolated — with a fixed 1/60 step the mover advanced 0, 1 or 2 steps a frame as the accumulator drifted, and that quantised motion scales with speed (walk shimmer → ride stutter → flight shake). Camera target and the ridden dino now sample prev→current by alpha like the model always did
+- [x] **The hitches** (a 33/66 ms frame every chunk border at speed): chunk geometry moved to a Web Worker (`terrain-worker.ts` loads the same world, runs the same `terrain-paint.ts`, transfers arrays back; first-frame LOD3 fill stays synchronous); water-edge distance from an 8 m field instead of every river segment per vertex; terrain colliders are Rapier heightfields (O(n) to create — the trimesh BVH build was the border hitch); scatter colliders indexed per chunk (was a walk over 300K nodes); respawns walk a dead set; instance uploads are partial (`addUpdateRange`) and one contiguous range per cell flip
+- [x] **Impostors** (the user's billboard idea): every tree kind beyond 180 m is three textured cards — two crossed uprights + a crown card — carrying the real model's side and top views captured at load (`impostor.ts`); one island-wide instanced mesh per kind+variant (two draw calls), slots by cell. Far twins and dots deleted. Spawn 5.0M → 2.75M tris, island view 1.0M; shadows now every frame (the every-third-frame update strobed 16/16/33)
+- [x] Jitter meter after: standing 0 hitches (max 16.8 ms); walk/sprint/fly 2–4 hitches per 12 s (was 9–89). 73/73

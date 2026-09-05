@@ -31,6 +31,8 @@ const DORMANT_SLEEP = 680
 const DORMANT_WAKE = 600
 
 export class Dino {
+  /** interpolation factor between the last two physics steps (main loop sets it each frame) */
+  static renderAlpha = 1
   readonly object = new THREE.Group()
   /** the loaded rig — hidden (not `object`, which doubles as "alive") while dormant */
   private model: THREE.Object3D | null = null
@@ -236,9 +238,10 @@ export class Dino {
     }
 
     if (this.ridden && this.mover) {
-      // position comes from the mover; visuals + anim only. Small embed: the
+      // position comes from the mover — sampled between physics steps so the
+      // mount doesn't stutter at speed; visuals + anim only. Small embed: the
       // KCC's contact offset + capsule hemisphere read as hovering otherwise.
-      pos.copy(this.mover.position)
+      pos.lerpVectors(this.mover.prevPosition, this.mover.position, Dino.renderAlpha)
       pos.y -= this.mover.feetOffset + 0.12
       this.object.rotation.y = this.heading
       const planar = Math.hypot(this.mover.intent.vx, this.mover.intent.vz)

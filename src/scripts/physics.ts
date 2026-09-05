@@ -7,8 +7,29 @@
 // streams them in/out. This is deliberately the same shape streaming will
 // take at M5/M6.
 import RAPIER from '@dimforge/rapier3d-compat'
-import { chunkGridData, CHUNKS_PER_SIDE, CHUNK_SIZE } from './terrain'
-import { HALF_SIZE } from './heightmap'
+import { CHUNKS_PER_SIDE, CHUNK_SIZE } from './terrain'
+import { HALF_SIZE, heightAt } from './heightmap'
+
+/** LOD0 vertex grid of one chunk as a Rapier heightfield: 64×64 cells, 2 m
+ *  apart, heights column-major (rows along z, columns along x). Creating a
+ *  heightfield is O(n); the trimesh it replaces built a BVH over 8K
+ *  triangles every time you crossed a chunk border — three at once, one
+ *  hitch. Same 2 m grid, same heights, so what you see is what you stand on. */
+const HF_CELLS = 64
+function chunkHeightfield(cx: number, cz: number): RAPIER.ColliderDesc {
+  const originX = -HALF_SIZE + cx * CHUNK_SIZE
+  const originZ = -HALF_SIZE + cz * CHUNK_SIZE
+  const n = HF_CELLS + 1
+  const heights = new Float32Array(n * n)
+  const step = CHUNK_SIZE / HF_CELLS
+  for (let j = 0; j < n; j++) { // column: x
+    for (let i = 0; i < n; i++) { // row: z
+      heights[j * n + i] = heightAt(originX + j * step, originZ + i * step)
+    }
+  }
+  return RAPIER.ColliderDesc.heightfield(HF_CELLS, HF_CELLS, heights, { x: CHUNK_SIZE, y: 1, z: CHUNK_SIZE })
+    .setTranslation(originX + CHUNK_SIZE / 2, 0, originZ + CHUNK_SIZE / 2)
+}
 
 export const FIXED_DT = 1 / 60
 
@@ -53,8 +74,7 @@ export class Physics {
     }
     for (const key of wanted) {
       if (this.terrainColliders.has(key)) continue
-      const { vertices, indices } = chunkGridData(key % CHUNKS_PER_SIDE, Math.floor(key / CHUNKS_PER_SIDE))
-      const collider = this.world.createCollider(RAPIER.ColliderDesc.trimesh(vertices, indices))
+      const collider = this.world.createCollider(chunkHeightfield(key % CHUNKS_PER_SIDE, Math.floor(key / CHUNKS_PER_SIDE)))
       this.terrainColliders.set(key, collider)
     }
   }

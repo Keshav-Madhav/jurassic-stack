@@ -87,7 +87,7 @@ async function boot(): Promise<void> {
   if (save) inventory.restore(save.inventory as ReturnType<Inventory['serialize']>)
 
   const scatter = new Scatter()
-  await scatter.load()
+  await scatter.load(renderer)
   scene.add(scatter.group)
   if (save) scatter.restore(save.deadNodes as { id: number; respawnAt: number }[])
 
@@ -490,6 +490,11 @@ async function boot(): Promise<void> {
     setIntent: (vx: number, vz: number) => { debugIntent = vx || vz ? { vx, vz } : null },
     player: () => ({ ...(riding?.mover ? riding.mover.position : player.mover.position) }),
     groundAt: (x: number, z: number) => heightAt(x, z),
+    /** QA: where the PHYSICS ground is under (x,z) — must agree with groundAt */
+    physicsGroundAt: (x: number, z: number) => {
+      const hit = physics.world.castRay(new RAPIER.Ray({ x, y: 400, z }, { x: 0, y: -1, z: 0 }), 1000, true)
+      return hit ? 400 - hit.timeOfImpact : null
+    },
     /** QA: hide/show whole layers to attribute what's on screen */
     setLayer: (name: 'water' | 'scatter' | 'terrain', visible: boolean) => {
       const g = name === 'water' ? water.group : name === 'scatter' ? scatter.group : terrain.group
@@ -498,6 +503,18 @@ async function boot(): Promise<void> {
     fps: () => hud.fps,
     /** ms per frame spent in JS (sim+update) vs the render call — tells CPU-bound from GPU-bound */
     perf: () => ({ update: +perfUpdate.toFixed(2), render: +perfRender.toFixed(2) }),
+    /** QA: shadow cadence + map size */
+    setShadow: (every: number, size?: number) => {
+      shadowEvery = Math.max(1, every)
+      if (size) { daynight.setShadowSize(size) }
+    },
+    /** frame-time stats (ms) since the last call — the jitter meter */
+    frameStats: () => {
+      const a = frameTimes.slice().sort((p, q) => p - q)
+      frameTimes.length = 0
+      const pick = (f: number) => a.length ? +a[Math.min(a.length - 1, Math.floor(f * a.length))].toFixed(1) : 0
+      return { n: a.length, p50: pick(0.5), p95: pick(0.95), p99: pick(0.99), max: a.length ? +a[a.length - 1].toFixed(1) : 0, over25: a.filter((v) => v > 25).length }
+    },
     renderInfo: () => ({
       calls: renderer.info.render.calls,
       tris: renderer.info.render.triangles,
@@ -721,6 +738,9 @@ async function boot(): Promise<void> {
   let frameCount = 0
   let perfUpdate = 0
   let perfRender = 0
+  let shadowEvery = 1
+  // frame-time histogram for the jitter hunt: max / p95 since the last read
+  const frameTimes: number[] = []
 
   function frame(now: number): void {
     requestAnimationFrame(frame)
@@ -729,6 +749,8 @@ async function boot(): Promise<void> {
       return
     }
     const t0 = performance.now()
+    frameTimes.push(now - last)
+    if (frameTimes.length > 2000) frameTimes.splice(0, 1000)
     let dt = (now - last) / 1000
     last = now
     dt = Math.min(dt, 0.1)
@@ -782,9 +804,22 @@ async function boot(): Promise<void> {
     }
     const alpha = accumulator / FIXED_DT
 
+    // THE JITTER FIX: everything the eye follows — the camera target, the
+    // ridden dino — samples the mover BETWEEN physics steps (prev→current by
+    // alpha), like the player model already did. Raw step positions advance
+    // 0, 1 or 2 steps a frame as the accumulator drifts, and that quantised
+    // motion scales with speed: walking shimmered, riding stuttered, flying
+    // shook (user report).
+    Dino.renderAlpha = alpha
     player.render(alpha, dt) // runs while riding too (seat pose + mixer)
     player.setHeldItem(inventory.held)
     const pFeet = feetPos()
+    const renderFeet = (): THREE.Vector3 => {
+      const m = riding?.mover ?? player.mover
+      const p = new THREE.Vector3().lerpVectors(m.prevPosition, m.position, alpha)
+      p.y -= m.feetOffset
+      return p
+    }
     for (const d of dinos) d.update(dt, pFeet, hurtPlayer)
     // pack aggro: a wild raptor entering aggro pulls packmates in range
     for (const d of dinos) {
@@ -853,7 +888,7 @@ async function boot(): Promise<void> {
         freeCam.z - Math.cos(freeCam.yaw) * cp,
       )
     } else {
-      const camTargetFeet = pFeet.clone()
+      const camTargetFeet = renderFeet()
       cam.update(input, camTargetFeet, dt)
       cam.camera.position.y += camKick
       if (riding) cam.camera.position.addScaledVector(cam.camera.getWorldDirection(new THREE.Vector3()), -2.2)
@@ -890,7 +925,11 @@ async function boot(): Promise<void> {
 
     hud.tick(dt, focus.x, focus.y, focus.z, daynight.time, playerHp, (-cam.yaw * 180) / Math.PI)
     frameCount++
-    if (frameCount % 3 === 0) renderer.shadowMap.needsUpdate = true
+    // shadows EVERY frame: the every-third-frame update was the jitter — a
+    // frame with the shadow pass was ~5 ms heavier than its neighbours, so at
+    // the vsync edge every third frame missed and motion strobed 16/16/33.
+    // The cost is made steady instead (smaller map, casters only near).
+    if (frameCount % shadowEvery === 0) renderer.shadowMap.needsUpdate = true
     const t1 = performance.now()
     renderer.render(scene, cam.camera)
     const t2 = performance.now()

@@ -126,7 +126,7 @@ export class DayNight {
     // one directional shadow map following the player (CSM comes at M6 proper)
     this.sunLight.castShadow = true
     const sc = this.sunLight.shadow
-    sc.mapSize.set(1536, 1536)
+    sc.mapSize.set(1024, 1024)
     const EXTENT = 85
     sc.camera.left = -EXTENT
     sc.camera.right = EXTENT
@@ -154,6 +154,14 @@ export class DayNight {
   }
 
   /** Keep the shadow frustum centered on the action (snapped to reduce shimmer). */
+  /** QA: resize the shadow map at runtime */
+  setShadowSize(size: number): void {
+    const sc = this.sunLight.shadow
+    sc.mapSize.set(size, size)
+    sc.map?.dispose()
+    sc.map = null
+  }
+
   setFocus(x: number, z: number): void {
     this.focus.set(Math.round(x / 2) * 2, 0, Math.round(z / 2) * 2)
   }

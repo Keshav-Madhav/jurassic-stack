@@ -13,7 +13,8 @@ import RAPIER from '@dimforge/rapier3d-compat'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import { heightAt, lodFloorAt, normalAt, forestMaskAt, forestKindAt, biomeAt, shoreDist, BIOME, FOREST_KIND, SEA_LEVEL, HALF_SIZE, SPAWN, VOLCANO, worldMeta } from './heightmap'
-import { buildCanopyTree, buildElderTree, buildDotTree, buildFarPine, buildMushroom, buildRedwood, buildMangrove, buildDriedBush, buildCactus, buildReeds, buildPebbles, buildStones, buildSticks, buildOutcrop } from './trees'
+import { buildCanopyTree, buildElderTree, buildMushroom, buildRedwood, buildMangrove, buildDriedBush, buildCactus, buildReeds, buildPebbles, buildStones, buildSticks, buildOutcrop } from './trees'
+import { captureImpostor } from './impostor'
 import { CHUNK_SIZE, CHUNKS_PER_SIDE } from './terrain'
 import { addObstacle } from './obstacles'
 import type { Physics } from './physics'
@@ -203,14 +204,12 @@ const GROUND_COVER = new Set<NodeKind>(['grass', 'fern', 'flower', 'mushroom', '
 const COVER_DIST_OVERRIDE: Partial<Record<NodeKind, number>> = { pebbles: 110, sticks: 120, stones: 200, mushroom: 150, flower: 200 }
 /** Cover cells beyond this range from the player are hidden entirely. */
 const COVER_DRAW_DIST = 290
-/** Tree LOD bands per supercell (viewer distance to cell centre): built
- *  trees swap to 20-tri leaf masses beyond FAR, and every tree kind becomes
- *  a ~40-tri trunk-and-blob beyond DOT (a few pixels tall in the haze). */
+/** Beyond this (viewer → cell box) a tree is drawn as its IMPOSTOR: three
+ *  textured cards carrying the real model's side and top views, captured at
+ *  load (impostor.ts). Six triangles to the horizon; inside it, the model. */
 const TREE_LOD_FAR = 180
-const TREE_LOD_DOT = 600
-const DOT_KINDS: Partial<Record<NodeKind, 'canopy' | 'elder' | 'pine' | 'palm' | 'bare' | 'redwood'>> = {
-  tree: 'canopy', elder: 'elder', redwood: 'redwood', pine: 'pine', palm: 'palm', deadtree: 'bare', willow: 'canopy', mangrove: 'canopy',
-}
+/** kinds that get impostors (everything tall enough to matter at a distance) */
+const IMPOSTOR_KINDS = new Set<NodeKind>(['tree', 'elder', 'redwood', 'pine', 'palm', 'deadtree', 'willow', 'mangrove', 'outcrop'])
 /** Small solid props (boulders, logs) vanish beyond this — a 2 m rock is a
  *  pixel at 600 m, but 2,000 of them at full geometry are not free. */
 const SMALL_SOLID_DRAW_DIST = 600
@@ -366,7 +365,21 @@ class InstancedProp {
     })
   }
 
-  setInstance(i: number, x: number, y: number, z: number, scale: number, rotY: number, tint = 1): void {
+  /** During the fill everything is written, so whole-buffer uploads are
+   *  right; after `sealed` (computeBounds) every write is a partial upload
+   *  (addUpdateRange) — flipping one cell's dot range on an island-wide
+   *  40K-instance mesh re-uploaded 2.5 MB per band change, a hitch at speed. */
+  private sealed = false
+  private markInstance(m: THREE.InstancedMesh, i: number, color: boolean): void {
+    if (this.sealed) {
+      m.instanceMatrix.addUpdateRange(i * 16, 16)
+      if (color && m.instanceColor) m.instanceColor.addUpdateRange(i * 3, 3)
+    }
+    m.instanceMatrix.needsUpdate = true
+    if (color && m.instanceColor) m.instanceColor.needsUpdate = true
+  }
+
+  setInstance(i: number, x: number, y: number, z: number, scale: number, rotY: number, tint = 1, mark = true): void {
     this.dummy.position.set(x, y, z)
     this.dummy.rotation.set(0, rotY, 0)
     this.dummy.scale.setScalar(scale)
@@ -376,6 +389,17 @@ class InstancedProp {
       m.setMatrixAt(i, this.dummy.matrix)
       m.setColorAt(i, c)
       m.count = Math.max(m.count, i + 1)
+      if (mark) this.markInstance(m, i, true)
+    }
+  }
+
+  /** One upload for a contiguous block written with mark=false. */
+  markRange(start: number, count: number): void {
+    for (const m of this.meshes) {
+      if (this.sealed) {
+        m.instanceMatrix.addUpdateRange(start * 16, count * 16)
+        if (m.instanceColor) m.instanceColor.addUpdateRange(start * 3, count * 3)
+      }
       m.instanceMatrix.needsUpdate = true
       if (m.instanceColor) m.instanceColor.needsUpdate = true
     }
@@ -383,20 +407,96 @@ class InstancedProp {
 
   /** Hide by zero-scaling AT the node position (a zero matrix at the origin
    *  would balloon the instanced bounding sphere toward world 0,0,0). */
-  hideInstance(i: number, x: number, y: number, z: number): void {
+  hideInstance(i: number, x: number, y: number, z: number, mark = true): void {
     this.dummy.position.set(x, y, z)
     this.dummy.rotation.set(0, 0, 0)
     this.dummy.scale.setScalar(0.0001)
     this.dummy.updateMatrix()
     for (const m of this.meshes) {
       m.setMatrixAt(i, this.dummy.matrix)
-      m.instanceMatrix.needsUpdate = true
+      if (mark) this.markInstance(m, i, false)
     }
   }
 
-  /** Compute per-mesh bounding spheres from the filled instances. */
+  /** Compute per-mesh bounding spheres from the filled instances; from here
+   *  on, writes upload only their own slots. */
   computeBounds(): void {
     for (const m of this.meshes) m.computeBoundingSphere()
+    this.sealed = true
+  }
+}
+
+/**
+ * One island-wide instanced impostor mesh for a kind+variant. Slots are
+ * grouped by supercell so a cell's cards show/hide as one contiguous upload;
+ * hidden slots are zero-scale.
+ */
+class ImpostorSet {
+  readonly mesh: THREE.InstancedMesh
+  readonly total: number
+  shown = 0
+  private ranges = new Map<string, { start: number; ids: number[]; shown: boolean }>()
+  private slotOf = new Map<number, number>()
+  private dummy = new THREE.Object3D()
+
+  constructor(renderer: THREE.WebGLRenderer, sample: InstancedProp, cells: { cell: string; ids: number[] }[], private nodes: ScatterNode[], group: THREE.Group) {
+    // the normalized prop (unit height, base at y=0) as a plain group → pictures
+    const root = new THREE.Group()
+    for (const m of sample.meshes) root.add(new THREE.Mesh(m.geometry, m.material))
+    const bb = new THREE.Box3().setFromObject(root)
+    const size = bb.getSize(new THREE.Vector3())
+    const imp = captureImpostor(renderer, root, bb.min.y, size.y, Math.max(size.x, size.z))
+    let total = 0
+    for (const c of cells) total += c.ids.length
+    this.total = total
+    this.mesh = new THREE.InstancedMesh(imp.geometry, [imp.sideMaterial, imp.topMaterial], total)
+    this.mesh.frustumCulled = false // island-wide; six tris an instance
+    this.mesh.matrixAutoUpdate = false
+    this.mesh.castShadow = false
+    this.mesh.receiveShadow = false
+    let slot = 0
+    for (const c of cells) {
+      this.ranges.set(c.cell, { start: slot, ids: c.ids, shown: false })
+      for (const id of c.ids) {
+        this.slotOf.set(id, slot)
+        this.write(slot, this.nodes[id], false)
+        slot++
+      }
+    }
+    this.mesh.count = total
+    this.mesh.instanceMatrix.needsUpdate = true
+    this.mesh.computeBoundingSphere()
+    group.add(this.mesh)
+  }
+
+  private write(slot: number, n: ScatterNode, show: boolean): void {
+    this.dummy.position.set(n.x, n.y, n.z)
+    this.dummy.rotation.set(0, show ? n.rotY : 0, 0)
+    this.dummy.scale.setScalar(show ? n.scale : 0.0001)
+    this.dummy.updateMatrix()
+    this.mesh.setMatrixAt(slot, this.dummy.matrix)
+  }
+
+  /** flip a whole cell's block (one upload) */
+  setCell(cell: string, show: boolean): void {
+    const r = this.ranges.get(cell)
+    if (!r || r.shown === show) return
+    r.shown = show
+    for (const id of r.ids) this.write(this.slotOf.get(id)!, this.nodes[id], show && this.nodes[id].alive)
+    this.shown += show ? r.ids.length : -r.ids.length
+    this.mesh.instanceMatrix.addUpdateRange(r.start * 16, r.ids.length * 16)
+    this.mesh.instanceMatrix.needsUpdate = true
+  }
+
+  /** a single node harvested/respawned */
+  setNode(n: ScatterNode, alive: boolean): void {
+    const slot = this.slotOf.get(n.id)
+    if (slot === undefined) return
+    let shown = false
+    for (const r of this.ranges.values()) if (slot >= r.start && slot < r.start + r.ids.length) { shown = r.shown; break }
+    this.write(slot, n, alive && shown)
+    this.mesh.instanceMatrix.addUpdateRange(slot * 16, 16)
+    this.mesh.instanceMatrix.needsUpdate = true
   }
 }
 
@@ -404,21 +504,24 @@ export class Scatter {
   readonly group = new THREE.Group()
   readonly nodes: ScatterNode[] = []
   private props = new Map<string, InstancedProp>()
-  /** far-LOD twins of built-tree groups, same instance slots */
-  private farProps = new Map<string, InstancedProp>()
-  /** distant stand-ins: ONE instanced mesh per kind for the whole island
-   *  (a per-cell dot mesh was a draw call each — hundreds of 30-tri draws),
-   *  instances laid out cell by cell so a cell's range flips as one block */
-  private dots = new Map<NodeKind, { prop: InstancedProp; ranges: Map<string, { start: number; count: number; shown: boolean }>; slotOf: Map<number, number> }>()
+  /** impostors: ONE instanced cross-card mesh per kind+variant for the whole
+   *  island (two draw calls each: side cards, crown card), instances laid out
+   *  cell by cell so a cell's block flips as one contiguous upload */
+  private impostors = new Map<string, ImpostorSet>()
   private order = new Map<string, number[]>()
   private propMeta = new Map<string, { minX: number; maxX: number; minZ: number; maxZ: number; cover: boolean; small: boolean }>()
   private treeColliders = new Map<number, RAPIER.Collider>()
   private activeChunks = new Set<number>()
+  /** solid (collider-bearing) node ids per terrain chunk — the collider
+   *  stream walks 9 chunks' worth, not all 300K nodes */
+  private solidByChunk = new Map<number, number[]>()
+  /** harvested nodes waiting to respawn — the respawn tick walks only these */
+  private dead = new Set<number>()
   private lastChunkKey = -1
   private tmpN = new THREE.Vector3()
   private pendingColliderDrops: number[] = []
 
-  async load(): Promise<void> {
+  async load(renderer: THREE.WebGLRenderer): Promise<void> {
     const loader = new GLTFLoader()
     loader.setMeshoptDecoder(MeshoptDecoder)
     const files = [...new Set(Object.values(KIND_MODELS).flat().map((m) => m.file).filter((f): f is string => !!f))]
@@ -441,18 +544,12 @@ export class Scatter {
       }
       const make = ref.gen === 'elder' ? buildElderTree : ref.gen === 'redwood' ? buildRedwood : ref.gen === 'mangrove' ? buildMangrove : ref.gen === 'outcrop' ? buildOutcrop : buildCanopyTree
       built.set(key, make(ref.seed ?? 1))
-      built.set(key + ':far', make(ref.seed ?? 1, true))
     }
-    const rootOf = (ref: ModelRef, far = false): THREE.Object3D => {
-      if (ref.gen) return built.get(`${ref.gen}:${ref.seed}${far ? ':far' : ''}`)!
+    const rootOf = (ref: ModelRef): THREE.Object3D => {
+      if (ref.gen) return built.get(`${ref.gen}:${ref.seed}`)!
       const src = loaded.get(ref.file!)!
       return ref.node ? (src.getObjectByName(ref.node) ?? src) : src
     }
-    // the pine's mid-distance twin: the GLB's colour lives in textures (base
-    // colour white), so the twin is painted to match the rendered needles and
-    // bark by eye against the pines-eye QA shot
-    built.set('pine:far', buildFarPine(new THREE.Color(0x27521f), new THREE.Color(0x5a3c30), 7))
-
     // footprint aspect per kind (max over variants): wide props (merged
     // clusters, broad canopies) only place on ground that's flat across
     // their footprint — a merged pine GROVE placed on a slope hung its far
@@ -503,27 +600,6 @@ export class Scatter {
         prop.setInstance(i, n.x, n.y, n.z, n.scale, n.rotY, n.tint)
       })
       prop.computeBounds()
-      // tree LODs: built trees get a far twin (coarse leaf masses), and every
-      // tree kind a distant stand-in; visibility flips per supercell by
-      // distance in updateVisibility()
-      const fillTwin = (twin: InstancedProp): InstancedProp => {
-        ids.forEach((nodeId, i) => {
-          const n = this.nodes[nodeId]
-          twin.setInstance(i, n.x, n.y, n.z, n.scale, n.rotY, n.tint)
-        })
-        twin.computeBounds()
-        for (const m of twin.meshes) m.visible = false
-        return twin
-      }
-      if (KIND_MODELS[kind][variant].gen && built.has(`${KIND_MODELS[kind][variant].gen}:${KIND_MODELS[kind][variant].seed}:far`)) {
-        this.farProps.set(key, fillTwin(new InstancedProp(rootOf(KIND_MODELS[kind][variant], true), Math.max(ids.length, 1), this.group, true)))
-      } else if (kind === 'pine') {
-        this.farProps.set(key, fillTwin(new InstancedProp(built.get('pine:far')!, Math.max(ids.length, 1), this.group, true)))
-      } else if (kind === 'willow') {
-        // 2K-tri weeping crowns line 5 km of river; past 300 m a coarse
-        // canopy stands in (the droop is under a pixel by then)
-        this.farProps.set(key, fillTwin(new InstancedProp(built.get('canopy:11:far')!, Math.max(ids.length, 1), this.group, true)))
-      }
       // cell bounds for distance culling
       let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity
       for (const nodeId of ids) {
@@ -534,48 +610,23 @@ export class Scatter {
       this.propMeta.set(key, { minX, maxX, minZ, maxZ, cover, small: SMALL_SOLID.has(kind) })
     }
 
-    // the dots: per kind, every node of every variant, grouped by cell
-    for (const [kind, dotKind] of Object.entries(DOT_KINDS) as [NodeKind, 'canopy' | 'elder' | 'pine' | 'palm' | 'bare' | 'redwood'][]) {
-      const byCell = new Map<string, number[]>()
-      for (const [key, ids] of this.order) {
-        if (parseGroupKey(key).kind !== kind) continue
-        const cell = key.slice(key.lastIndexOf('#') + 1)
-        if (!byCell.has(cell)) byCell.set(cell, [])
-        byCell.get(cell)!.push(...ids)
-      }
-      let total = 0
-      for (const ids of byCell.values()) total += ids.length
-      if (!total) continue
-      const prop = new InstancedProp(buildDotTree(dotKind, 1), total, this.group, false)
-      const ranges = new Map<string, { start: number; count: number; shown: boolean }>()
-      const slotOf = new Map<number, number>()
-      let slot = 0
-      for (const [cell, ids] of byCell) {
-        ranges.set(cell, { start: slot, count: ids.length, shown: false })
-        for (const id of ids) {
-          const n = this.nodes[id]
-          slotOf.set(id, slot)
-          prop.hideInstance(slot, n.x, n.y, n.z) // start hidden; bands reveal
-          slot++
+    // the impostors: per kind+variant, one island-wide cross-card mesh whose
+    // slots are laid out cell by cell; captured from the normalized prop so
+    // the cards sit exactly where the model does
+    for (const kind of IMPOSTOR_KINDS) {
+      for (let variant = 0; variant < KIND_MODELS[kind].length; variant++) {
+        const cells: { cell: string; ids: number[] }[] = []
+        let sample: InstancedProp | null = null
+        for (const [key, ids] of this.order) {
+          const pk = parseGroupKey(key)
+          if (pk.kind !== kind || pk.variant !== variant) continue
+          cells.push({ cell: key.slice(key.lastIndexOf('#') + 1), ids })
+          sample ??= this.props.get(key)!
         }
+        if (!sample || !cells.length) continue
+        const set = new ImpostorSet(renderer, sample, cells, this.nodes, this.group)
+        this.impostors.set(`${kind}#${variant}`, set)
       }
-      prop.computeBounds()
-      this.dots.set(kind, { prop, ranges, slotOf })
-    }
-  }
-
-  /** Reveal or hide one cell's block of dots (matrix writes only on a flip). */
-  private setDotRange(kind: NodeKind, cell: string, shown: boolean): void {
-    const d = this.dots.get(kind)
-    if (!d) return
-    const r = d.ranges.get(cell)
-    if (!r || r.shown === shown) return
-    r.shown = shown
-    for (const [id, slot] of d.slotOf) {
-      if (slot < r.start || slot >= r.start + r.count) continue
-      const n = this.nodes[id]
-      if (shown && n.alive) d.prop.setInstance(slot, n.x, n.y, n.z, n.scale, n.rotY, n.tint)
-      else d.prop.hideInstance(slot, n.x, n.y, n.z)
     }
   }
 
@@ -597,16 +648,12 @@ export class Scatter {
         for (const m of this.props.get(key)!.meshes) m.visible = visible
         continue
       }
-      const far = this.farProps.get(key)
-      const { kind } = parseGroupKey(key)
-      const hasDot = this.dots.has(kind)
-      if (!far && !hasDot) continue
-      const band = d < TREE_LOD_FAR ? 0 : d < TREE_LOD_DOT ? 1 : 2
-      // a kind without a far twin keeps its full model through band 1
-      const fullVisible = band === 0 || (band === 1 && !far)
-      for (const m of this.props.get(key)!.meshes) m.visible = fullVisible
-      if (far) for (const m of far.meshes) m.visible = band === 1
-      if (hasDot) this.setDotRange(kind, key.slice(key.lastIndexOf('#') + 1), band === 2)
+      const { kind, variant } = parseGroupKey(key)
+      const set = this.impostors.get(`${kind}#${variant}`)
+      if (!set) continue
+      const near = d < TREE_LOD_FAR
+      for (const m of this.props.get(key)!.meshes) m.visible = near
+      set.setCell(key.slice(key.lastIndexOf('#') + 1), !near)
     }
   }
 
@@ -714,7 +761,12 @@ export class Scatter {
         const key = groupKeyOf(kind, variant, x, z)
         if (!this.order.has(key)) this.order.set(key, [])
         this.order.get(key)!.push(id)
-        if (TRUNK_KINDS.has(kind)) addObstacle(x, z, kind === 'rock' || kind === 'boulder' ? scale * 0.42 : kind === 'outcrop' ? scale * 0.3 : kind === 'elder' ? scale * 0.05 : kind === 'redwood' ? scale * 0.04 : 0.4)
+        if (TRUNK_KINDS.has(kind)) {
+          addObstacle(x, z, kind === 'rock' || kind === 'boulder' ? scale * 0.42 : kind === 'outcrop' ? scale * 0.3 : kind === 'elder' ? scale * 0.05 : kind === 'redwood' ? scale * 0.04 : 0.4)
+          const ck = this.chunkKeyOf(this.nodes[id])
+          if (!this.solidByChunk.has(ck)) this.solidByChunk.set(ck, [])
+          this.solidByChunk.get(ck)!.push(id)
+        }
         count++
       }
     }
@@ -752,6 +804,7 @@ export class Scatter {
     if (node.hp > 0) return {}
     node.alive = false
     node.respawnAt = Date.now() + RESPAWN_MS
+    this.dead.add(node.id)
     this.setNodeVisible(node, false)
     this.pendingColliderDrops.push(node.id)
     const out: Partial<Record<ItemId, number>> = {}
@@ -774,10 +827,12 @@ export class Scatter {
 
   tickRespawns(physics: Physics): void {
     const now = Date.now()
-    for (const n of this.nodes) {
+    for (const id of this.dead) {
+      const n = this.nodes[id]
       if (n.alive || n.respawnAt > now) continue
       n.alive = true
       n.hp = NODE_DEFS[n.kind].hp
+      this.dead.delete(id)
       this.setNodeVisible(n, true)
       this.ensureCollidersAround(Number.NaN, Number.NaN, physics, true)
     }
@@ -787,21 +842,9 @@ export class Scatter {
     const key = groupKeyOf(node.kind, node.variant, node.x, node.z)
     const prop = this.props.get(key)!
     const idx = this.order.get(key)!.indexOf(node.id)
-    const twins = [prop, this.farProps.get(key)]
-    for (const p of twins) {
-      if (!p) continue
-      if (visible) p.setInstance(idx, node.x, node.y, node.z, node.scale, node.rotY, node.tint)
-      else p.hideInstance(idx, node.x, node.y, node.z)
-    }
-    const d = this.dots.get(node.kind)
-    if (d) {
-      const slot = d.slotOf.get(node.id)
-      const shown = d.ranges.get(key.slice(key.lastIndexOf('#') + 1))?.shown ?? false
-      if (slot !== undefined) {
-        if (visible && shown) d.prop.setInstance(slot, node.x, node.y, node.z, node.scale, node.rotY, node.tint)
-        else d.prop.hideInstance(slot, node.x, node.y, node.z)
-      }
-    }
+    if (visible) prop.setInstance(idx, node.x, node.y, node.z, node.scale, node.rotY, node.tint)
+    else prop.hideInstance(idx, node.x, node.y, node.z)
+    this.impostors.get(`${node.kind}#${node.variant}`)?.setNode(node, visible)
   }
 
   ensureCollidersAround(x: number, z: number, physics: Physics, force = false): void {
@@ -825,9 +868,12 @@ export class Scatter {
         this.treeColliders.delete(id)
       }
     }
-    for (const n of this.nodes) {
-      if (!TRUNK_KINDS.has(n.kind) || !n.alive) continue
-      if (!this.activeChunks.has(this.chunkKeyOf(n)) || this.treeColliders.has(n.id)) continue
+    for (const ck of this.activeChunks) {
+      const ids = this.solidByChunk.get(ck)
+      if (!ids) continue
+      for (const id of ids) {
+      const n = this.nodes[id]
+      if (!n.alive || this.treeColliders.has(n.id)) continue
       const rock = n.kind === 'rock' || n.kind === 'boulder' || n.kind === 'outcrop'
       const half = rock ? n.scale * 0.32 : n.scale * 0.5
       const radius = n.kind === 'outcrop' ? n.scale * 0.3 : rock ? n.scale * 0.42 : n.kind === 'elder' ? n.scale * 0.05 : n.kind === 'redwood' ? n.scale * 0.04 : Math.max(0.3, n.scale * 0.045)
@@ -835,6 +881,7 @@ export class Scatter {
         RAPIER.ColliderDesc.cylinder(half, radius).setTranslation(n.x, n.y + half, n.z),
       )
       this.treeColliders.set(n.id, col)
+      }
     }
   }
 
@@ -895,7 +942,6 @@ export class Scatter {
       return t
     }
     for (const [key, prop] of this.props) {
-      const far = this.farProps.get(key)
       out.push({
         key,
         nodes: this.order.get(key)?.length ?? 0,
@@ -903,17 +949,12 @@ export class Scatter {
         drawn: prop.meshes[0]?.count ?? 0,
         // triangles this group submits (visible LOD only; frustum culling
         // then drops whole supercells)
-        tris: trisOf(prop) + (far ? trisOf(far) : 0),
-        visible: [prop, far].some((p) => p?.meshes.some((m) => m.visible)),
+        tris: trisOf(prop),
+        visible: prop.meshes.some((m) => m.visible),
       })
     }
-    for (const [kind, d] of this.dots) {
-      // the island-wide dot mesh per kind (hidden slots are zero-scale)
-      let shown = 0
-      for (const r of d.ranges.values()) if (r.shown) shown += r.count
-      const g = d.prop.meshes[0]?.geometry
-      const tri = g ? (g.index ? g.index.count : g.getAttribute('position').count) / 3 : 0
-      out.push({ key: `${kind}#dots`, nodes: d.slotOf.size, submeshes: d.prop.meshes.length, drawn: shown, tris: tri * shown, visible: shown > 0 })
+    for (const [kv, set] of this.impostors) {
+      out.push({ key: `${kv.split('#')[0]}#impostor`, nodes: set.total, submeshes: 1, drawn: set.shown, tris: set.shown * 6, visible: set.shown > 0 })
     }
     return out
   }
@@ -929,6 +970,7 @@ export class Scatter {
       n.alive = false
       n.hp = 0
       n.respawnAt = d.respawnAt
+      this.dead.add(n.id)
       this.setNodeVisible(n, false)
     }
   }
