@@ -15,7 +15,7 @@
 // river path becomes a bed, and then lets erosion age it.
 import { writeFileSync, mkdirSync } from 'node:fs'
 import {
-  HALF, SPAWN, VOLCANO, COAST, RANGES, HOLM, SHELVES, RIVER, RIVER_PATHS, LAKES, FORESTS, CLEARINGS, RUINS, BIOMES,
+  HALF, SPAWN, VOLCANO, COAST, RANGES, HOLM, SHELVES, RIVER, RIVER_PATHS, LAKES, FORESTS, CLEARINGS, RUINS, BIOMES, RAVINE,
   shoreDist, distToPath, closedPath,
 } from './hand-geometry.mjs'
 import { encodeRowDelta } from './world-io.mjs'
@@ -402,6 +402,37 @@ for (const part of RIVER.parts) {
 }
 console.timeEnd('rivers')
 
+// ---------- THE RAVINE: a slot up the volcano's flank into the crater ----------
+// Cut before erosion (so the walls weather like the rest of the cone) and
+// re-laid after it (`assert`): 100 m walls shed talus into a 14 m slot, and
+// droplets gullied the floor into steps the navmesh wouldn't climb.
+const RAVINE_CUM = [0]
+for (let i = 1; i < RAVINE.path.length; i++) RAVINE_CUM.push(RAVINE_CUM[i - 1] + Math.hypot(RAVINE.path[i].x - RAVINE.path[i - 1].x, RAVINE.path[i].z - RAVINE.path[i - 1].z))
+function ravineFloorAt(seg, t) {
+  const along = (RAVINE_CUM[seg] + (RAVINE_CUM[Math.min(seg + 1, RAVINE_CUM.length - 1)] - RAVINE_CUM[seg]) * t) / RAVINE_CUM[RAVINE_CUM.length - 1]
+  return lerp(RAVINE.floorStart, RAVINE.floorEnd, smoothstep(0, 1, along) * 0.35 + along * 0.65)
+}
+function carveRavine(assert) {
+  const hw = RAVINE.halfWidth
+  for (let iz = 0; iz < SIDE; iz++) {
+    for (let ix = 0; ix < SIDE; ix++) {
+      const x = worldX(ix), z = worldZ(iz)
+      const { d, seg, t } = distToPath(x, z, RAVINE.path)
+      if (d > 60) continue
+      const floor = ravineFloorAt(seg, t)
+      const i0 = idx(ix, iz)
+      // flat slot floor, then a steep wall up to wherever the mountain already is
+      const cap = d < hw ? floor : floor + (d - hw) * RAVINE.wallSlope
+      if (H[i0] > cap) H[i0] = cap
+      // after erosion the floor is LAID, not just capped — talus and silt out
+      if (assert && d < hw + 2) H[i0] = lerp(floor, H[i0], smoothstep(hw - 1, hw + 2, d))
+    }
+  }
+}
+console.time('ravine')
+carveRavine(false)
+console.timeEnd('ravine')
+
 // ---------- sculpt: rock bands on the ranges and the canyon walls ----------
 console.time('sculpt')
 {
@@ -623,6 +654,23 @@ for (let iz = 0; iz < SIDE; iz++) {
     if (H[i0] < floorH && !RIVER_PATHS.some((p) => distToPath(x, z, p).d < 40)) H[i0] = floorH
   }
 }
+// the Ravine's floor and the crater bench: re-laid (see carveRavine)
+carveRavine(true)
+{
+  const crater = SHELVES.find((sh) => sh.name === 'crater')
+  for (let iz = 0; iz < SIDE; iz++) {
+    for (let ix = 0; ix < SIDE; ix++) {
+      const x = worldX(ix), z = worldZ(iz)
+      const sd = shoreDist(x, z, crater.shore)
+      if (sd > 6) continue
+      const i0 = idx(ix, iz)
+      const bench = crater.h + 1.5 * fbm(x * 0.02, z * 0.02, 2)
+      // silt from the rim piles on the bench: shave it back down to the bench
+      const t = smoothstep(6, -6, sd)
+      if (H[i0] > bench + 0.3) H[i0] = lerp(H[i0], bench + 0.3, t)
+    }
+  }
+}
 // the spawn beach (droplets gully everything)
 for (let iz = 0; iz < SIDE; iz++) {
   for (let ix = 0; ix < SIDE; ix++) {
@@ -718,13 +766,14 @@ for (const site of RUIN_SITES) {
   const h = hAt(site.x, site.z)
   const f = flatness(site.x, site.z)
   const river = Math.min(...RIVER_PATHS.map((p) => distToPath(site.x, site.z, p).d))
+  const crater = site.tag === 'crater-beacon' // stands on a hand bench inside the cone; the tree rule can't apply
   const lake = Math.min(...LAKES_ACTIVE.map((l) => shoreDist(site.x, site.z, l.shore)))
   const problems = []
   if (h < SEA + 1.6) problems.push(`wet (h ${h.toFixed(1)})`)
   if (f > 6) problems.push(`not flat (${f.toFixed(1)} m over 24 m)`)
   if (river < 40) problems.push(`in the river corridor (${river.toFixed(0)} m)`)
   if (lake < 20) problems.push(`in standing water (${lake.toFixed(0)} m)`)
-  if (forestDensityAt(site.x, site.z) > 0.15) problems.push(`in forest (density ${forestDensityAt(site.x, site.z).toFixed(2)})`)
+  if (!crater && forestDensityAt(site.x, site.z) > 0.15) problems.push(`in forest (density ${forestDensityAt(site.x, site.z).toFixed(2)})`)
   if (problems.length) {
     console.error(`VALIDATOR FAIL: ruin ${site.tag} at (${site.x},${site.z}): ${problems.join('; ')}`)
     process.exitCode = 1
@@ -746,12 +795,16 @@ if (nan) fail(`${nan} non-finite heights`)
 if (mx > 600 || mn < -60) fail(`height range out of bounds: ${mn.toFixed(1)}..${mx.toFixed(1)}`)
 const hSpawn = hAt(SPAWN.x, SPAWN.z)
 if (hSpawn < SEA + 1.5 || hSpawn > SEA + 6) fail(`spawn beach height ${hSpawn.toFixed(2)} outside 1.5..6`)
-const hPeak = Math.max(hAt(VOLCANO.x, VOLCANO.z - 100), hAt(VOLCANO.x, VOLCANO.z + 100), hAt(VOLCANO.x - 100, VOLCANO.z), hAt(VOLCANO.x + 100, VOLCANO.z))
+// the rim ring sits outside the sunk crater bench (~100 m) — probe at 140 m
+const hPeak = Math.max(hAt(VOLCANO.x, VOLCANO.z - 140), hAt(VOLCANO.x, VOLCANO.z + 140), hAt(VOLCANO.x - 140, VOLCANO.z), hAt(VOLCANO.x + 140, VOLCANO.z))
 if (hPeak < 240) fail(`volcano rim only ${hPeak.toFixed(0)} m`)
+// the crater: a real bowl now — its bench must sit well under the rim
+const hBench = hAt(VOLCANO.x, VOLCANO.z)
+if (hBench > hPeak - 60) fail(`crater bench ${hBench.toFixed(0)} m is not sunk under the rim ${hPeak.toFixed(0)} m`)
 {
   // spawn → volcano sightline: from eye height at spawn, the rim must clear all terrain between
   const eye = hSpawn + 1.6
-  const rim = { x: VOLCANO.x, z: VOLCANO.z + 110, y: hAt(VOLCANO.x, VOLCANO.z + 110) }
+  const rim = { x: VOLCANO.x, z: VOLCANO.z + 140, y: hAt(VOLCANO.x, VOLCANO.z + 140) }
   let blocked = false
   for (let t = 0.05; t < 0.95; t += 0.005) {
     const x = SPAWN.x + (rim.x - SPAWN.x) * t
@@ -829,7 +882,7 @@ const meta = {
   lakes: LAKES_ACTIVE, ruinSites: RUIN_SITES, ruins: RUINS,
   swamp: SWAMP ? { level: SWAMP.level, shore: SWAMP.shore } : null,
   biomes: BIOMES,
-  coast: COAST, ranges: RANGES, holm: HOLM,
+  coast: COAST, ranges: RANGES, holm: HOLM, ravine: RAVINE,
   forests: FORESTS, clearings: CLEARINGS,
   bakedAt: new Date().toISOString(),
 }

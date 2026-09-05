@@ -264,6 +264,16 @@ Range** (long, N–S along the west side, peaks 350–420 m, the Tarn in its sad
 rock bands on the flanks, real passes where the crest heights dip. **The volcano** grows with the map
 (rim ~320 m); the caldera gate stands at its south foot, visible on approach.
 
+**Behind the door (M17, 2026-09-05): the Ravine and the Crater.** The door in the rock face opens on a
+hand-traced **slot canyon** — 16 m wide, walls at 67°, a floor that climbs 71 → 175 m over a 380 m
+switchback up the cone's south flank (`RAVINE` in `tools/hand-geometry.mjs`; cut before erosion so the
+walls weather with the cone, re-laid after it so talus and silt can't step the floor). It tops out on
+the **crater bench**, a 175 m shelf sunk 100 m under the rim — the summit is a real bowl now, not a
+dished dome — where the Beacon's court stands: eight columns, two guardians facing the mouth, an arch,
+and the basalt brazier itself (`beacon.ts`). Bare ash: no grass, no flora, only rockfall. The navmesh
+admits exactly the slot floor and the bench inside the cone; the population never spawns there. The
+scripted alpha guarding the door and the "keep living" choice remain as written below.
+
 **Biomes by hand, bigger.** The **swamp** (~700 m) wraps the Reservoir's east and south and the
 outflow delta. The **desert** (~1 km) fills the south-west rain shadow behind the West Range, between
 Lake Aster and the south-west coast. **Plains** open the south-centre between the spawn beach and the
@@ -318,7 +328,11 @@ told through geography, ruins, and what you can't survive yet (v1 design, playte
 5. **The summit.** All keystones unseal the caldera door; the island's one scripted monster — an
    oversized alpha apex — guards it. Your tame army is your progression made flesh. Behind the door:
    what the ruin-builders left, and a choice — light the great beacon and roll credits, or keep living
-   as the island's new apex. Either way the sandbox continues.
+   as the island's new apex. Either way the sandbox continues. *(Built M17: the Ravine climbs to the
+   crater bench; E at the brazier with all five keystones lights it — fire, embers, a light the crater
+   reads by, a swell in the ambience — and the credits card fades in over the world with the tally:
+   keystones, tames, pieces built, island days lived. Any key dismisses; `beaconLit` is saved. The alpha
+   at the door is still to come.)*
 
 **The Wayfinder:** a compass relic on the first beach that points to the next arc beat. Carry it =
 guided playthrough; leave it in a chest = pure sandbox. One item replaces the tutorial/quest system.

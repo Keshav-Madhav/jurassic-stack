@@ -912,6 +912,14 @@
       "layout": null
     },
     {
+      "tag": "crater-beacon",
+      "x": 0,
+      "z": -1250,
+      "y": 175,
+      "keystone": false,
+      "layout": "beacon"
+    },
+    {
       "tag": "plain-circle",
       "x": -250,
       "z": 1000,
@@ -1075,6 +1083,12 @@
       "tag": "caldera-gate",
       "x": 0,
       "z": -876
+    },
+    {
+      "tag": "crater-beacon",
+      "x": 0,
+      "z": -1250,
+      "layout": "beacon"
     },
     {
       "tag": "plain-circle",
@@ -2211,6 +2225,50 @@
       600
     ]
   ],
+  "ravine": {
+    "halfWidth": 8,
+    "wallSlope": 2.4,
+    "floorStart": 71,
+    "floorEnd": 175,
+    "path": [
+      {
+        "x": 0,
+        "z": -896
+      },
+      {
+        "x": 22,
+        "z": -930
+      },
+      {
+        "x": 62,
+        "z": -968
+      },
+      {
+        "x": 112,
+        "z": -1012
+      },
+      {
+        "x": 128,
+        "z": -1060
+      },
+      {
+        "x": 100,
+        "z": -1104
+      },
+      {
+        "x": 52,
+        "z": -1136
+      },
+      {
+        "x": 14,
+        "z": -1162
+      },
+      {
+        "x": 0,
+        "z": -1196
+      }
+    ]
+  },
   "forests": [
     {
       "name": "southwood",
@@ -3685,5 +3743,5 @@
       ]
     ]
   ],
-  "bakedAt": "2026-09-05T06:15:49.214Z"
+  "bakedAt": "2026-09-05T10:26:20.276Z"
 }

@@ -145,7 +145,25 @@ export const SHELVES = [
   // the volcano, it looks like any other ruin")
   { name: 'gate-apron', h: 71, edge: 70, shore: [[-48, -850], [48, -850], [52, -906], [-52, -906]] },
   { name: 'gate-wall', h: 104, edge: 12, shore: [[-80, -909], [80, -909], [80, -1010], [-80, -1010]] },
+  // THE CRATER FLOOR — a 175 m bench sunk 100 m into the summit: the arc's
+  // last room, walled by the cone's own rim, reached only by the Ravine
+  { name: 'crater', h: 175, edge: 34, shore: [[-92, -1250], [-72, -1318], [-18, -1352], [46, -1340], [88, -1290], [92, -1224], [58, -1170], [0, -1150], [-58, -1170], [-90, -1206]] },
 ]
+
+// ---------- THE RAVINE: the way into the mountain ----------
+// A slot canyon cut through the volcano's south flank from the gate's rock
+// face up into the crater — floor climbs from the apron to the crater bench
+// along the traced path (switchbacks keep it walkable), walls are the cone.
+export const RAVINE = {
+  halfWidth: 8,
+  wallSlope: 2.4, // rise per metre out from the floor's edge (67°) — steep, but the rock texture still reads
+  floorStart: 71,
+  floorEnd: 175,
+  path: [
+    { x: 0, z: -896 }, { x: 22, z: -930 }, { x: 62, z: -968 }, { x: 112, z: -1012 }, { x: 128, z: -1060 },
+    { x: 100, z: -1104 }, { x: 52, z: -1136 }, { x: 14, z: -1162 }, { x: 0, z: -1196 },
+  ],
+}
 
 // ---------- THE LASSO: one river, three parts ----------
 // `flow` 1 = current runs source→end along the path; 0 = dead water at
@@ -437,6 +455,7 @@ export const RUINS = [
   { tag: 'highland-arch', x: 660, z: -240, keystone: true }, // the terrace on the inflow's east bank
   { tag: 'foothill-vault', x: -760, z: -320, keystone: true }, // the shelf between the west foothills and the pines
   { tag: 'caldera-gate', x: 0, z: -876 }, // mid-apron; the arch stands 19 m north against the rock face
+  { tag: 'crater-beacon', x: 0, z: -1250, layout: 'beacon' }, // the arc's end: the beacon in the crater
   // THE REST OF THE LOST CITY — minor ruins across the 4 km (layouts by kind):
   // a broken ring on the plain, a watch over the estuary, an obelisk in the
   // dunes, shrines by the lake, arches in the pines, columns in the swamp…

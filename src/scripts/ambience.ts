@@ -92,6 +92,26 @@ export class Ambience {
     }
   }
 
+  /** The beacon's swell: a slow major chord that blooms and fades over ~7 s. */
+  swell(): void {
+    if (!this.ctx || !this.master) return
+    const ctx = this.ctx
+    const now = ctx.currentTime
+    for (const [f, g0] of [[110, 0.16], [165, 0.11], [220, 0.09], [277, 0.07], [330, 0.05]] as const) {
+      const o = ctx.createOscillator()
+      o.type = 'triangle'
+      o.frequency.value = f
+      const g = ctx.createGain()
+      g.gain.setValueAtTime(0, now)
+      g.gain.linearRampToValueAtTime(g0, now + 2.4)
+      g.gain.setValueAtTime(g0, now + 4.2)
+      g.gain.exponentialRampToValueAtTime(0.0005, now + 7.5)
+      o.connect(g).connect(this.master)
+      o.start(now)
+      o.stop(now + 7.6)
+    }
+  }
+
   /** @param time 0..1 day fraction (0.25 sunrise, 0.5 noon, 0.75 sunset) · windiness 0..1 */
   update(dt: number, time: number, windiness = 0.5): void {
     if (!this.ctx || !this.windGain || !this.windFilter || !this.bugGain) return

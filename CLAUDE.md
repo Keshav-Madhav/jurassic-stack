@@ -48,7 +48,12 @@ Vercel. **No React, no framework.**
   Gates and QA tools read coordinates from the world (`__g.game.spawn()`, `gateSite()`, meta) — never
   hardcode a position. Every round re-shoots `tools/aerial.mjs` and `tools/qa-forest.mjs --tris` and
   keeps the per-view triangle/draw-call/JS-ms numbers honest: culling and LODs are part of the
-  feature, not a follow-up.
+  feature, not a follow-up. `tools/qa-crater.mjs` shoots the finale (ravine, crater, beacon lit,
+  credits). When reachability fails, `NAV_PROBE="x,z;x,z" node tools/bake-navmesh.mjs` adds probe
+  targets, and the navmesh is written regardless so `findClosestPoint`/`computePath` can bisect it.
+- **Hand shelves and cuts are re-laid after erosion.** Anything the player must walk (the Ravine
+  floor, the crater bench, the gate apron) is asserted again in the `reassert` pass — droplets and
+  talus turn a designed ramp into steps the navmesh won't climb.
 
 ## Dev commands
 

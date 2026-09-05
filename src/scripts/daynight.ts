@@ -105,6 +105,8 @@ function lerpGrade(a: Grade, b: Grade, t: number, out: Grade): Grade {
 export class DayNight {
   /** 0 = midnight, 0.25 = sunrise, 0.5 = noon, 0.75 = sunset. */
   time = 0.34 // spawn in mid-morning
+  /** days lived on the island (fractional, saved) — the finale's tally */
+  elapsedDays = 0
   private sky = new Sky()
   private sunLight = new THREE.DirectionalLight()
   private rimLight = new THREE.DirectionalLight(0xff5588)
@@ -157,6 +159,7 @@ export class DayNight {
 
   advance(dt: number): void {
     this.time = (this.time + dt / DAY_LENGTH_S) % 1
+    this.elapsedDays += dt / DAY_LENGTH_S
     this.apply()
   }
 

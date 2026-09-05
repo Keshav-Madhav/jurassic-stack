@@ -63,6 +63,8 @@ export interface WorldMeta {
   encoding?: 'row-delta'
   spawn: { x: number; z: number }
   volcano: { x: number; z: number }
+  /** the Ravine: the slot canyon from the caldera door up to the crater bench */
+  ravine: { halfWidth: number; floorStart: number; floorEnd: number; path: { x: number; z: number }[] }
   /** every part as a plain polyline (closed ones wrapped), flowing legs first */
   rivers: RiverPoint[][]
   river?: RiverDef

@@ -75,6 +75,17 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #10150f; }
 }
 #hud-panel .recipe:disabled { opacity: 0.35; cursor: default; }
 #hud-panel .recipe small { opacity: 0.75; font-size: 11px; }
+#hud-credits {
+  position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+  background: radial-gradient(ellipse at center, rgba(40, 18, 6, 0.55) 0%, rgba(8, 6, 4, 0.88) 100%);
+  opacity: 0; transition: opacity 1.6s ease; z-index: 4; text-align: center;
+}
+#hud-credits.show { opacity: 1; }
+#hud-credits .card { max-width: 520px; padding: 24px; }
+#hud-credits h1 { font-size: 34px; letter-spacing: 0.34em; margin: 0 0 6px; color: #ffd9a8; text-shadow: 0 0 24px rgba(255, 150, 60, 0.7); }
+#hud-credits .lede { font-size: 18px; margin: 0 0 22px; color: #ffb36b; }
+#hud-credits p { margin: 6px 0; font-size: 14px; opacity: 0.9; }
+#hud-credits .hint { margin-top: 26px; font-size: 12px; opacity: 0.55; }
 #hud-vignette {
   position: fixed; inset: 0; pointer-events: none; opacity: 0; transition: opacity 0.2s;
   background: radial-gradient(ellipse at center, transparent 55%, rgba(180, 30, 20, 0.55) 100%);

@@ -23,6 +23,9 @@ export interface SaveFile {
   creative?: boolean
   keystones?: string[]
   doorOpen?: boolean
+  beaconLit?: boolean
+  /** island days lived (fractional) */
+  days?: number
   inventory: unknown
   pieces: unknown
   deadNodes: unknown

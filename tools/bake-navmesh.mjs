@@ -9,7 +9,9 @@ import { generateTiledNavMesh } from '@recast-navigation/generators'
 await initRecast()
 
 import { readWorld } from './world-io.mjs'
+import { RAVINE, SHELVES, shoreDist, distToPath } from './hand-geometry.mjs'
 const { meta, grid } = readWorld()
+const CRATER = SHELVES.find((s) => s.name === 'crater')
 const { side, res, scale, half, sea } = meta
 
 // terrain mesh at bake resolution (2 m) — same data the game renders/collides
@@ -34,7 +36,12 @@ for (let iz = 0; iz < vside; iz++) {
 const VENT = meta.volcano
 const skipVertex = (i) => {
   const x = positions[i * 3], y = positions[i * 3 + 1], z = positions[i * 3 + 2]
-  return y < -1.5 || Math.hypot(x - VENT.x, z - VENT.z) < 330
+  if (y < -1.5) return true
+  if (Math.hypot(x - VENT.x, z - VENT.z) >= 330) return false
+  // inside the cone only the Ravine's floor and the crater bench are walkable
+  if (distToPath(x, z, RAVINE.path).d < RAVINE.halfWidth + 3) return false
+  if (CRATER && shoreDist(x, z, CRATER.shore) < 4) return false
+  return true
 }
 const tmp = []
 for (let iz = 0; iz < vside - 1; iz++) {
@@ -79,6 +86,13 @@ let failed = false
 // crater is sealed until M8's caldera door opens — the arc's final gate is
 // enforced by geometry, not just scripting. (Verified unreachable 2026-09-02.)
 const targets = meta.ruinSites.map((r) => ({ name: r.tag, x: r.x, y: r.y, z: r.z }))
+// NAV_PROBE="x,z;x,z" adds throwaway targets (height read from the grid) — for finding where a corridor breaks
+if (process.env.NAV_PROBE) {
+  for (const s of process.env.NAV_PROBE.split(';')) {
+    const [x, z] = s.split(',').map(Number)
+    targets.push({ name: `probe(${x},${z})`, x, y: grid[Math.round((z + half) / res) * side + Math.round((x + half) / res)] * scale, z })
+  }
+}
 for (const t of targets) {
   const { success: ok, path } = query.computePath(start, { x: t.x, y: t.y, z: t.z }, { halfExtents: HALF_EXT })
   if (!ok || !path || path.length === 0) {
@@ -95,8 +109,9 @@ for (const t of targets) {
     console.log(`PASS spawn → ${t.name}: ${path.length} waypoints`)
   }
 }
-if (failed) process.exit(1)
-
+// written even when reachability fails, so the failing mesh can be probed
+// (a stale navmesh.bin sent one debugging session down the wrong hole)
 const data = exportNavMesh(navMesh)
 writeFileSync('public/world/navmesh.bin', Buffer.from(data))
-console.log(`navmesh: ${(data.byteLength / 1024).toFixed(0)} KB → public/world/navmesh.bin`)
+console.log(`navmesh: ${(data.byteLength / 1024).toFixed(0)} KB → public/world/navmesh.bin${failed ? ' (REACHABILITY FAILED — probe it)' : ''}`)
+if (failed) process.exit(1)

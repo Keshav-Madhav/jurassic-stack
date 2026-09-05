@@ -73,7 +73,9 @@ for (const item of ['foundation', 'wall', 'ceiling', 'campfire']) {
 }
 
 // ---------- tame: punch to KO, feed to tame ----------
-check(await g('window.__g.game.gotoDino("idle")') || await g('window.__g.game.gotoDino("wander")'), 'found a wild raptor')
+// a raptor specifically: since the 1500-dino population, the nearest idle dino
+// on the spawn beach is as often a trike, whose torpor 45 punches can't reach
+check(await g('window.__g.game.gotoDino("idle", "raptor")') || await g('window.__g.game.gotoDino("wander", "raptor")'), 'found a wild raptor')
 await g('window.__g.game.select(8)') // empty slot = fists (torpor route)
 for (let i = 0; i < 45; i++) { // 160 torpor / 8 per punch + 2.2/s drain over the loop needs headroom
   await g('window.__g.game.swing()')
@@ -81,7 +83,7 @@ for (let i = 0; i < 45; i++) { // 160 torpor / 8 per punch + 2.2/s drain over th
   const ko = await g('window.__g.game.dinoStates().some(d => d.state === "ko")')
   if (ko) break
   // it may have fled or be chasing us — stay next to it
-  await g('window.__g.game.gotoDino("aggro") || window.__g.game.gotoDino("flee") || window.__g.game.gotoDino("idle") || window.__g.game.gotoDino("wander")')
+  await g('window.__g.game.gotoDino("aggro", "raptor") || window.__g.game.gotoDino("flee", "raptor") || window.__g.game.gotoDino("idle", "raptor") || window.__g.game.gotoDino("wander", "raptor")')
 }
 check(await g('window.__g.game.dinoStates().some(d => d.state === "ko")'), 'raptor knocked out')
 await g('window.__g.game.gotoDino("ko")')
@@ -100,12 +102,19 @@ check(await g('window.__g.game.dinoStates().some(d => d.saddled)'), 'raptor sadd
 await g('window.__g.game.interact()') // mount
 await page.waitForTimeout(200)
 check(await g('window.__g.game.riding()'), 'mounted')
-const before = await g('window.__g.player()')
-await g('window.__g.setIntent(0, -9)')
-await page.waitForTimeout(3000)
-await g('window.__g.setIntent(0, 0)')
-const after = await g('window.__g.player()')
-const rode = Math.hypot(after.x - before.x, after.z - before.z)
+// ride out: the mount stands where it was tamed, so a tree or rock may block
+// one heading — try the four in turn
+let rode = 0
+let after
+for (const [ix, iz] of [[0, -9], [9, 0], [0, 9], [-9, 0]]) {
+  const before = await g('window.__g.player()')
+  await g(`window.__g.setIntent(${ix}, ${iz})`)
+  await page.waitForTimeout(3000)
+  await g('window.__g.setIntent(0, 0)')
+  after = await g('window.__g.player()')
+  rode = Math.hypot(after.x - before.x, after.z - before.z)
+  if (rode > 15) break
+}
 check(rode > 15, `rode the raptor ${rode.toFixed(0)}m`)
 check(Number.isFinite(after.y) && after.y > -50, `ride stayed above ground (y=${after.y.toFixed(1)})`)
 await g('window.__g.game.interact()') // dismount

@@ -1,7 +1,7 @@
 // Grass tile generation — pure data (matrices + colours) from the baked
 // grids, so it can run in the terrain worker. grass.ts owns the meshes.
 import * as THREE from 'three'
-import { heightAt, normalAt, biomeAt, forestMaskAt, BIOME, worldMeta } from './heightmap'
+import { heightAt, normalAt, biomeAt, forestMaskAt, BIOME, VOLCANO, worldMeta } from './heightmap'
 
 export const GRASS_TILE = 64
 
@@ -73,6 +73,8 @@ export function buildGrassTile(tx: number, tz: number, spacing: number): { matri
       const h = heightAt(x, z)
       // the beach is sand: no grass under 2.5 m, dune tufts up to 3 (the spawn meadow sits at 3.0)
       if (h < 2.5 || h > 190) continue
+      // the volcano's cone, the Ravine and the crater bench are bare ash and rock
+      if (Math.hypot(x - VOLCANO.x, z - VOLCANO.z) < 340) continue
       if (h < 3.0 && r3 > 0.4) continue
       const biome = biomeAt(x, z)
       if (biome === BIOME.DESERT && r2 > 0.12) continue // a few dry tufts in the dunes

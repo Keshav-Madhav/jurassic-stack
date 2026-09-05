@@ -106,6 +106,16 @@ const LAYOUTS_BY_KIND: Record<string, PiecePlan[]> = {
     { model: 'Column', dx: -3, dz: 0, h: 7.5 }, { model: 'Column', dx: 3, dz: 0, h: 7.5 },
     { model: 'Arch', dx: 0, dz: -5, h: 5.5, rotY: 0 }, { model: 'Column', dx: 0, dz: 6, h: 3, toppled: true },
   ],
+  // THE BEACON's court (the brazier itself is beacon.ts): a ring of eight
+  // 9 m columns, two guardians facing the Ravine's mouth to the south
+  beacon: [
+    { model: 'Column', dx: 16, dz: 0, h: 9 }, { model: 'Column', dx: 11.3, dz: 11.3, h: 9 },
+    { model: 'Column', dx: 0, dz: 16, h: 6, toppled: true }, { model: 'Column', dx: -11.3, dz: 11.3, h: 9 },
+    { model: 'Column', dx: -16, dz: 0, h: 9 }, { model: 'Column', dx: -11.3, dz: -11.3, h: 9 },
+    { model: 'Column', dx: 0, dz: -16, h: 9 }, { model: 'Column', dx: 11.3, dz: -11.3, h: 9 },
+    { model: 'Statue', dx: -6, dz: 24, h: 7, rotY: Math.PI }, { model: 'Statue', dx: 6, dz: 24, h: 7, rotY: Math.PI },
+    { model: 'Arch', dx: 0, dz: 34, h: 11, rotY: 0 },
+  ],
 }
 
 export class Ruins {

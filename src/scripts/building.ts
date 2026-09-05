@@ -214,6 +214,10 @@ export class Building {
     return this.pieces.map((p) => ({ ...p }))
   }
 
+  count(): number {
+    return this.pieces.length
+  }
+
   restore(pieces: Piece[]): void {
     for (const p of pieces) this.commit(p)
   }

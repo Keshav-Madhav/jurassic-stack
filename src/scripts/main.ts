@@ -9,13 +9,14 @@ import { Physics, FIXED_DT } from './physics'
 import { Input } from './input'
 import { Player } from './player'
 import { ThirdPersonCamera } from './camera'
-import { DayNight } from './daynight'
+import { DayNight, DAY_LENGTH_S } from './daynight'
 import { Dino } from './dinos'
 import { SPECIES } from './species'
 import { Scatter } from './scatter'
 import { Building, type PieceKind } from './building'
 import { Ruins } from './ruins'
 import { Keystones } from './keystones'
+import { Beacon } from './beacon'
 import { Inventory } from './inventory'
 import { ITEMS, type ItemId } from './items'
 import { Hud } from './hud'
@@ -137,11 +138,21 @@ async function boot(): Promise<void> {
     physics.world.removeCollider(doorCollider, false)
   }
 
+  // THE BEACON — the arc's end, on the crater bench at the top of the Ravine
+  const beaconSite = worldMeta!.ruinSites.find((r) => r.tag === 'crater-beacon')!
+  const beacon = new Beacon(beaconSite.x, heightAt(beaconSite.x, beaconSite.z), beaconSite.z)
+  scene.add(beacon.group)
+  physics.world.createCollider(RAPIER.ColliderDesc.cylinder(1.4, 7.4).setTranslation(beaconSite.x, beacon.groundY + 1.4, beaconSite.z))
+  physics.world.createCollider(RAPIER.ColliderDesc.cylinder(3.5, 1.6).setTranslation(beaconSite.x, beacon.groundY + 2.7 + 3.5, beaconSite.z))
+  let beaconLit = save?.beaconLit ?? false
+  if (beaconLit) beacon.light(true)
+
   const building = new Building(physics)
   scene.add(building.group)
   if (save) building.restore(save.pieces as ReturnType<Building['serialize']>)
 
   if (save) daynight.setTime(save.time)
+  if (save?.days) daynight.elapsedDays = save.days as number
 
   // --- dinos ---
   const dinos: Dino[] = []
@@ -334,6 +345,24 @@ async function boot(): Promise<void> {
       hud.toast(`The gate is sealed. ${keystones.total - keystones.collectedCount} keystones missing (N to seek).`)
       return true
     }
+    // the beacon
+    if (!beaconLit && Math.hypot(f0.x - beaconSite.x, f0.z - beaconSite.z) < 11) {
+      if (keystones.collectedCount >= keystones.total) {
+        beaconLit = true
+        beacon.light()
+        ambience.swell()
+        hud.toast('The keystones burn — the beacon takes.')
+        const tamed = dinos.filter((d) => d.state === 'tamed').length
+        setTimeout(() => hud.credits([
+          `${keystones.total} keystones carried through the caldera door`,
+          `${tamed} dino${tamed === 1 ? '' : 's'} tamed · ${building.count()} pieces built`,
+          `${Math.round(daynight.elapsedDays * 10) / 10} island days lived (one is ${Math.round(DAY_LENGTH_S / 60)} real minutes)`,
+        ]), 2800)
+        return true
+      }
+      hud.toast('The brazier is cold — it wants the fire of all five keystones.')
+      return true
+    }
     // keystones (the arc's thread)
     const got = keystones.collectNear(f0.x, f0.z)
     if (got) {
@@ -434,12 +463,12 @@ async function boot(): Promise<void> {
     if (e.code === 'KeyN') {
       const f = feetPos()
       const gate = worldMeta?.ruinSites.find((r) => r.tag === 'caldera-gate')
-      const target = keystones.collectedCount < keystones.total ? keystones.nearestMissing(f.x, f.z) : gate ?? null
+      const target = keystones.collectedCount < keystones.total ? keystones.nearestMissing(f.x, f.z) : doorOpen && !beaconLit ? beaconSite : gate ?? null
       if (target) {
         const d = Math.hypot(target.x - f.x, target.z - f.z)
         const ang = ((Math.atan2(-(target.x - f.x), -(target.z - f.z)) * 180) / Math.PI + 360) % 360
         const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
-        const label = keystones.collectedCount < keystones.total ? 'keystone' : 'the caldera gate'
+        const label = keystones.collectedCount < keystones.total ? 'keystone' : doorOpen && !beaconLit ? 'the beacon' : 'the caldera gate'
         hud.toast(`Wayfinder: ${label} ${dirs[Math.round(ang / 45) % 8]} · ${Math.round(d)}m`)
       }
     }
@@ -464,6 +493,7 @@ async function boot(): Promise<void> {
     version: SAVE_VERSION,
     savedAt: Date.now(),
     time: daynight.time,
+    days: daynight.elapsedDays,
     player: { x: f.x, y: f.y + 1.0, z: f.z, hp: playerHp },
     creative,
     inventory: inventory.serialize(),
@@ -472,6 +502,7 @@ async function boot(): Promise<void> {
     dinos: dinos.map((d) => d.serialize()),
     keystones: keystones.serialize(),
     doorOpen,
+    beaconLit,
     }
   }
   setInterval(() => void saveGame(collectSave()), 30_000)
@@ -696,8 +727,10 @@ async function boot(): Promise<void> {
         return true
       },
       /** Teleport beside the nearest dino matching a state. */
-      gotoDino: (state: string) => {
-        const d = nearestDino(Infinity, (x) => x.state === state)
+      /** QA: stand at the nearest dino in `state` (optionally of one species —
+       *  with 1500 wild dinos the nearest idle one is as likely a trike) */
+      gotoDino: (state: string, species?: string) => {
+        const d = nearestDino(Infinity, (x) => x.state === state && (!species || x.species.id === species))
         if (!d) return false
         const px = d.object.position.x
         const pz = d.object.position.z + 2.2
@@ -744,6 +777,9 @@ async function boot(): Promise<void> {
       keystoneSites: () => keystones.sites.map((k) => ({ tag: k.tag, x: k.x, z: k.z, collected: k.collected })),
       /** where the caldera-gate slab stands (gates/QA read the world, not constants) */
       gateSite: () => ({ x: gateSite.x, z: gateSite.z }),
+      beaconSite: () => ({ x: beaconSite.x, z: beaconSite.z, y: beacon.groundY }),
+      beaconLit: () => beaconLit,
+      ravinePath: () => worldMeta!.ravine.path,
       spawn: () => ({ x: SPAWN.x, z: SPAWN.z }),
       flying: () => player.flying,
       poseInfo: () => player.poseInfo(),
@@ -960,6 +996,7 @@ async function boot(): Promise<void> {
     building.updateGhost(held && ITEMS[held].placeable ? (held as PieceKind) : null, held && ITEMS[held].placeable ? updateAim() : null)
 
     keystones.update(dt)
+    beacon.update(dt, cam.camera.position)
     if (doorAnim > 0) {
       doorAnim -= dt
       doorMesh.position.y = Math.max(doorGroundY - 8.5, doorMesh.position.y - dt * 4)
@@ -968,7 +1005,9 @@ async function boot(): Promise<void> {
     const fk = feetPos()
     const nearKey = keystones.sites.find((k) => !k.collected && Math.hypot(k.x - fk.x, k.z - fk.z) < 5)
     const nearGate = !doorOpen && Math.hypot(fk.x - gateSite.x, fk.z - gateSite.z) < 8
+    const nearBeacon = !beaconLit && Math.hypot(fk.x - beaconSite.x, fk.z - beaconSite.z) < 11
     if (riding) hud.prompt('E — dismount')
+    else if (nearBeacon) hud.prompt(keystones.collectedCount >= keystones.total ? 'E — light the beacon' : 'the brazier is cold')
     else if (nearGate) hud.prompt(keystones.collectedCount >= keystones.total ? 'E — set the keystones' : `sealed — ${keystones.total - keystones.collectedCount} keystones missing`)
     else if (nearKey) hud.prompt('E — take the keystone')
     else {

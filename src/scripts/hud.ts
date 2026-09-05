@@ -36,6 +36,7 @@ export class Hud {
       <div id="hud-toast"></div>
       <div id="hud-hotbar"></div>
       <div id="hud-panel" hidden></div>
+      <div id="hud-credits" hidden></div>
       <div id="hud-help">WASD · LMB use · E interact · F eat 🫐 · N wayfinder · TAB inventory · C creative · bushes→🫐</div>
     `
     this.fpsEl = root.querySelector('#hud-fps')!
@@ -92,6 +93,25 @@ export class Hud {
   prompt(text: string | null): void {
     this.promptEl.textContent = text ?? ''
     this.promptEl.style.opacity = text ? '1' : '0'
+  }
+
+  /** The finale card: fades in over the world, any key or click dismisses. */
+  credits(lines: string[]): void {
+    const el = document.getElementById('hud-credits')!
+    el.innerHTML = `<div class="card"><h1>JURASSIC STACK</h1><p class="lede">The beacon is lit.</p>${lines.map((l) => `<p>${l}</p>`).join('')}<p class="hint">the island is yours — any key to keep playing</p></div>`
+    el.hidden = false
+    requestAnimationFrame(() => el.classList.add('show'))
+    const close = () => {
+      el.classList.remove('show')
+      setTimeout(() => { el.hidden = true }, 900)
+      window.removeEventListener('keydown', close)
+      window.removeEventListener('pointerdown', close)
+    }
+    // arm after the fade so the E that lit it can't also dismiss it
+    setTimeout(() => {
+      window.addEventListener('keydown', close)
+      window.addEventListener('pointerdown', close)
+    }, 1600)
   }
 
   togglePanel(): void {
