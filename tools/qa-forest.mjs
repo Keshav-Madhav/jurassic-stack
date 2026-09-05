@@ -39,6 +39,7 @@ for (const [name, x, y, z, yaw, pitch, t, px, pz] of shots) {
   await page.evaluate(([xx, yy, zz, ya, pi, tt, ppx, ppz]) => {
     const g = window.__g
     g.setTime(tt)
+    g.setFog?.(yy > 40 ? 6 : 1) // aerials see through the fog; eye shots keep it
     g.teleport(ppx, ppz)
     // low cameras are eye heights above the ground under them, not absolutes
     const camY = yy < 40 ? g.groundAt(xx, zz) + yy : yy

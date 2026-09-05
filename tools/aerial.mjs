@@ -31,6 +31,7 @@ for (const [name, x, y, z, yaw, pitch, t] of shots) {
   await page.evaluate(([xx, yy, zz, ya, pi, tt]) => {
     const g = window.__g
     g.setTime(tt)
+    g.setFog?.(yy > 40 ? 6 : 1) // aerials see through the fog; eye shots keep it
     // eye-level shots: y is a height above the ground under the camera
     const camY = yy < 40 ? g.groundAt(xx, zz) + yy : yy
     if (yy < 40) g.teleport(xx, zz) // eye shots: ground cover follows the player

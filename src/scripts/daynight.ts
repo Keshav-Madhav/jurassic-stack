@@ -31,7 +31,7 @@ interface Grade {
 const NOON: Grade = {
   exposure: 0.52, // dark, contrasty (user: real-leaf greens, strong shadows)
   fog: new THREE.Color(0x8fb2cf),
-  fogNear: 420, fogFar: 5200, // 4 km island: the far coast is haze, not absent
+  fogNear: 140, fogFar: 1500, // subtle onset, real distance: the volcano is NOT in view from the beach any more — you find it (user)
   hemiSky: new THREE.Color(0x8fb6dc),
   hemiGround: new THREE.Color(0x1d2719),
   hemiIntensity: 0.3, // ARK reference: canopy shadow pools go properly dark
@@ -45,7 +45,7 @@ const NOON: Grade = {
 const GOLDEN: Grade = {
   exposure: 0.6,
   fog: new THREE.Color(0xe8884e),
-  fogNear: 380, fogFar: 4200,
+  fogNear: 130, fogFar: 1300,
   hemiSky: new THREE.Color(0xffa858),
   hemiGround: new THREE.Color(0x2c3a26),
   hemiIntensity: 1.05,
@@ -57,14 +57,16 @@ const GOLDEN: Grade = {
 }
 
 const NIGHT: Grade = {
-  exposure: 0.5,
-  fog: new THREE.Color(0x141c2c),
-  fogNear: 260, fogFar: 2800,
-  hemiSky: new THREE.Color(0x2a3a5a),
-  hemiGround: new THREE.Color(0x141c14),
-  hemiIntensity: 0.4,
-  sun: new THREE.Color(0x9db8e8), // the "sun" light doubles as moonlight
-  sunIntensity: 0.35,
+  // brighter than it was (user: "moonlight, brighter, slightly more
+  // visibility"): a real moonlit night — blue key, lifted fill, readable fog
+  exposure: 0.78,
+  fog: new THREE.Color(0x22304c),
+  fogNear: 120, fogFar: 1250,
+  hemiSky: new THREE.Color(0x44598a),
+  hemiGround: new THREE.Color(0x1c2418),
+  hemiIntensity: 1.0,
+  sun: new THREE.Color(0xb0c8ff), // the "sun" light doubles as moonlight
+  sunIntensity: 1.35,
   rimIntensity: 0,
   turbidity: 4,
   rayleigh: 0.6,
@@ -73,7 +75,7 @@ const NIGHT: Grade = {
 const scratch: Grade = {
   exposure: 1,
   fog: new THREE.Color(),
-  fogNear: 160, fogFar: 2000,
+  fogNear: 90, fogFar: 900,
   hemiSky: new THREE.Color(),
   hemiGround: new THREE.Color(),
   hemiIntensity: 1,
@@ -114,6 +116,11 @@ export class DayNight {
 
   /** Shadow follow-focus (the player/mount), set per frame from the game loop. */
   private focus = new THREE.Vector3()
+  /** for the sky furniture: where the key light comes from, how deep the night is, the key colour */
+  readonly keyDir = new THREE.Vector3()
+  nightness = 0
+  readonly keyColor = new THREE.Color()
+  fogFar = 1500
 
   constructor(
     private renderer: THREE.WebGLRenderer,
@@ -154,6 +161,11 @@ export class DayNight {
   }
 
   /** Keep the shadow frustum centered on the action (snapped to reduce shimmer). */
+  /** QA: stretch the fog (aerial shots need to see the whole island) */
+  fogScale = 1
+  /** the main camera, so its far plane can follow the fog */
+  camera: THREE.PerspectiveCamera | null = null
+
   /** QA: resize the shadow map at runtime */
   setShadowSize(size: number): void {
     const sc = this.sunLight.shadow
@@ -203,8 +215,14 @@ export class DayNight {
     this.renderer.toneMappingExposure = grade.exposure
     const fog = this.scene.fog as THREE.Fog
     fog.color.copy(grade.fog)
-    fog.near = grade.fogNear
-    fog.far = grade.fogFar
+    fog.near = grade.fogNear * this.fogScale
+    fog.far = grade.fogFar * this.fogScale
+    // the camera's far plane sits just past the fog: everything beyond is
+    // fog-coloured anyway, so the far half of the island stops costing draws
+    if (this.camera && Math.abs(this.camera.far - fog.far * 1.08) > 1) {
+      this.camera.far = fog.far * 1.08
+      this.camera.updateProjectionMatrix()
+    }
     this.hemi.color.copy(grade.hemiSky)
     this.hemi.groundColor.copy(grade.hemiGround)
     this.hemi.intensity = grade.hemiIntensity
@@ -213,6 +231,10 @@ export class DayNight {
     this.sunLight.position.copy(this.focus).addScaledVector(this.sunDir, 420)
     this.sunLight.target.position.copy(this.focus)
     this.rimLight.intensity = grade.rimIntensity
+    this.keyDir.copy(this.sunDir)
+    this.keyColor.copy(grade.sun)
+    this.nightness = THREE.MathUtils.clamp((2 - elev) / 12, 0, 1)
+    this.fogFar = fog.far
 
     // sky shader follows the real sun even when the lights have switched to moon
     const u = this.sky.material.uniforms

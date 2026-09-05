@@ -277,6 +277,16 @@ Westwood above Lake Aster, the Lakeshore. Glades at every ruin plus two meadows.
 **Ruins, hand-placed** along the arc gradient: beach statue → coast shrine → the Holm temple → highland
 arch → foothill vault → caldera gate, each site a chosen coordinate validated flat, dry, reachable.
 
+**The volcano is found, not shown (2026-09-05).** Real fog now (subtle onset ~140 m, gone by
+~1.5 km): from the spawn beach you see the meadow, the wood line and haze — the ranges, the Holm's
+redwoods and the volcano reveal themselves as you go inland. This revises the M2 "volcano visible
+from minute one" pillar on purpose: the user asked for fog that hides the far skyline from a fresh
+spawn, and the arc gains a first reveal. The beach statue still points the way.
+
+**Later, deliberately not now (user, 2026-09-05):** terrain **tessellation / displacement** for
+close-range ground detail (rocky lips, ruts, root bulges) — worth doing once the current budget
+has headroom; it competes with everything else for GPU time.
+
 **Performance is part of the story at 4 km** — the map only grows if it stays 60 fps: 32×32 terrain
 chunks with 4 LODs and frustum culling; scatter in 256 m supercells with distance-culled ground cover
 and three tree LOD bands (full / coarse / blob) per cell; nothing beyond the fog paid for at full

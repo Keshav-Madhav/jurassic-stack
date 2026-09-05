@@ -25,6 +25,8 @@ import { loadNavmesh, findPath } from './navmesh'
 import { WaterSystem } from './water'
 import { wildPopulation } from './population'
 import { GrassField } from './grass'
+import { SkyExtras } from './sky-extras'
+import { Ambience } from './ambience'
 
 const SWING_COOLDOWN = 0.45
 const REACH = 3.2
@@ -91,6 +93,13 @@ async function boot(): Promise<void> {
   await scatter.load(renderer)
   const grass = new GrassField()
   scene.add(grass.group)
+  const skyExtras = new SkyExtras()
+  scene.add(skyExtras.group)
+  const ambience = new Ambience()
+  // audio needs a gesture: the first click / key starts the soundscape
+  const startAudio = () => { ambience.start(); window.removeEventListener('pointerdown', startAudio); window.removeEventListener('keydown', startAudio) }
+  window.addEventListener('pointerdown', startAudio)
+  window.addEventListener('keydown', startAudio)
   scene.add(scatter.group)
   if (save) scatter.restore(save.deadNodes as { id: number; respawnAt: number }[])
 
@@ -507,8 +516,10 @@ async function boot(): Promise<void> {
     },
     fps: () => hud.fps,
     /** ms per frame spent in JS (sim+update) vs the render call — tells CPU-bound from GPU-bound */
-    perf: () => ({ update: +perfUpdate.toFixed(2), render: +perfRender.toFixed(2) }),
+    perf: () => ({ update: +perfUpdate.toFixed(2), render: +perfRender.toFixed(2), dinos: +perfSec.dinos.toFixed(2), scatter: +perfSec.scatter.toFixed(2), grass: +perfSec.grass.toFixed(2), terrain: +perfSec.terrain.toFixed(2), physics: +perfSec.physics.toFixed(2) }),
     terrainWorker: () => terrain.workerState(),
+    /** QA: fog distance multiplier (aerials use 6) */
+    setFog: (scale: number) => { daynight.fogScale = scale },
     /** QA: shadow cadence + map size */
     setShadow: (every: number, size?: number) => {
       shadowEvery = Math.max(1, every)
@@ -757,6 +768,10 @@ async function boot(): Promise<void> {
   let perfUpdate = 0
   let perfRender = 0
   let shadowEvery = 1
+  const awake: Dino[] = []
+  let lastVisX = Infinity
+  let lastVisZ = Infinity
+  const perfSec = { dinos: 0, scatter: 0, grass: 0, terrain: 0, physics: 0 }
   // frame-time histogram for the jitter hunt: max / p95 since the last read
   const frameTimes: number[] = []
 
@@ -779,6 +794,7 @@ async function boot(): Promise<void> {
     const focus = riding?.mover ? riding.mover.position : player.mover.position
 
     accumulator += dt
+    const tP0 = performance.now()
     while (accumulator >= FIXED_DT) {
       physics.ensureTerrainAround(focus.x, focus.z)
       if (riding?.mover) {
@@ -820,6 +836,7 @@ async function boot(): Promise<void> {
       physics.step()
       accumulator -= FIXED_DT
     }
+    perfSec.physics = perfSec.physics * 0.95 + (performance.now() - tP0) * 0.05
     const alpha = accumulator / FIXED_DT
 
     // THE JITTER FIX: everything the eye follows — the camera target, the
@@ -838,25 +855,33 @@ async function boot(): Promise<void> {
       p.y -= m.feetOffset
       return p
     }
-    for (const d of dinos) d.update(dt, pFeet, hurtPlayer)
-    // pack aggro: a wild raptor entering aggro pulls packmates in range
+    const tD0 = performance.now()
+    // dormant dinos only check for waking every 8th frame (staggered): 1500
+    // distance tests a frame were a millisecond of nothing happening
     for (const d of dinos) {
-      if (d.state !== 'aggro' || !d.object.visible) continue
-      for (const o of dinos) {
-        if (o === d || o.state === 'tamed' || o.state === 'ko' || !o.object.visible || o.dormant) continue
+      if (d.dormant && ((frameCount + d.index) & 7) !== 0) continue
+      d.update(dt, pFeet, hurtPlayer)
+    }
+    perfSec.dinos = perfSec.dinos * 0.95 + (performance.now() - tD0) * 0.05
+    // the AWAKE set once per frame — the pair loops below are n² and 1500²
+    // with a `continue` per dormant dino was still a million iterations
+    awake.length = 0
+    for (const d of dinos) if (!d.dormant && d.object.visible) awake.push(d)
+    // pack aggro: a wild raptor entering aggro pulls packmates in range
+    for (const d of awake) {
+      if (d.state !== 'aggro') continue
+      for (const o of awake) {
+        if (o === d || o.state === 'tamed' || o.state === 'ko') continue
         if (o.species.id === d.species.id && o.object.position.distanceTo(d.object.position) < d.species.packRange) {
           o.joinPack()
         }
       }
     }
     // dino-dino separation + player-dino body push (soft, gameplay-level)
-    for (let i = 0; i < dinos.length; i++) {
-      const a = dinos[i]
-      if (!a.object.visible || a.dormant) continue
-      for (let j = i + 1; j < dinos.length; j++) {
-        const b = dinos[j]
-        if (b.dormant) continue
-        if (!b.object.visible) continue
+    for (let i = 0; i < awake.length; i++) {
+      const a = awake[i]
+      for (let j = i + 1; j < awake.length; j++) {
+        const b = awake[j]
         const dx = b.object.position.x - a.object.position.x
         const dz = b.object.position.z - a.object.position.z
         const d2 = Math.hypot(dx, dz)
@@ -889,13 +914,30 @@ async function boot(): Promise<void> {
         }
       }
     }
+    let tS = performance.now()
     scatter.ensureCollidersAround(focus.x, focus.z, physics)
-    scatter.updateVisibility(freeCam ? freeCam.x : focus.x, freeCam ? freeCam.z : focus.z)
+    // LOD bands and cover culling re-evaluate when the viewer has moved 3 m
+    // (12K prop groups a frame was 2 ms of the same answer)
+    {
+      const vx = freeCam ? freeCam.x : focus.x, vz = freeCam ? freeCam.z : focus.z
+      if (Math.hypot(vx - lastVisX, vz - lastVisZ) > 3) {
+        lastVisX = vx; lastVisZ = vz
+        scatter.updateVisibility(vx, vz)
+      }
+    }
+    perfSec.scatter = perfSec.scatter * 0.95 + (performance.now() - tS) * 0.05
+    tS = performance.now()
     grass.update(freeCam ? freeCam.x : focus.x, freeCam ? freeCam.z : focus.z)
+    perfSec.grass = perfSec.grass * 0.95 + (performance.now() - tS) * 0.05
     water.update(dt)
+    daynight.camera = cam.camera
     daynight.setFocus(focus.x, focus.z)
     daynight.advance(dt)
+    skyExtras.update(dt, cam.camera, daynight.keyDir, daynight.nightness, daynight.keyColor, daynight.fogFar)
+    ambience.update(dt, daynight.time)
+    tS = performance.now()
     terrain.update(freeCam ? freeCam.x : focus.x, freeCam ? freeCam.z : focus.z)
+    perfSec.terrain = perfSec.terrain * 0.95 + (performance.now() - tS) * 0.05
 
     // camera follows whoever is being driven (or the QA free camera)
     if (freeCam) {

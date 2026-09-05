@@ -409,3 +409,17 @@ Findings and fixes, each measured with the new jitter meter (`__g.frameStats()`,
 - [x] Seven species wired from the intaken roster, clip maps read off each GLB: **Carnotaurus** (the sprinter), **Allosaurus** (the north's second apex), **Terror Bird** (flocks on the plain and dune edges), **Pachycephalosaurus** (skittish headbutter), **Parasaurolophus** (herds on the plain, the first easy ride), **Apatosaurus** (8.5 m sauropod), **Mammoth** (highlands, pairs and threes). Dilophosaurus/Sauropelta/Spinosaurus wait on rigs with real clips
 - [x] Population 200 → 500 by habitat (carnivores by wood and latitude, herbivores by open ground, mammoths above 60 m or north of the pines); a parasaur herd grazes the south plain by spawn. Dormancy keeps it at 60 fps; jitter meter clean at every speed
 - [x] `__g.game.gotoSpecies(id)` for portraits; stone recolour darkened again (boulders read as chalk in the sun). 73/73
+
+### M15 — FOG, LOD BANDS, THE WATER-THROUGH-LEAVES BUG (user list, 2026-09-05)
+- [x] **Fog with a subtle onset** (140 → 1500 m by day, tighter at dusk/night); the camera's far plane follows the fog so nothing beyond it is drawn — a fresh spawn sees meadow, wood line and haze, not the volcano (PLAN.md revised: the volcano is found, not shown). QA tools stretch the fog for aerials (`__g.setFog(6)`)
+- [x] **Water through leaves and bushes** (screenshot 19): the Quaternius pine needles, palm fronds and berry bush ship alphaMode BLEND — no depth write, sorted behind the water's renderOrder — so the sea drew straight over them. Every foliage material is CUTOUT now (alphaTest, depth write)
+- [x] **Three LOD bands** ("trees become billboards too soon"): full model to 240 m, the built kinds' coarse twin (20-tri masses; pines as three cones) to 480 m, impostor cards beyond. The mid band is per-cell instanced (an island-wide slot set submitted 11M zero-scaled triangles a frame — measured, reverted)
+- [x] **Tessellation**: recorded in PLAN.md as a later item (user correction: it would be good, not yet)
+
+### M16 — DENSER GRASS, 1500 DINOS, MOON AND CLOUDS AND SOUND
+- [x] **Grass by ring**: 1.0 m spacing underfoot → 1.7 → 2.6 m out to ~290 m (9×9 64 m tiles), built in the terrain worker (`grass-gen.ts`, matrices transferred back; the main thread only uploads); tiles rebuild when their ring changes; none on the sand
+- [x] **1500 dinos**: population tripled by habitat. Found and fixed the real costs: dormant rigs are DETACHED from the scene (three.js updates world matrices for every Object3D, visible or not — 1500 rigs × ~100 bones was 30 ms a frame); dormant dinos poll for waking every 8th frame; the pair loops (pack aggro, separation) run over the awake set only; scatter LOD/cover re-evaluates when the viewer has moved 3 m
+- [x] **Night**: a real moonlit night (blue key 1.35, lifted fill, exposure 0.78, fog 0x22304c to 1250 m), a **moon disc** riding the night light, a **starry dome** fading in over the black Sky shader
+- [x] **Clouds**: 70 soft cumulus cards at 420–760 m, drifting, wrapping around the viewer, lit by the key light (fog-free so they stay white), moon-blue at night
+- [x] **Ambience** (`ambience.ts`, Web Audio, no files): wind that breathes, birdsong by day, insects at night; starts on the first click/key
+- [x] Jitter meter: 0/0/3/1 hitches; spawn 60 fps with 1500 dinos and the dense carpet. 73/73

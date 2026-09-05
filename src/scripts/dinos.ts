@@ -111,9 +111,11 @@ export class Dino {
         o.receiveShadow = true
       }
     })
-    this.object.add(model)
     this.model = model
-    if (this.dormant) model.visible = false
+    // a dormant rig is DETACHED, not hidden: three.js walks every Object3D
+    // in the scene each frame to update world matrices, visible or not, and
+    // 1500 rigs × ~100 bones was 30 ms of CPU a frame (M15 jitter meter)
+    if (!this.dormant) this.object.add(model)
 
     this.mixer = new THREE.AnimationMixer(model)
     for (const slot of ['idle', 'walk', 'run', 'attack', 'ko'] as const) {
@@ -234,15 +236,16 @@ export class Dino {
     // aggroed stay live; hysteresis keeps the edge from flickering.
     const wildIdle = !this.ridden && (this.state === 'idle' || this.state === 'wander' || this.state === 'flee')
     if (this.dormant) {
+      // (the main loop only calls a dormant dino every 8th frame)
       if (this.distToPlayer < DORMANT_WAKE || !wildIdle) {
         this.dormant = false
-        if (this.model) this.model.visible = true
+        if (this.model && !this.model.parent) this.object.add(this.model)
       } else {
         return
       }
     } else if (wildIdle && this.distToPlayer > DORMANT_SLEEP) {
       this.dormant = true
-      if (this.model) this.model.visible = false
+      if (this.model) this.object.remove(this.model)
       return
     }
     // skinned casters are expensive in the shadow pass — only nearby dinos cast

@@ -40,6 +40,7 @@ class TerrainBuilder {
   private ready = false
   private nextId = 1
   private waiting = new Map<number, (a: ChunkArrays) => void>()
+  private grassWaiting = new Map<number, (g: { matrices: Float32Array; colors: Float32Array; count: number }) => void>()
 
   constructor() {
     try {
@@ -51,6 +52,11 @@ class TerrainBuilder {
           const cb = this.waiting.get(m.id)
           this.waiting.delete(m.id)
           cb?.({ pos: m.pos, nor: m.nor, col: m.col, spl: m.spl, indices: m.indices })
+        }
+        if (m.type === 'grassBuilt') {
+          const cb = this.grassWaiting.get(m.id)
+          this.grassWaiting.delete(m.id)
+          cb?.({ matrices: m.matrices, colors: m.colors, count: m.count })
         }
       }
       this.worker.onerror = () => { this.worker = null; this.ready = false }
@@ -70,13 +76,24 @@ class TerrainBuilder {
     this.waiting.set(id, cb)
     this.worker!.postMessage({ type: 'build', id, originX, originZ, quads, size })
   }
+
+  /** a grass tile's matrices + colours, built off-thread */
+  requestGrass(tx: number, tz: number, spacing: number, cb: (g: { matrices: Float32Array; colors: Float32Array; count: number }) => void): void {
+    const id = this.nextId++
+    this.grassWaiting.set(id, cb)
+    this.worker!.postMessage({ type: 'grass', id, tx, tz, spacing })
+  }
+  get grassInFlight(): number { return this.grassWaiting.size }
 }
+
+/** the one builder, shared with grass.ts */
+export let sharedBuilder: TerrainBuilder | null = null
 
 export class Terrain {
   readonly group = new THREE.Group()
   private chunks: Chunk[] = []
   private supers: { sx: number; sz: number; mesh: THREE.Mesh; geo: THREE.BufferGeometry | null; active: boolean }[] = []
-  private builder = new TerrainBuilder()
+  private builder = (sharedBuilder = new TerrainBuilder())
   private material: THREE.MeshStandardMaterial
 
   constructor() {

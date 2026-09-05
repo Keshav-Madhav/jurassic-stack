@@ -22,7 +22,7 @@ export class ThirdPersonCamera {
   private first = true
 
   constructor(aspect: number) {
-    this.camera = new THREE.PerspectiveCamera(55, aspect, 0.6, 6000) // the 4 km island fits in one view; near 0.6 keeps depth precision ~1 m at 3 km (the 0.1 near z-fought the sea through far beaches)
+    this.camera = new THREE.PerspectiveCamera(55, aspect, 0.6, 6000) // far is set each frame from the fog (daynight) — nothing past the fog is drawn
   }
 
   /** Skip the follow smoothing on the next update (teleports). */

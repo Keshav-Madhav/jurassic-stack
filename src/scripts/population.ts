@@ -1,8 +1,8 @@
-// The wild population: ~200 dinos on the island at all times, placed by
+// The wild population: ~1500 dinos on the island at all times, placed by
 // habitat (packs in the woods, herds on the open ground, apexes in the
 // north), deterministic per seed. The Dino class keeps them cheap — beyond
 // ~650 m a wild dino goes dormant (no AI, no animation, no draw) and wakes
-// as the player comes back into range — so 200 live on the map while a few
+// as the player comes back into range — so 1500 live on the map while a few
 // dozen are ever simulated.
 import { heightAt, normalAt, forestMaskAt, biomeAt, shoreDist, BIOME, SPAWN, VOLCANO, worldMeta } from './heightmap'
 import * as THREE from 'three'
@@ -55,25 +55,25 @@ interface Habitat {
 
 const HABITATS: Habitat[] = [
   // carnivores
-  { species: 'raptor', groups: 28, size: [3, 4], minSpawnDist: 220, likes: (_x, _z, f, b) => f > -0.5 && b !== BIOME.DESERT },
-  { species: 'carno', groups: 14, size: [1, 2], minSpawnDist: 500, likes: (_x, _z, f, b) => f < 0.4 && b !== BIOME.SWAMP },
-  { species: 'allo', groups: 12, size: [1, 1], minSpawnDist: 800, likes: (_x, z, f) => z < -100 && f < 0.5 },
-  { species: 'trex', groups: 16, size: [1, 1], minSpawnDist: 900, likes: (_x, z, f) => z < -200 && f < 0.3 },
-  { species: 'terrorbird', groups: 12, size: [3, 4], minSpawnDist: 380, likes: (_x, _z, f, b) => f < -0.2 && b !== BIOME.SWAMP },
+  { species: 'raptor', groups: 84, size: [3, 4], minSpawnDist: 220, likes: (_x, _z, f, b) => f > -0.5 && b !== BIOME.DESERT },
+  { species: 'carno', groups: 40, size: [1, 2], minSpawnDist: 500, likes: (_x, _z, f, b) => f < 0.4 && b !== BIOME.SWAMP },
+  { species: 'allo', groups: 34, size: [1, 1], minSpawnDist: 800, likes: (_x, z, f) => z < -100 && f < 0.5 },
+  { species: 'trex', groups: 40, size: [1, 1], minSpawnDist: 900, likes: (_x, z, f) => z < -200 && f < 0.3 },
+  { species: 'terrorbird', groups: 36, size: [3, 4], minSpawnDist: 380, likes: (_x, _z, f, b) => f < -0.2 && b !== BIOME.SWAMP },
   // herbivores
-  { species: 'trike', groups: 16, size: [3, 5], minSpawnDist: 160, likes: (_x, _z, f, b) => f < 0.2 && b !== BIOME.SWAMP },
-  { species: 'stego', groups: 22, size: [2, 2], minSpawnDist: 160, likes: (_x, _z, f) => f < 0.5 },
-  { species: 'pachy', groups: 18, size: [2, 4], minSpawnDist: 200, likes: (_x, _z, f, b) => f < 0.6 && b !== BIOME.DESERT },
-  { species: 'parasaur', groups: 14, size: [4, 6], minSpawnDist: 150, likes: (_x, _z, f, b) => f < 0 && b !== BIOME.DESERT && b !== BIOME.SWAMP },
-  { species: 'apato', groups: 10, size: [1, 2], minSpawnDist: 400, likes: (_x, _z, f, b) => f < -0.2 && b !== BIOME.DESERT },
-  { species: 'mammoth', groups: 10, size: [2, 3], minSpawnDist: 700, likes: (x, z, f) => (z < -400 || heightAt(x, z) > 60) && f < 0.6 },
+  { species: 'trike', groups: 48, size: [3, 5], minSpawnDist: 160, likes: (_x, _z, f, b) => f < 0.2 && b !== BIOME.SWAMP },
+  { species: 'stego', groups: 60, size: [2, 2], minSpawnDist: 160, likes: (_x, _z, f) => f < 0.5 },
+  { species: 'pachy', groups: 50, size: [2, 4], minSpawnDist: 200, likes: (_x, _z, f, b) => f < 0.6 && b !== BIOME.DESERT },
+  { species: 'parasaur', groups: 40, size: [4, 6], minSpawnDist: 150, likes: (_x, _z, f, b) => f < 0 && b !== BIOME.DESERT && b !== BIOME.SWAMP },
+  { species: 'apato', groups: 28, size: [1, 2], minSpawnDist: 400, likes: (_x, _z, f, b) => f < -0.2 && b !== BIOME.DESERT },
+  { species: 'mammoth', groups: 28, size: [2, 3], minSpawnDist: 700, likes: (x, z, f) => (z < -400 || heightAt(x, z) > 60) && f < 0.6 },
 ]
 
 /**
  * Lay out the wild roster. `extra` are hand-placed spawns added first (the
  * spawn-beach raptor pack the taming loop relies on, the herd on the plain).
  */
-export function wildPopulation(seed = 20260904, target = 500): WildSpawn[] {
+export function wildPopulation(seed = 20260904, target = 1500): WildSpawn[] {
   const rand = mulberry32(seed)
   const out: WildSpawn[] = []
   // the spawn-beach raptors: three, but spread out — a tight pack all
