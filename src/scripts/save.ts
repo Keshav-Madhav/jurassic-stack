@@ -24,6 +24,7 @@ export interface SaveFile {
   keystones?: string[]
   doorOpen?: boolean
   beaconLit?: boolean
+  alphaSlain?: boolean
   /** island days lived (fractional) */
   days?: number
   inventory: unknown

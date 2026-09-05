@@ -62,14 +62,15 @@ const GOLDEN: Grade = {
 const NIGHT: Grade = {
   // brighter than it was (user: "moonlight, brighter, slightly more
   // visibility"): a real moonlit night — blue key, lifted fill, readable fog
-  exposure: 0.78,
-  fog: new THREE.Color(0x22304c),
+  // (a notch darker again — user screenshot 27: "a little darker, not too dark")
+  exposure: 0.66,
+  fog: new THREE.Color(0x1c2842),
   fogNear: 120, fogFar: 1250,
-  hemiSky: new THREE.Color(0x44598a),
-  hemiGround: new THREE.Color(0x1c2418),
-  hemiIntensity: 1.0,
+  hemiSky: new THREE.Color(0x3d5080),
+  hemiGround: new THREE.Color(0x181f15),
+  hemiIntensity: 0.85,
   sun: new THREE.Color(0xb0c8ff), // the "sun" light doubles as moonlight
-  sunIntensity: 1.35,
+  sunIntensity: 1.15,
   rimIntensity: 0,
   turbidity: 4,
   rayleigh: 0.6,
@@ -260,7 +261,19 @@ export class DayNight {
     u.rayleigh.value = grade.rayleigh
     u.mieCoefficient.value = 0.004
     u.mieDirectionalG.value = 0.85
-    const realE = THREE.MathUtils.degToRad(elev)
+    // the Sky shader goes black within a degree or two of the sun setting, while
+    // the light grade takes 12° to reach night — at 18:07 the sky was starry over
+    // an orange, fully-lit island (user screenshot 26). The sky's sun now sinks
+    // WITH the grade: it reaches −6° (dark) exactly when nightness reaches 1
+    // The shader's whole sky scales with its sun-intensity curve, which is
+    // near-black by 0° — so the sky's sun rides above the real one through the
+    // evening: +3.5° at sunset, then it sinks with nightness so that it is
+    // still a lit dusk (3°) when the star dome starts fading in (nightness
+    // 0.55) and only reaches the horizon as the dome covers it
+    const skyElev = elev >= 2
+      ? elev + 3.5 * (1 - THREE.MathUtils.smoothstep(elev, 2, 30))
+      : THREE.MathUtils.lerp(5.5, -1.5, THREE.MathUtils.smoothstep(this.nightness, 0.35, 1))
+    const realE = THREE.MathUtils.degToRad(skyElev)
     u.sunPosition.value.set(
       Math.cos(realE) * Math.sin(azimuth),
       Math.sin(realE),

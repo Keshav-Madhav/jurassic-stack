@@ -455,13 +455,21 @@ function ravineFloorAt(seg, t) {
   const along = (RAVINE_CUM[seg] + (RAVINE_CUM[Math.min(seg + 1, RAVINE_CUM.length - 1)] - RAVINE_CUM[seg]) * t) / RAVINE_CUM[RAVINE_CUM.length - 1]
   return lerp(RAVINE.floorStart, RAVINE.floorEnd, smoothstep(0, 1, along) * 0.35 + along * 0.65)
 }
+function ravineAlong(seg, t) {
+  return (RAVINE_CUM[seg] + (RAVINE_CUM[Math.min(seg + 1, RAVINE_CUM.length - 1)] - RAVINE_CUM[seg]) * t) / RAVINE_CUM[RAVINE_CUM.length - 1]
+}
+/** the slot's half-width: a 6.5 m THROAT for the first ~30 m so the rock meets
+ *  the gate arch's piers (13 m wide), then the full width */
+function ravineHalfWidth(along) {
+  return lerp(RAVINE.throatHalfWidth ?? RAVINE.halfWidth, RAVINE.halfWidth, smoothstep(0.075, 0.14, along))
+}
 function carveRavine(assert) {
-  const hw = RAVINE.halfWidth
   for (let iz = 0; iz < SIDE; iz++) {
     for (let ix = 0; ix < SIDE; ix++) {
       const x = worldX(ix), z = worldZ(iz)
       const { d, seg, t } = distToPath(x, z, RAVINE.path)
       if (d > 60) continue
+      const hw = ravineHalfWidth(ravineAlong(seg, t))
       const floor = ravineFloorAt(seg, t)
       const i0 = idx(ix, iz)
       // flat slot floor, then a steep wall up to wherever the mountain already is

@@ -105,6 +105,48 @@ export class Ambience {
     o.stop(now + pulses / 28 + 0.05)
   }
 
+  /** The keystone chime: a rising bell arpeggio (each stone found starts one
+   *  step higher up a pentatonic; the one that completes the set adds a fifth
+   *  note) with a soft shimmer under it. */
+  chime(count: number, needed: number): void {
+    if (!this.ctx || !this.master) return
+    const ctx = this.ctx
+    const now = ctx.currentTime
+    const scale = [0, 2, 4, 7, 9, 12, 14, 16, 19, 21, 24, 26]
+    const root = 523.25 * Math.pow(2, scale[Math.max(0, Math.min(count - 1, scale.length - 1))] / 12)
+    const notes = count >= needed ? [0, 4, 7, 12, 16] : [0, 4, 7, 12]
+    notes.forEach((semi, i) => {
+      const t0 = now + i * 0.11
+      for (const [mult, g0] of [[1, 0.13], [2, 0.05], [3, 0.02]] as const) {
+        const o = ctx.createOscillator()
+        o.type = 'sine'
+        o.frequency.value = root * Math.pow(2, semi / 12) * mult
+        const g = ctx.createGain()
+        g.gain.setValueAtTime(0, t0)
+        g.gain.linearRampToValueAtTime(g0, t0 + 0.012)
+        g.gain.exponentialRampToValueAtTime(0.0004, t0 + 1.6 / mult)
+        o.connect(g).connect(this.master!)
+        o.start(t0)
+        o.stop(t0 + 1.7)
+      }
+    })
+    // the shimmer: a high-passed noise wash swelling under the bells
+    const buf = ctx.createBuffer(1, Math.floor(ctx.sampleRate * 1.2), ctx.sampleRate)
+    const d = buf.getChannelData(0)
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * 0.5
+    const src = ctx.createBufferSource()
+    src.buffer = buf
+    const hp = ctx.createBiquadFilter()
+    hp.type = 'highpass'
+    hp.frequency.value = 5000
+    const sg = ctx.createGain()
+    sg.gain.setValueAtTime(0, now)
+    sg.gain.linearRampToValueAtTime(0.05, now + 0.4)
+    sg.gain.exponentialRampToValueAtTime(0.0005, now + 1.2)
+    src.connect(hp).connect(sg).connect(this.master)
+    src.start(now)
+  }
+
   /** The beacon's swell: a slow major chord that blooms and fades over ~7 s. */
   swell(): void {
     if (!this.ctx || !this.master) return

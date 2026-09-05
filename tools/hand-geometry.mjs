@@ -156,6 +156,7 @@ export const SHELVES = [
 // along the traced path (switchbacks keep it walkable), walls are the cone.
 export const RAVINE = {
   halfWidth: 8,
+  throatHalfWidth: 6.5, // the mouth, where the gate arch (13 m across) stands between the rock walls
   wallSlope: 3.5, // rise per metre out from the floor's edge (74°) — 2.4 (67°) left a 40° ramp beside the door where the cap cut the wall shelf (M19)
   floorStart: 71,
   floorEnd: 175,
@@ -461,21 +462,23 @@ export const RUINS = [
   // THE REST OF THE LOST CITY — minor ruins across the 4 km (layouts by kind):
   // a broken ring on the plain, a watch over the estuary, an obelisk in the
   // dunes, shrines by the lake, arches in the pines, columns in the swamp…
-  { tag: 'plain-circle', x: -250, z: 1000, layout: 'circle' },
+  // Seven of them hold keystones too (M20: twelve in all, the gate wants
+  // eight — every region has one, and no single lost ruin can block the arc)
+  { tag: 'plain-circle', x: -250, z: 1000, layout: 'circle', keystone: true },
   { tag: 'south-mound-columns', x: 550, z: 938, layout: 'columns' },
-  { tag: 'estuary-watch', x: 850, z: 1240, layout: 'watch' },
+  { tag: 'estuary-watch', x: 850, z: 1240, layout: 'watch', keystone: true },
   { tag: 'spit-columns', x: 1472, z: 1372, layout: 'columns' },
   { tag: 'coast-statue', x: 1498, z: 1034, layout: 'statue' },
-  { tag: 'dune-obelisk', x: -950, z: 1150, layout: 'obelisk' },
+  { tag: 'dune-obelisk', x: -950, z: 1150, layout: 'obelisk', keystone: true },
   { tag: 'dune-shrine', x: -700, z: 1280, layout: 'shrine' },
-  { tag: 'aster-shrine', x: -814, z: 44, layout: 'shrine' }, // the lake's north-east bay
-  { tag: 'ring-west-watch', x: -620, z: 420, layout: 'watch' },
+  { tag: 'aster-shrine', x: -814, z: 44, layout: 'shrine', keystone: true }, // the lake's north-east bay
+  { tag: 'ring-west-watch', x: -620, z: 420, layout: 'watch', keystone: true },
   { tag: 'holm-north-shrine', x: -60, z: 110, layout: 'shrine' },
   { tag: 'swamp-columns', x: 884, z: 720, layout: 'columns' },
-  { tag: 'foothill-circle', x: 1084, z: 86, layout: 'circle' }, // up on the east foothills
+  { tag: 'foothill-circle', x: 1084, z: 86, layout: 'circle', keystone: true }, // up on the east foothills
   { tag: 'pine-arch-west', x: -500, z: -520, layout: 'arch' },
   { tag: 'pine-arch-east', x: 360, z: -620, layout: 'arch' },
-  { tag: 'horns-watch', x: -916, z: -1048, layout: 'watch' },
+  { tag: 'horns-watch', x: -916, z: -1048, layout: 'watch', keystone: true },
   { tag: 'wellspring-columns', x: 1020, z: -1190, layout: 'columns' }, // above the gorge, by the pool
 ]
 

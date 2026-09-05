@@ -16,7 +16,7 @@ await page.waitForTimeout(1500)
 const g = (expr) => page.evaluate(expr)
 
 const sites = await g('window.__g.game.keystoneSites()')
-check(sites.length === 5, `5 keystone sites (${sites.map((s) => s.tag).join(', ')})`)
+check(sites.length === 12, `12 keystone sites (${sites.map((s) => s.tag).join(', ')})`)
 check((await g('window.__g.game.keystoneCount()')) === 0, 'none collected on fresh save')
 
 // collect the beach one
@@ -50,7 +50,7 @@ await page.waitForTimeout(400)
 await g('window.__g.game.interact()')
 check(!(await g('window.__g.game.doorOpen()')), 'door refuses with missing keystones')
 await g('window.__g.game.grantAllKeystones()')
-check((await g('window.__g.game.keystoneCount()')) === 5, 'all keystones granted (debug)')
+check((await g('window.__g.game.keystoneCount()')) === 12, 'all keystones granted (debug)')
 await g('window.__g.game.interact()')
 await page.waitForTimeout(300)
 check(await g('window.__g.game.doorOpen()'), 'door opens with all five')

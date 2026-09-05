@@ -110,9 +110,12 @@ for (let i = 0; i < 14; i++) {
 check(await g('window.__g.game.dinoStates().some(d => d.state === "tamed")'), 'raptor tamed')
 
 // ---------- saddle + ride ----------
-await g('window.__g.game.gotoDino("tamed")')
-await g('window.__g.game.interact()') // saddle
-await page.waitForTimeout(200)
+for (let i = 0; i < 3; i++) { // (a follow-step can carry the tame out of reach between goto and interact)
+  await page.evaluate((i) => window.__g.game.gotoDinoIndex(i), ourRaptor)
+  await g('window.__g.game.interact()') // saddle
+  await page.waitForTimeout(250)
+  if (await g('window.__g.game.dinoStates().some(d => d.saddled)')) break
+}
 check(await g('window.__g.game.dinoStates().some(d => d.saddled)'), 'raptor saddled')
 await g('window.__g.game.interact()') // mount
 await page.waitForTimeout(200)

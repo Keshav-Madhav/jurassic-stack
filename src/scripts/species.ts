@@ -35,6 +35,8 @@ export interface SpeciesDef {
   diet: 'carnivore' | 'herbivore'
   /** who fights back: skittish flee when hit, defensive charge the attacker, aggressive attack on sight */
   temperament: 'skittish' | 'defensive' | 'aggressive'
+  /** the island's one scripted monster: guards its post, hunts nothing, fears nothing, tinted */
+  alpha?: boolean
   /** regex per animation slot, matched against clip names */
   clips: { idle: RegExp; walk: RegExp; run: RegExp; attack: RegExp; ko: RegExp }
   /** optional flavor one-shots played randomly while idle */
@@ -164,6 +166,41 @@ export const SPECIES: Record<string, SpeciesDef> = {
       run: /^run$/i,
       attack: /^bite$/i,
       ko: /^roar$/i, // no KO clip: collapse-roar, then the pose holds
+    },
+    flavorClips: [/^roar$/i],
+  },
+  // THE GATEKEEPER (PLAN beat 5, built M20): an oversized alpha rex that
+  // stands on the causeway before the caldera door — the arc's boss-shaped
+  // fact. Not a lock (the keystones are); a fight you bring your tames to, or
+  // a run you make on a fast mount. Stays dead once killed (saved).
+  alpharex: {
+    id: 'alpharex',
+    name: 'Alpha Rex · the Gatekeeper',
+    model: 'models/dinos/TRex.glb',
+    height: 6.2,
+    walkSpeed: 2.6,
+    runSpeed: 10,
+    turnRate: 1.5,
+    hp: 4200,
+    torporMax: 999999, // cannot be knocked out
+    torporDrain: 50,
+    tameFood: 'berry',
+    tamePerFeed: 0,
+    temperament: 'aggressive',
+    diet: 'carnivore',
+    alpha: true,
+    aggroRange: 55,
+    packRange: 0,
+    attackDamage: 140,
+    attackRange: 5.6,
+    rideable: false,
+    seat: { x: 0, y: 2.7, z: -0.5 },
+    clips: {
+      idle: /^idle$/i,
+      walk: /^run$/i,
+      run: /^run$/i,
+      attack: /^bite$/i,
+      ko: /^roar$/i,
     },
     flavorClips: [/^roar$/i],
   },

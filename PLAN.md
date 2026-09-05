@@ -340,7 +340,8 @@ told through geography, ruins, and what you can't survive yet (v1 design, playte
    crater bench; E at the brazier with all five keystones lights it — fire, embers, a light the crater
    reads by, a swell in the ambience — and the credits card fades in over the world with the tally:
    keystones, tames, pieces built, island days lived. Any key dismisses; `beaconLit` is saved. The alpha
-   at the door is still to come.)*
+   at the door is still to come.)* *(M20: the Gatekeeper stands — an alpha rex on the causeway, slain
+   once and for all when it falls. Twelve keystones now, eight open the door.)*
 
 **The Wayfinder:** a compass relic on the first beach that points to the next arc beat. Carry it =
 guided playthrough; leave it in a chest = pure sandbox. One item replaces the tutorial/quest system.

@@ -907,7 +907,7 @@
       "tag": "caldera-gate",
       "x": 0,
       "z": -876,
-      "y": 72.1,
+      "y": 71.9,
       "keystone": false,
       "layout": null
     },
@@ -924,7 +924,7 @@
       "x": -250,
       "z": 1000,
       "y": 13.6,
-      "keystone": false,
+      "keystone": true,
       "layout": "circle"
     },
     {
@@ -940,7 +940,7 @@
       "x": 850,
       "z": 1240,
       "y": 6.6,
-      "keystone": false,
+      "keystone": true,
       "layout": "watch"
     },
     {
@@ -964,7 +964,7 @@
       "x": -950,
       "z": 1150,
       "y": 7.6,
-      "keystone": false,
+      "keystone": true,
       "layout": "obelisk"
     },
     {
@@ -980,7 +980,7 @@
       "x": -814,
       "z": 44,
       "y": 50.6,
-      "keystone": false,
+      "keystone": true,
       "layout": "shrine"
     },
     {
@@ -988,7 +988,7 @@
       "x": -620,
       "z": 420,
       "y": 32.1,
-      "keystone": false,
+      "keystone": true,
       "layout": "watch"
     },
     {
@@ -1012,7 +1012,7 @@
       "x": 1084,
       "z": 86,
       "y": 92.5,
-      "keystone": false,
+      "keystone": true,
       "layout": "circle"
     },
     {
@@ -1036,7 +1036,7 @@
       "x": -916,
       "z": -1048,
       "y": 61.5,
-      "keystone": false,
+      "keystone": true,
       "layout": "watch"
     },
     {
@@ -1094,7 +1094,8 @@
       "tag": "plain-circle",
       "x": -250,
       "z": 1000,
-      "layout": "circle"
+      "layout": "circle",
+      "keystone": true
     },
     {
       "tag": "south-mound-columns",
@@ -1106,7 +1107,8 @@
       "tag": "estuary-watch",
       "x": 850,
       "z": 1240,
-      "layout": "watch"
+      "layout": "watch",
+      "keystone": true
     },
     {
       "tag": "spit-columns",
@@ -1124,7 +1126,8 @@
       "tag": "dune-obelisk",
       "x": -950,
       "z": 1150,
-      "layout": "obelisk"
+      "layout": "obelisk",
+      "keystone": true
     },
     {
       "tag": "dune-shrine",
@@ -1136,13 +1139,15 @@
       "tag": "aster-shrine",
       "x": -814,
       "z": 44,
-      "layout": "shrine"
+      "layout": "shrine",
+      "keystone": true
     },
     {
       "tag": "ring-west-watch",
       "x": -620,
       "z": 420,
-      "layout": "watch"
+      "layout": "watch",
+      "keystone": true
     },
     {
       "tag": "holm-north-shrine",
@@ -1160,7 +1165,8 @@
       "tag": "foothill-circle",
       "x": 1084,
       "z": 86,
-      "layout": "circle"
+      "layout": "circle",
+      "keystone": true
     },
     {
       "tag": "pine-arch-west",
@@ -1178,7 +1184,8 @@
       "tag": "horns-watch",
       "x": -916,
       "z": -1048,
-      "layout": "watch"
+      "layout": "watch",
+      "keystone": true
     },
     {
       "tag": "wellspring-columns",
@@ -2227,6 +2234,7 @@
   ],
   "ravine": {
     "halfWidth": 8,
+    "throatHalfWidth": 6.5,
     "wallSlope": 3.5,
     "floorStart": 71,
     "floorEnd": 175,
@@ -3747,5 +3755,5 @@
       ]
     ]
   ],
-  "bakedAt": "2026-09-05T13:16:39.284Z"
+  "bakedAt": "2026-09-05T15:27:58.911Z"
 }

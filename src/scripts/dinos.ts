@@ -156,6 +156,19 @@ export class Dino {
             mm.needsUpdate = true
           }
         }
+        // the alpha wears its own skin: darker, ember-lit — its materials are
+        // CLONED (the GLB's are shared by every rig of the species)
+        if (this.species.alpha) {
+          const mats = Array.isArray(o.material) ? o.material : [o.material]
+          const tinted = mats.map((m) => {
+            const c = (m as THREE.MeshStandardMaterial).clone()
+            c.color.multiplyScalar(0.55)
+            c.emissive = new THREE.Color(0x6a0c08)
+            c.emissiveIntensity = 0.45
+            return c
+          })
+          o.material = Array.isArray(o.material) ? tinted : tinted[0]
+        }
         // culled by a bounding sphere computed from the SKINNED pose after
         // calibration (below) — three's default used the bind-space sphere,
         // which for rigs with scale tracks on the root sits nowhere near the
@@ -525,7 +538,7 @@ export class Dino {
         const tgt = foe && !foeGone ? foe.object.position : playerPos
         const d = pos.distanceTo(tgt)
         const reach = this.species.attackRange + (foe ? foe.species.height * 0.45 : 0)
-        const giveUp = this.state === 'hunt' ? 110 : 45
+        const giveUp = this.state === 'hunt' ? 110 : this.species.alpha ? 120 : 45
         if (foe && foe.state === 'dead' && this.species.diet === 'carnivore' && foe.species.diet === 'herbivore' && d < reach + 3) {
           // the kill: eat
           this.state = 'feed'
@@ -647,7 +660,7 @@ export class Dino {
    */
   private think(senses: Senses, playerPos: THREE.Vector3): void {
     if (this.state !== 'idle' && this.state !== 'wander') return
-    if (this.ridden) return
+    if (this.ridden || this.species.alpha) return // the Gatekeeper guards; it hunts nothing
     const pos = this.object.position
     const sp = this.species
     if (sp.diet === 'carnivore') {
@@ -854,7 +867,7 @@ export class Dino {
   private pickWanderTarget(): void {
     for (let tries = 0; tries < 12; tries++) {
       const a = Math.random() * Math.PI * 2
-      const r = 8 + Math.random() * 45
+      const r = this.species.alpha ? 4 + Math.random() * 14 : 8 + Math.random() * 45
       let x = this.home.x + Math.sin(a) * r
       let z = this.home.z + Math.cos(a) * r
       // herbivores drift with their herd: half-way toward the herd's centre

@@ -157,7 +157,7 @@ export class SkyExtras {
     this.dome.position.copy(camPos)
     this.dome.scale.setScalar(fogFar * 1.04)
     this.dome.rotation.y = this.t * 0.002 // the stars wheel, barely
-    this.domeMat.opacity = THREE.MathUtils.clamp((nightness - 0.35) * 1.8, 0, 1)
+    this.domeMat.opacity = THREE.MathUtils.clamp((nightness - 0.55) * 2.4, 0, 1) // stars once the sky has actually darkened
 
     // clouds: drift with the wind, wrap around the camera so the field is endless
     const wind = this.t * 6
@@ -185,7 +185,11 @@ export class SkyExtras {
     this.uprights.instanceMatrix.needsUpdate = true
     // lit by the key light by day, moon-blue and dim at night (the shading is
     // in the upright texture; MeshBasic under the filmic exposure wants ~1.4×)
-    const tint = this.cloudMat.color.copy(sunTint).lerp(new THREE.Color(0xffffff), 0.75).multiplyScalar(THREE.MathUtils.lerp(1.9, 0.5, nightness))
+    // clouds dim with the sky (they hung white over a black sky at dusk)
+    // — they go dusky-pink with the key, then dim toward the moon-lit grey, on
+    // the same curve the sky's sun sinks by
+    const dusk = THREE.MathUtils.smoothstep(nightness, 0.2, 1)
+    const tint = this.cloudMat.color.copy(sunTint).lerp(new THREE.Color(0xffffff), THREE.MathUtils.lerp(0.75, 0.45, THREE.MathUtils.smoothstep(nightness, 0, 0.5) * (1 - dusk))).multiplyScalar(THREE.MathUtils.lerp(1.9, 0.28, dusk))
     this.uprightMat.color.copy(tint)
     // the flat card is the shape from the air; from underneath it only blurs
     // the heap, so it thins out as the viewer drops below the cloud deck

@@ -57,6 +57,10 @@ Vercel. **No React, no framework.**
   batch per 256 m cell. Anything new with a material or texture: it must exist in the scene (even
   hidden) before the load-time warm-up in `main.ts`, or hook `Dino.onFirstRig`-style — a first-sight
   compile is a 100–200 ms stall. Never calibrate or measure a rig that isn't attached to the scene.
+- **Point lights are a fill-rate budget** (M20): three.js evaluates every point light in every
+  fragment of every lit material — no culling by distance. Going 5 → 12 keystone halos cost 30
+  hitches a fly run. Share one light and move it (keystones), pool a handful (campfires), and never
+  hide a light with `visible = false` (the light count changes → every shader recompiles).
 - **Hand shelves and cuts are re-laid after erosion.** Anything the player must walk (the Ravine
   floor, the crater bench, the gate apron) is asserted again in the `reassert` pass — droplets and
   talus turn a designed ramp into steps the navmesh won't climb.

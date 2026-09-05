@@ -95,6 +95,14 @@ export class Hud {
     this.promptEl.style.opacity = text ? '1' : '0'
   }
 
+  /** a cool-gold flash at the screen's edges — the keystone pickup */
+  glow(): void {
+    const v = document.getElementById('hud-vignette')
+    if (!v) return
+    v.classList.add('glow')
+    setTimeout(() => v.classList.remove('glow'), 900)
+  }
+
   /** The finale card: fades in over the world, any key or click dismisses. */
   credits(lines: string[]): void {
     const el = document.getElementById('hud-credits')!

@@ -121,6 +121,10 @@ async function boot(): Promise<void> {
   scene.add(keystones.group)
   keystones.group.name = 'keystones'
   if (save?.keystones) keystones.restore(save.keystones as string[])
+  keystones.onCollect = () => {
+    ambience.chime(keystones.collectedCount, keystones.needed)
+    hud.glow()
+  }
 
   // the caldera door: a stone slab sealing the gate arch until all five
   // keystones are set (the arc's lock)
@@ -133,24 +137,41 @@ async function boot(): Promise<void> {
   // sliver between slab and wall.
   const doorZ = gateSite.z - 36
   const doorGroundY = heightAt(gateSite.x, doorZ)
+  // the slab sits INSIDE the arch's 13 m span (11 × 13.5, a metre behind the
+  // arch face) in a dark bronze-wood — the 18 m grey block that stuck out past
+  // the arch read as a wall bolted onto the mountain (user screenshot 25); the
+  // rock itself now meets the arch's piers (the Ravine's 6.5 m throat)
   const doorMesh = new THREE.Mesh(
-    new THREE.BoxGeometry(18, 17, 1.6),
-    new THREE.MeshStandardMaterial({ color: 0x3c3a38, roughness: 0.95 }),
+    new THREE.BoxGeometry(11, 13.5, 1.4),
+    new THREE.MeshStandardMaterial({ color: 0x3a2a1c, roughness: 0.82, metalness: 0.18 }),
   )
-  doorMesh.position.set(gateSite.x, doorGroundY + 8.0, doorZ)
+  doorMesh.position.set(gateSite.x, doorGroundY + 6.4, doorZ - 1.0)
+  // bronze studs and a centre seam so it reads as a door, not a plank
+  {
+    const stud = new THREE.MeshStandardMaterial({ color: 0x8a6a34, roughness: 0.45, metalness: 0.7 })
+    for (const [sx, sy] of [[-3.6, 3.6], [3.6, 3.6], [-3.6, -3.4], [3.6, -3.4], [-3.6, 0.1], [3.6, 0.1]]) {
+      const b = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.3), stud)
+      b.position.set(sx, sy, -0.8)
+      doorMesh.add(b)
+    }
+    const seam = new THREE.Mesh(new THREE.BoxGeometry(0.25, 12.8, 0.2), stud)
+    seam.position.set(0, -0.2, -0.78)
+    doorMesh.add(seam)
+  }
   doorMesh.castShadow = true
   doorMesh.receiveShadow = true
   scene.add(doorMesh)
   let doorOpen = save?.doorOpen ?? false
   let doorAnim = 0
   const doorCollider = physics.world.createCollider(
-    RAPIER.ColliderDesc.cuboid(9, 8.5, 0.8).setTranslation(gateSite.x, doorGroundY + 8.0, doorZ),
+    RAPIER.ColliderDesc.cuboid(5.5, 6.75, 0.7).setTranslation(gateSite.x, doorGroundY + 6.4, doorZ - 1.0),
   )
+  // the arch's piers and the rock beyond them: solid from the slab's edge outward
   for (const side of [-1, 1]) {
-    physics.world.createCollider(RAPIER.ColliderDesc.cuboid(4, 14, 1.2).setTranslation(gateSite.x + side * 12, doorGroundY + 10, doorZ))
+    physics.world.createCollider(RAPIER.ColliderDesc.cuboid(3.2, 14, 1.4).setTranslation(gateSite.x + side * 8.6, doorGroundY + 10, doorZ - 1.0))
   }
   if (doorOpen) {
-    doorMesh.position.y = doorGroundY - 9.5
+    doorMesh.position.y = doorGroundY - 8.2
     physics.world.removeCollider(doorCollider, false)
   }
 
@@ -208,6 +229,11 @@ async function boot(): Promise<void> {
   // packs in the woods, herds on the open ground, rexes in the north. Far
   // ones sleep (Dino.dormant), so the count costs nothing until you arrive.
   for (const w of wildPopulation()) spawnDino(w.species, w.x, w.z)
+  // THE GATEKEEPER: the alpha rex on the causeway before the caldera door —
+  // once slain it stays slain (saved)
+  let alphaSlain = save?.alphaSlain ?? false
+  const gateSiteForAlpha = worldMeta!.ruinSites.find((r) => r.tag === 'caldera-gate')!
+  const gatekeeper: Dino | null = alphaSlain ? null : spawnDino('alpharex', gateSiteForAlpha.x + 3, gateSiteForAlpha.z + 44)
 
   const hud = new Hud(document.getElementById('hud')!, inventory, (id) => {
     if (inventory.craftById(id)) hud.toast(`Crafted ${ITEMS[id].name}`)
@@ -366,41 +392,42 @@ async function boot(): Promise<void> {
     // the caldera door
     const f0 = feetPos()
     if (!doorOpen && Math.hypot(f0.x - gateSite.x, f0.z - doorZ) < 11) {
-      if (keystones.collectedCount >= keystones.total) {
+      if (keystones.enough) {
         doorOpen = true
         doorAnim = 4
         physics.world.removeCollider(doorCollider, false)
         hud.toast('The keystones flare — the caldera gate grinds open.')
         return true
       }
-      hud.toast(`The gate is sealed. ${keystones.total - keystones.collectedCount} keystones missing (N to seek).`)
+      hud.toast(`The gate is sealed. ${keystones.needed - keystones.collectedCount} more keystones (${keystones.collectedCount}/${keystones.needed}) — N to seek.`)
       return true
     }
     // the beacon
     if (!beaconLit && Math.hypot(f0.x - beaconSite.x, f0.z - beaconSite.z) < 11) {
-      if (keystones.collectedCount >= keystones.total) {
+      if (keystones.enough) {
         beaconLit = true
         beacon.light()
         ambience.swell()
         hud.toast('The keystones burn — the beacon takes.')
         const tamed = dinos.filter((d) => d.state === 'tamed').length
         setTimeout(() => hud.credits([
-          `${keystones.total} keystones carried through the caldera door`,
+          `${keystones.collectedCount} of ${keystones.total} keystones found · ${keystones.needed} opened the caldera door`,
+          alphaSlain ? 'the Gatekeeper slain on its causeway' : 'the Gatekeeper still walks its causeway',
           `${tamed} dino${tamed === 1 ? '' : 's'} tamed · ${building.count()} pieces built`,
           `${Math.round(daynight.elapsedDays * 10) / 10} island days lived (one is ${Math.round(DAY_LENGTH_S / 60)} real minutes)`,
         ]), 2800)
         return true
       }
-      hud.toast('The brazier is cold — it wants the fire of all five keystones.')
+      hud.toast(`The brazier is cold — it wants the fire of ${keystones.needed} keystones.`)
       return true
     }
     // keystones (the arc's thread)
-    const got = keystones.collectNear(f0.x, f0.z)
+    const got = keystones.collectNear(f0.x, f0.z, 4, f0.y + 1.3)
     if (got) {
       const n = keystones.collectedCount
-      hud.toast(n === keystones.total
-        ? `Keystone ${n}/${keystones.total} — the caldera gate awaits (N to point the way)`
-        : `Keystone ${n}/${keystones.total} collected (${got.tag})`)
+      hud.toast(n >= keystones.needed
+        ? `Keystone ${n}/${keystones.total} — enough for the caldera gate (N to point the way)`
+        : `Keystone ${n}/${keystones.total} · ${keystones.needed - n} more open the gate (${got.tag})`)
       return true
     }
     // feed a KO'd dino
@@ -494,12 +521,12 @@ async function boot(): Promise<void> {
     if (e.code === 'KeyN') {
       const f = feetPos()
       const gate = worldMeta?.ruinSites.find((r) => r.tag === 'caldera-gate')
-      const target = keystones.collectedCount < keystones.total ? keystones.nearestMissing(f.x, f.z) : doorOpen && !beaconLit ? beaconSite : gate ?? null
+      const target = !keystones.enough ? keystones.nearestMissing(f.x, f.z) : doorOpen && !beaconLit ? beaconSite : gate ?? null
       if (target) {
         const d = Math.hypot(target.x - f.x, target.z - f.z)
         const ang = ((Math.atan2(-(target.x - f.x), -(target.z - f.z)) * 180) / Math.PI + 360) % 360
         const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
-        const label = keystones.collectedCount < keystones.total ? 'keystone' : doorOpen && !beaconLit ? 'the beacon' : 'the caldera gate'
+        const label = !keystones.enough ? 'keystone' : doorOpen && !beaconLit ? 'the beacon' : 'the caldera gate'
         hud.toast(`Wayfinder: ${label} ${dirs[Math.round(ang / 45) % 8]} · ${Math.round(d)}m`)
       }
     }
@@ -534,6 +561,7 @@ async function boot(): Promise<void> {
     keystones: keystones.serialize(),
     doorOpen,
     beaconLit,
+    alphaSlain,
     }
   }
   setInterval(() => void saveGame(collectSave()), 30_000)
@@ -894,6 +922,8 @@ async function boot(): Promise<void> {
       gateSite: () => ({ x: gateSite.x, z: gateSite.z, doorZ }),
       beaconSite: () => ({ x: beaconSite.x, z: beaconSite.z, y: beacon.groundY }),
       beaconLit: () => beaconLit,
+      alphaSlain: () => alphaSlain,
+      alphaInfo: () => gatekeeper ? gatekeeper.drawInfo() : null,
       ravinePath: () => worldMeta!.ravine.path,
       spawn: () => ({ x: SPAWN.x, z: SPAWN.z }),
       flying: () => player.flying,
@@ -1190,7 +1220,12 @@ async function boot(): Promise<void> {
     const held = inventory.held
     building.updateGhost(held && ITEMS[held].placeable ? (held as PieceKind) : null, held && ITEMS[held].placeable ? updateAim() : null)
 
-    keystones.update(dt)
+    keystones.update(dt, feetPos().setY(feetPos().y + 1.3))
+    if (gatekeeper && !alphaSlain && gatekeeper.state === 'dead') {
+      alphaSlain = true
+      hud.toast('The Gatekeeper falls. The causeway is yours.')
+      ambience.swell()
+    }
     beacon.update(dt, cam.camera.position)
     {
       const fb = feetPos()
@@ -1200,7 +1235,7 @@ async function boot(): Promise<void> {
     }
     if (doorAnim > 0) {
       doorAnim -= dt
-      doorMesh.position.y = Math.max(doorGroundY - 9.5, doorMesh.position.y - dt * 4)
+      doorMesh.position.y = Math.max(doorGroundY - 8.2, doorMesh.position.y - dt * 4)
     }
     // context prompt
     const fk = feetPos()
@@ -1208,8 +1243,8 @@ async function boot(): Promise<void> {
     const nearGate = !doorOpen && Math.hypot(fk.x - gateSite.x, fk.z - doorZ) < 11
     const nearBeacon = !beaconLit && Math.hypot(fk.x - beaconSite.x, fk.z - beaconSite.z) < 11
     if (riding) hud.prompt('E — dismount')
-    else if (nearBeacon) hud.prompt(keystones.collectedCount >= keystones.total ? 'E — light the beacon' : 'the brazier is cold')
-    else if (nearGate) hud.prompt(keystones.collectedCount >= keystones.total ? 'E — set the keystones' : `sealed — ${keystones.total - keystones.collectedCount} keystones missing`)
+    else if (nearBeacon) hud.prompt(keystones.enough ? 'E — light the beacon' : 'the brazier is cold')
+    else if (nearGate) hud.prompt(keystones.enough ? 'E — set the keystones' : `sealed — ${keystones.collectedCount}/${keystones.needed} keystones`)
     else if (nearKey) hud.prompt('E — take the keystone')
     else {
       const ko = nearestDino(INTERACT_RANGE, (d) => d.state === 'ko')
