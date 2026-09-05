@@ -189,6 +189,12 @@ for (let iz = 0; iz < SIDE; iz++) {
       h += 14 * Math.sin(vAng * 12 + 0.7) * cone * cone * smoothstep(60, 150, dv) // flank ridges
       h += 22 * Math.exp(-((dv - 86) * (dv - 86)) / (2 * 16 * 16)) // crater rim lip
       h -= 150 * Math.exp(-(dv * dv) / (2 * 68 * 68)) // the caldera dish
+      // THE ESCARPMENT: a 52 m cliff band ringing the cone at ~280 m — the
+      // cone's own flank never passed 47° and the caldera door could be
+      // walked around up any side of the mountain (user, M19). The ring is
+      // the only way in: the Ravine cuts through the band, the gate-wall
+      // shelf flattens it where the door stands
+      h += 52 * smoothstep(298, 268, dv)
       // two ridgelines radiating south-east and south-west from the cone
       for (const ang of [0.75, -0.75]) {
         const rx = VOLCANO.x + Math.sin(ang) * 760
@@ -206,6 +212,11 @@ for (let iz = 0; iz < SIDE; iz++) {
       const t = smoothstep(edge, -edge * 0.35, sd)
       h = lerp(h, sh.h + 1.5 * fbm(x * 0.02, z * 0.02, 2), t)
     }
+
+    // THE GATE-WALL'S BACK: the 104 m shelf the door is set into must not be
+    // a landing you can walk off onto the cone — its north edge rises 52 m
+    // into the mountain as a cliff (the escarpment band is flattened under it)
+    if (Math.abs(x) < 120 && z < -996) h += 52 * smoothstep(-996, -1022, z) * smoothstep(120, 96, Math.abs(x))
 
     // THE HOLM: the plateau the ring is cut into — held at ~20 m so the ring,
     // the Reservoir and the Knot are carved INTO ground
@@ -382,6 +393,38 @@ for (let iz = 0; iz < SIDE; iz++) {
     }
   }
 }
+// THE LEVEE: the ring is dead water held at the Knot's level, and its south
+// end leaves the Holm plateau for the plains, which sit 1–3 m UNDER that
+// level — the carve never raised anything, so the water sheet floated over
+// the low bank and dinos grazed on a dry trench beside a wall of water (user
+// screenshots 21–22, M19). Standing water must be held by its banks: within
+// 2.4 half-widths the ground rises to the level + 0.7 and feathers out.
+function containRing() {
+  for (let ri = 0; ri < RIVER.parts.length; ri++) {
+    const part = RIVER.parts[ri]
+    if (part.flow) continue
+    const path = RIVER_PATHS[ri]
+    const hw = part.halfWidth
+    const level = RIVER.level
+    for (let iz = 0; iz < SIDE; iz++) {
+      for (let ix = 0; ix < SIDE; ix++) {
+        const x = worldX(ix), z = worldZ(iz)
+        const { d } = distToPath(x, z, path)
+        if (d < hw * 0.65 || d > hw * 2.6) continue
+        if (LAKES_ACTIVE.some((l) => shoreDist(x, z, l.shore) < 4)) continue // not into the Reservoir
+        if (RIVER.parts.some((p, j) => p.flow && distToPath(x, z, RIVER_PATHS[j]).d < p.halfWidth * 1.6)) continue // the legs cross the ring
+        const i0 = idx(ix, iz)
+        // a wading shore (level −1.5 at 0.7 hw) rising to the crest (level +0.7
+        // at 1.2 hw), then feathering back into whatever the land was
+        const crest = level - 1.5 + 2.2 * smoothstep(hw * 0.7, hw * 1.2, d)
+        const bank = lerp(crest, H[i0], smoothstep(hw * 1.25, hw * 2.6, d))
+        if (H[i0] < bank) H[i0] = bank
+      }
+    }
+  }
+}
+containRing()
+
 // THE FORD: a gravel bar across the ring on its far side, knee-deep
 for (const part of RIVER.parts) {
   if (!part.ford) continue
@@ -627,6 +670,7 @@ for (let iz = 0; iz < SIDE; iz++) {
     }
   }
 }
+containRing() // droplets gully the levee too
 // the sea: 880K droplets carry sediment to the shore and build a beach out
 // past the drawn coast — cap the sea floor to its designed profile so the
 // waterline stays where it was traced (deposits may only deepen, never fill)
@@ -823,7 +867,9 @@ for (const [ri, part] of RIVER.parts.entries()) {
     for (let t = 0; t < 1; t += 0.1) {
       const sx = path[i].x + (path[i + 1].x - path[i].x) * t, sz = path[i].z + (path[i + 1].z - path[i].z) * t
       if (inStandingWater(sx, sz)) continue // the pool and the Reservoir are basins, not bed
-      samples.push({ x: sx, z: sz })
+      const len = Math.hypot(path[i + 1].x - path[i].x, path[i + 1].z - path[i].z) || 1
+      // the segment's left normal, for bank probes
+      samples.push({ x: sx, z: sz, nx: -(path[i + 1].z - path[i].z) / len, nz: (path[i + 1].x - path[i].x) / len })
     }
   }
   if (part.flow) {
@@ -846,6 +892,22 @@ for (const [ri, part] of RIVER.parts.entries()) {
       const hf = hAt(part.ford.x, part.ford.z)
       if (hf > RIVER.level - 0.3 || hf < RIVER.level - 1.05) fail(`ford bed ${hf.toFixed(2)} not knee-deep under level ${RIVER.level}`)
     }
+    // the banks HOLD the water: at 1.25 half-widths from the centreline the
+    // ground must sit above the level all the way round (except where the
+    // legs and the Reservoir join) — the sheet floated over low ground before
+    let lowBank = 0
+    let worst = null
+    for (const s of samples) {
+      for (const side of [1, -1]) {
+        const bx = s.x + s.nx * side * part.halfWidth * 1.4, bz = s.z + s.nz * side * part.halfWidth * 1.4
+        if (distToPath(bx, bz, path).d < part.halfWidth * 1.15) continue // inside a bend, the probe fell back into the channel
+        if (LAKES_ACTIVE.some((l) => shoreDist(bx, bz, l.shore) < 6)) continue
+        if (RIVER.parts.some((p, j) => p.flow && distToPath(bx, bz, RIVER_PATHS[j]).d < p.halfWidth * 1.8)) continue
+        const h = hAt(bx, bz)
+        if (h < RIVER.level + 0.3) { lowBank++; if (!worst || h < worst.h) worst = { h, x: bx, z: bz } }
+      }
+    }
+    if (lowBank) fail(`${part.name}: ${lowBank} bank samples under the water level (lowest ${worst.h.toFixed(2)} at ${worst.x.toFixed(0)},${worst.z.toFixed(0)})`)
   }
 }
 // standing water holds: deep point below level; every shore vertex's outside

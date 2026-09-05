@@ -293,6 +293,14 @@ redwoods and the volcano reveal themselves as you go inland. This revises the M2
 from minute one" pillar on purpose: the user asked for fog that hides the far skyline from a fresh
 spawn, and the arc gains a first reveal. The beach statue still points the way.
 
+**The ecology (M19, 2026-09-05).** The species table gained `diet` and a third temperament
+(`defensive`), and the one generic brain gained a half-second *think*: carnivores hunt what they can
+take and feed on the kill, skittish herbivores flee, defensive ones stand their ground against anything
+smaller and charge inside 16 m, herds drift together. Balance rule of thumb: a predator wins the hunts
+it picks but pays for it (a carno takes a trike at ~10 bites and leaves with a quarter of its health).
+Player-facing aggro is unchanged. Still to come here: hunger as a drive (not just a cooldown), tames
+defending their owner, alpha variants, the ragdoll for kills.
+
 **Later, deliberately not now (user, 2026-09-05):** terrain **tessellation / displacement** for
 close-range ground detail (rocky lips, ruts, root bulges) — worth doing once the current budget
 has headroom; it competes with everything else for GPU time.

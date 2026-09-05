@@ -18,8 +18,6 @@ export interface SpeciesDef {
   /** item that fills the tame bar, and how much per feed */
   tameFood: 'berry'
   tamePerFeed: number
-  /** aggro: flees / fights back when hit */
-  temperament: 'skittish' | 'aggressive'
   /** unprovoked aggro when the player comes this close (0 = only when hit) */
   aggroRange: number
   /** packmates within this radius join a fight */
@@ -29,6 +27,14 @@ export interface SpeciesDef {
   rideable: boolean
   /** rider seat offset from dino origin (local, pre-scale-normalized units) */
   seat: { x: number; y: number; z: number }
+  /** yaw the rig needs on top of its heading to face the way it moves (models
+   *  ship with any forward axis: the Allosaurus and Apatosaurus walked
+   *  backwards, the Terror Bird sideways — side-on portraits, M19) */
+  facingOffset?: number
+  /** what it eats — the brain's predation and fear rules key off this */
+  diet: 'carnivore' | 'herbivore'
+  /** who fights back: skittish flee when hit, defensive charge the attacker, aggressive attack on sight */
+  temperament: 'skittish' | 'defensive' | 'aggressive'
   /** regex per animation slot, matched against clip names */
   clips: { idle: RegExp; walk: RegExp; run: RegExp; attack: RegExp; ko: RegExp }
   /** optional flavor one-shots played randomly while idle */
@@ -53,9 +59,10 @@ export const SPECIES: Record<string, SpeciesDef> = {
     tameFood: 'berry',
     tamePerFeed: 12,
     temperament: 'aggressive',
+    diet: 'carnivore',
     aggroRange: 14,
     packRange: 28,
-    attackDamage: 14,
+    attackDamage: 16,
     attackRange: 2.0,
     rideable: true,
     seat: { x: 0, y: 0.48, z: -0.05 },
@@ -81,7 +88,8 @@ export const SPECIES: Record<string, SpeciesDef> = {
     torporDrain: 1.6,
     tameFood: 'berry',
     tamePerFeed: 10,
-    temperament: 'skittish',
+    temperament: 'defensive',
+    diet: 'herbivore',
     aggroRange: 0,
     packRange: 0,
     attackDamage: 22,
@@ -110,7 +118,8 @@ export const SPECIES: Record<string, SpeciesDef> = {
     torporDrain: 1.4,
     tameFood: 'berry',
     tamePerFeed: 10,
-    temperament: 'skittish',
+    temperament: 'defensive',
+    diet: 'herbivore',
     aggroRange: 0,
     packRange: 0,
     attackDamage: 26,
@@ -142,9 +151,10 @@ export const SPECIES: Record<string, SpeciesDef> = {
     tameFood: 'berry',
     tamePerFeed: 6,
     temperament: 'aggressive',
+    diet: 'carnivore',
     aggroRange: 26,
     packRange: 0,
-    attackDamage: 55,
+    attackDamage: 90,
     attackRange: 4.2,
     rideable: true,
     seat: { x: 0, y: 2.7, z: -0.5 },
@@ -174,9 +184,10 @@ export const SPECIES: Record<string, SpeciesDef> = {
     tameFood: 'berry',
     tamePerFeed: 9,
     temperament: 'aggressive',
+    diet: 'carnivore',
     aggroRange: 22,
     packRange: 0,
-    attackDamage: 26,
+    attackDamage: 42,
     attackRange: 3.0,
     rideable: true,
     seat: { x: 0, y: 1.9, z: -0.3 },
@@ -198,9 +209,11 @@ export const SPECIES: Record<string, SpeciesDef> = {
     tameFood: 'berry',
     tamePerFeed: 8,
     temperament: 'aggressive',
+    diet: 'carnivore',
+    facingOffset: Math.PI,
     aggroRange: 24,
     packRange: 0,
-    attackDamage: 34,
+    attackDamage: 48,
     attackRange: 3.4,
     rideable: true,
     seat: { x: 0, y: 2.1, z: -0.4 },
@@ -222,9 +235,11 @@ export const SPECIES: Record<string, SpeciesDef> = {
     tameFood: 'berry',
     tamePerFeed: 12,
     temperament: 'aggressive',
+    diet: 'carnivore',
+    facingOffset: -Math.PI / 2,
     aggroRange: 16,
     packRange: 22,
-    attackDamage: 16,
+    attackDamage: 20,
     attackRange: 2.2,
     rideable: true,
     seat: { x: 0, y: 1.3, z: -0.1 },
@@ -246,6 +261,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     tameFood: 'berry',
     tamePerFeed: 12,
     temperament: 'skittish',
+    diet: 'herbivore',
     aggroRange: 0,
     packRange: 0,
     attackDamage: 14,
@@ -270,6 +286,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     tameFood: 'berry',
     tamePerFeed: 14,
     temperament: 'skittish',
+    diet: 'herbivore',
     aggroRange: 0,
     packRange: 0,
     attackDamage: 8,
@@ -292,7 +309,9 @@ export const SPECIES: Record<string, SpeciesDef> = {
     torporDrain: 3.5,
     tameFood: 'berry',
     tamePerFeed: 5,
-    temperament: 'skittish',
+    temperament: 'defensive',
+    diet: 'herbivore',
+    facingOffset: Math.PI,
     aggroRange: 0,
     packRange: 0,
     attackDamage: 70,
@@ -315,7 +334,8 @@ export const SPECIES: Record<string, SpeciesDef> = {
     torporDrain: 2.4,
     tameFood: 'berry',
     tamePerFeed: 7,
-    temperament: 'skittish',
+    temperament: 'defensive',
+    diet: 'herbivore',
     aggroRange: 0,
     packRange: 0,
     attackDamage: 42,

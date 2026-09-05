@@ -62,9 +62,9 @@ const LAYOUTS: Record<string, PiecePlan[]> = {
   // unseal, M8) at the head of a 70 m causeway of columns, two guardian
   // statues facing the approach — readable from the far end of the corridor
   'caldera-gate': [
-    { model: 'Arch', dx: 0, dz: -19, h: 15, rotY: 0 }, // set against the rock face behind the apron
-    { model: 'Column', dx: -12, dz: -14, h: 9 },
-    { model: 'Column', dx: 12, dz: -14, h: 9 },
+    { model: 'Arch', dx: 0, dz: -36, h: 15, rotY: 0 }, // IN the Ravine's mouth, where the rock face rises (M19: it stood 14 m out on the apron and you walked round it)
+    { model: 'Column', dx: -12, dz: -22, h: 9 },
+    { model: 'Column', dx: 12, dz: -22, h: 9 },
     { model: 'Statue', dx: -7, dz: 4, h: 7, rotY: Math.PI },
     { model: 'Statue', dx: 7, dz: 4, h: 7, rotY: Math.PI },
     { model: 'Column', dx: -9, dz: 18, h: 7 }, { model: 'Column', dx: 9, dz: 18, h: 7 },

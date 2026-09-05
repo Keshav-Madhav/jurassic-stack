@@ -117,7 +117,6 @@ export class DayNight {
   private sunDir = new THREE.Vector3()
   private pmrem: THREE.PMREMGenerator
   private envTarget: THREE.WebGLRenderTarget | null = null
-  private lastBakedElevation = Number.POSITIVE_INFINITY
 
   /** Shadow follow-focus (the player/mount), set per frame from the game loop. */
   private focus = new THREE.Vector3()
@@ -268,16 +267,23 @@ export class DayNight {
       Math.cos(realE) * Math.cos(azimuth),
     )
 
-    // re-bake environment when the sun has moved enough (cheap: sky-only scene)
-    if (Math.abs(elev - this.lastBakedElevation) > 3) {
-      this.lastBakedElevation = elev
-      this.envTarget?.dispose()
+    // the environment map is baked ONCE, from a mid-morning sky, and only its
+    // intensity follows the day. It used to re-bake every 3° of sun — every
+    // ~5 s of the 10-minute day — and each bake was both a 20–40 ms stall and
+    // a visible jump in every reflection (the water most of all): the
+    // "flashing" (user, M19). The sun light itself still carries the colour.
+    if (!this.envTarget) {
       const skyOnly = new THREE.Scene()
       const skyClone = this.sky.clone()
+      const su = (skyClone.material as THREE.ShaderMaterial).uniforms
+      su.sunPosition.value.set(0.55, 0.62, 0.55)
+      su.turbidity.value = 3
+      su.rayleigh.value = 1.2
       skyOnly.add(skyClone)
       this.envTarget = this.pmrem.fromScene(skyOnly as unknown as THREE.Scene, 0, 0.1, 1000)
       this.scene.environment = this.envTarget.texture
       skyOnly.remove(skyClone)
     }
+    this.scene.environmentIntensity = THREE.MathUtils.lerp(0.13, 0.025, this.nightness)
   }
 }

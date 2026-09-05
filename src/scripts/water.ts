@@ -258,7 +258,7 @@ export class WaterSystem {
     flow: THREE.Vector2,
     swell: number,
     foam = false,
-    roughness = 0.18,
+    roughness = 0.34, // (0.18 blew the near sheet out to milk-white under the noon sun — the "bulging" look, M19)
   ): THREE.MeshStandardMaterial {
     const mat = new THREE.MeshStandardMaterial({
       color,
@@ -303,7 +303,7 @@ export class WaterSystem {
             // the ripple's wavelength is ~7 m: past a few hundred metres it
             // is under a pixel and aliases into a screen-door moiré over the
             // whole sea (aerial review) — fade it out with distance
-            float ripple = 0.22 * (1.0 - smoothstep(120.0, 700.0, length(vWaterWorld - cameraPosition)));
+            float ripple = 0.13 * (1.0 - smoothstep(120.0, 700.0, length(vWaterWorld - cameraPosition)));
             normal = normalize(normal + vec3(nx, 0.0, nz) * ripple);
           }`,
         )

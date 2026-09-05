@@ -82,18 +82,26 @@ check(sizes.length === 0, `every loaded rig within ±60% of its species height${
 // ---------- tame: punch to KO, feed to tame ----------
 // a raptor specifically: since the 1500-dino population, the nearest idle dino
 // on the spawn beach is as often a trike, whose torpor 45 punches can't reach
-check(await g('window.__g.game.gotoDino("idle", "raptor")') || await g('window.__g.game.gotoDino("wander", "raptor")'), 'found a wild raptor')
+// a fresh raptor at our feet (the beach pack may be off hunting pachys or
+// fleeing a trike since the ecology — M19; the taming mechanic is what's under test)
+const ourRaptor = await page.evaluate(() => { const p = window.__g.player(); return window.__g.game.spawnDino('raptor', p.x + 2.5, p.z - 1) })
+await page.waitForTimeout(1500)
+check(await page.evaluate((i) => window.__g.game.gotoDinoIndex(i), ourRaptor), 'found a wild raptor')
 await g('window.__g.game.select(8)') // empty slot = fists (torpor route)
+// invulnerable for the punching: the raptor punches back (16 a bite since the
+// M19 rebalance) and killed the player mid-loop; the respawn scattered the
+// punches over three animals
+await g('window.__g.game.setGod(true)')
 for (let i = 0; i < 45; i++) { // 160 torpor / 8 per punch + 2.2/s drain over the loop needs headroom
+  await page.evaluate((i) => window.__g.game.gotoDinoIndex(i), ourRaptor) // stay on ONE animal, whatever it does
   await g('window.__g.game.swing()')
   await page.waitForTimeout(520)
-  const ko = await g('window.__g.game.dinoStates().some(d => d.state === "ko")')
-  if (ko) break
-  // it may have fled or be chasing us — stay next to it
-  await g('window.__g.game.gotoDino("aggro", "raptor") || window.__g.game.gotoDino("flee", "raptor") || window.__g.game.gotoDino("idle", "raptor") || window.__g.game.gotoDino("wander", "raptor")')
+  const st = await page.evaluate((i) => window.__g.game.dinoStates()[i].state, ourRaptor)
+  if (st === 'ko') break
 }
-check(await g('window.__g.game.dinoStates().some(d => d.state === "ko")'), 'raptor knocked out')
-await g('window.__g.game.gotoDino("ko")')
+await g('window.__g.game.setGod(false)')
+check((await page.evaluate((i) => window.__g.game.dinoStates()[i].state, ourRaptor)) === 'ko', 'raptor knocked out')
+await page.evaluate((i) => window.__g.game.gotoDinoIndex(i), ourRaptor)
 for (let i = 0; i < 14; i++) {
   await g('window.__g.game.interact()')
   await page.waitForTimeout(250)

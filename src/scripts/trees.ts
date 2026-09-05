@@ -512,6 +512,11 @@ function grassTexture(): THREE.CanvasTexture {
   }
   grassTex = new THREE.CanvasTexture(c)
   grassTex.colorSpace = THREE.SRGBColorSpace
+  // no mipmaps: an alpha-tested card whose minified mip averages above the
+  // threshold turns into a solid green rectangle at 20–60 m (seen behind the
+  // dinos in the M19 portraits); sharp-at-distance is the lesser evil here
+  grassTex.generateMipmaps = false
+  grassTex.minFilter = THREE.LinearFilter
   grassTex.wrapS = grassTex.wrapT = THREE.ClampToEdgeWrapping
   return grassTex
 }

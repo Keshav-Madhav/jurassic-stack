@@ -244,6 +244,16 @@ function mulberry32(seed: number): () => number {
 }
 
 
+function distToPathXZ(px: number, pz: number, path: { x: number; z: number }[]): number {
+  let best = Infinity
+  for (let i = 0; i < path.length - 1; i++) {
+    const ax = path[i].x, az = path[i].z, dx = path[i + 1].x - ax, dz = path[i + 1].z - az
+    const t = Math.max(0, Math.min(1, ((px - ax) * dx + (pz - az) * dz) / (dx * dx + dz * dz || 1)))
+    best = Math.min(best, Math.hypot(px - (ax + dx * t), pz - (az + dz * t)))
+  }
+  return best
+}
+
 function groupKeyOf(kind: NodeKind, variant: number, x: number, z: number): string {
   return `${kind}#${variant}#${Math.floor((x + HALF_SIZE) / SUPER)},${Math.floor((z + HALF_SIZE) / SUPER)}`
 }
@@ -799,6 +809,10 @@ export class Scatter {
         if (ny < (kind === 'rock' || kind === 'boulder' || kind === 'outcrop' ? 0.5 : 0.72)) continue
         const dv = Math.hypot(x - VOLCANO.x, z - VOLCANO.z)
         if (kind !== 'rock' && kind !== 'boulder' && kind !== 'outcrop' && kind !== 'deadtree' && dv < 300) continue
+        // the Ravine's floor and the gate's mouth stay clear of everything solid
+        // (a boulder sat across the door — M19); ruin courts keep their footprint
+        if (worldMeta?.ravine && distToPathXZ(x, z, worldMeta.ravine.path) < worldMeta.ravine.halfWidth + 10) continue
+        if (worldMeta && worldMeta.ruinSites.some((r) => Math.hypot(x - r.x, z - r.z) < (r.tag === 'caldera-gate' ? 40 : r.tag === 'crater-beacon' ? 40 : 14) && !GROUND_COVER.has(kind))) continue
         if (Math.hypot(x - SPAWN.x, z - SPAWN.z) < 14) continue
         const riverD = riverDistAt(x, z)
         if (riverD < 13 && kind !== 'willow') continue // keep channels clear

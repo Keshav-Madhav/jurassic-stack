@@ -14,7 +14,14 @@ import { Mover, type MoverConfig } from './mover'
 import type { Physics } from './physics'
 import type { SpeciesDef } from './species'
 
-export type DinoState = 'idle' | 'wander' | 'aggro' | 'flee' | 'ko' | 'tamed'
+export type DinoState = 'idle' | 'wander' | 'aggro' | 'hunt' | 'feed' | 'flee' | 'ko' | 'dead' | 'tamed'
+
+/** What the brain sees each think: the awake herd around it (main.ts fills it once a frame). */
+export interface Senses {
+  awake: Dino[]
+  /** a hit landed somewhere — main.ts sprays blood there */
+  onHit: (x: number, y: number, z: number, heavy: boolean) => void
+}
 
 const loader = new GLTFLoader()
 loader.setMeshoptDecoder(MeshoptDecoder)
@@ -36,9 +43,12 @@ function whenMyTurn(): Promise<void> {
     if (!clonePump) { clonePump = true; requestAnimationFrame(pumpClones) }
   })
 }
+/** every clip name per model URL — the animation audit reads this */
+export const clipNamesByModel = new Map<string, string[]>()
 async function loadModel(url: string) {
   if (!modelCache.has(url)) modelCache.set(url, loader.loadAsync(url))
   const gltf = await modelCache.get(url)!
+  if (!clipNamesByModel.has(url)) clipNamesByModel.set(url, gltf.animations.map((a) => a.name))
   await whenMyTurn()
   return { scene: (await import('three/addons/utils/SkeletonUtils.js')).clone(gltf.scene) as THREE.Group, animations: gltf.animations }
 }
@@ -61,6 +71,7 @@ export class Dino {
    *  a species' first appearance was a 150 ms compile stall — M18) */
   static onFirstRig: ((speciesId: string, model: THREE.Object3D) => void) | null = null
   private static warmed = new Set<string>()
+  private static cullSpheres = new Map<string, THREE.Sphere[]>()
   readonly object = new THREE.Group()
   /** the loaded rig — hidden (not `object`, which doubles as "alive") while dormant */
   private model: THREE.Object3D | null = null
@@ -88,6 +99,17 @@ export class Dino {
   private runBlend = 0
   private attackCooldown = 0
   private tmpN = new THREE.Vector3()
+  /** the animal this one is chasing (hunt) or fighting (aggro on a dino) */
+  private foe: Dino | null = null
+  /** seconds until a carnivore is hungry again (a kill feeds it for minutes) */
+  private satiety = 20 + Math.random() * 60
+  /** perception runs every ~0.5 s, staggered */
+  private thinkT = Math.random() * 0.5
+  /** the carcass timer (dead) and the meal timer (feed) share it */
+  private deadT = 0
+  /** rigs without a real death clip topple procedurally when KO'd */
+  private topple = 0
+  private toppleWanted = false
   /** navmesh path-following (chase/follow): waypoints toward the target */
   private waypoints: PathPoint[] = []
   private repathT = 0
@@ -120,11 +142,13 @@ export class Dino {
         }
         o.castShadow = true
         o.receiveShadow = true
-        // our own distance gate decides what's drawn (DRAW_DIST); three's
-        // per-mesh culling used the BIND-space bounding sphere, which for
-        // rigs with scale tracks on the root sits nowhere near the animal —
-        // the mammoth was culled while you stood in front of it (M18)
-        o.frustumCulled = false
+        // culled by a bounding sphere computed from the SKINNED pose after
+        // calibration (below) — three's default used the bind-space sphere,
+        // which for rigs with scale tracks on the root sits nowhere near the
+        // animal (the mammoth was culled while you stood in front of it, M18);
+        // and turning culling off drew every rig in 380 m whichever way you
+        // faced — 280 draw calls at the wood line (M19 draw audit)
+        o.frustumCulled = true
       }
     })
     this.model = model
@@ -176,6 +200,29 @@ export class Dino {
       }
       this.debugCalib = { rawH: +(bounds.max.y - bounds.min.y).toFixed(2), scale: +s.toFixed(3) }
     }
+    // per-mesh culling spheres from the posed skin, inflated for the animation's
+    // reach — computed ONCE per species (it walks every skinned vertex; doing it
+    // for 1500 clones stretched the load-time frames to 50 ms) and copied
+    {
+      let spheres = Dino.cullSpheres.get(this.species.id)
+      if (!spheres) {
+        spheres = []
+        model.traverse((o) => {
+          if (!(o instanceof THREE.SkinnedMesh)) return
+          o.computeBoundingSphere()
+          const sp = o.boundingSphere ? o.boundingSphere.clone() : new THREE.Sphere(new THREE.Vector3(), 1)
+          sp.radius *= 1.7
+          spheres!.push(sp)
+        })
+        Dino.cullSpheres.set(this.species.id, spheres)
+      }
+      let k = 0
+      model.traverse((o) => {
+        if (!(o instanceof THREE.SkinnedMesh)) return
+        const sp = spheres![k++]
+        if (sp) o.boundingSphere = sp.clone()
+      })
+    }
     if (Dino.onFirstRig && !Dino.warmed.has(this.species.id)) {
       Dino.warmed.add(this.species.id)
       Dino.onFirstRig(this.species.id, model)
@@ -190,6 +237,50 @@ export class Dino {
     this.object.add(model)
     return () => { this.object.remove(model) }
   }
+
+  /** QA: which clip each slot resolved to (null = the species regex matched nothing) */
+  clipReport(): Record<string, string | null> {
+    const out: Record<string, string | null> = {}
+    for (const slot of ['idle', 'walk', 'run', 'attack', 'ko'] as const) out[slot] = this.actions[slot]?.getClip().name ?? null
+    return out
+  }
+
+  /** QA: where the rig's high parts (head/neck for most dinos) sit relative to
+   *  the heading: +1 = ahead of the body centre, −1 = behind → walking backwards */
+  headSide(): number | null {
+    if (!this.model) return null
+    const detached = !this.model.parent
+    if (detached) this.object.add(this.model)
+    this.object.updateMatrixWorld(true)
+    const pts: THREE.Vector3[] = []
+    const v = new THREE.Vector3()
+    let maxY = -Infinity, minY = Infinity
+    this.model.traverse((o) => {
+      if (!(o instanceof THREE.SkinnedMesh) || !o.visible) return
+      const count = o.geometry.attributes.position.count
+      const step = Math.max(1, Math.floor(count / 3000))
+      for (let i = 0; i < count; i += step) {
+        o.getVertexPosition(i, v).applyMatrix4(o.matrixWorld)
+        pts.push(v.clone())
+        maxY = Math.max(maxY, v.y); minY = Math.min(minY, v.y)
+      }
+    })
+    if (detached) this.object.remove(this.model)
+    if (!pts.length) return null
+    const cut = minY + (maxY - minY) * 0.8
+    let hx = 0, hz = 0, n = 0, cx = 0, cz = 0
+    for (const p of pts) { cx += p.x; cz += p.z; if (p.y > cut) { hx += p.x; hz += p.z; n++ } }
+    cx /= pts.length; cz /= pts.length
+    if (!n) return null
+    const fx = Math.sin(this.heading), fz = Math.cos(this.heading)
+    const along = (hx / n - cx) * fx + (hz / n - cz) * fz
+    const span = Math.max(...pts.map((p) => Math.abs((p.x - cx) * fx + (p.z - cz) * fz)))
+    return along / (span || 1)
+  }
+
+  /** QA: the way it faces/moves (radians, 0 = +z) */
+  get facing(): number { return this.heading }
+  get speedNow(): number { return this.speed }
 
   /** QA: how this dino is being drawn right now */
   drawInfo(): Record<string, unknown> {
@@ -255,25 +346,23 @@ export class Dino {
     this.hp -= damage
     this.torpor += torporGain
     if (this.hp <= 0) {
-      // graybox death = despawn after collapse; ragdolls arrive at M7
-      this.state = 'ko'
-      this.playKo()
-      this.object.visible = false
+      // killed: a carcass lies there a while (ragdolls arrive at M7)
+      this.die()
       return
     }
     if (this.torpor >= this.species.torporMax) {
       this.state = 'ko'
+      this.foe = null
       this.playKo()
       return
     }
-    // provoked: aggressive species turn on the attacker, skittish bolt
-    if (this.species.temperament === 'aggressive') {
+    // provoked: aggressive AND defensive species turn on the attacker, skittish bolt
+    if (this.species.temperament !== 'skittish') {
       this.state = 'aggro'
+      this.foe = null // the player
       this.stateT = 12
     } else {
-      this.state = 'flee'
-      this.stateT = 6
-      this.target.set(this.object.position.x * 2 - fromX, 0, this.object.position.z * 2 - fromZ)
+      this.fleeFrom(fromX, fromZ, 6)
     }
   }
 
@@ -291,14 +380,14 @@ export class Dino {
     return false
   }
 
-  update(dt: number, playerPos: THREE.Vector3, attackPlayer: (damage: number) => void): void {
+  update(dt: number, playerPos: THREE.Vector3, attackPlayer: (damage: number) => void, senses?: Senses): void {
     this.attackCooldown -= dt
     const pos = this.object.position
     this.distToPlayer = pos.distanceTo(playerPos)
     // dormancy: a wild dino far from the player is frozen and undrawn (200 on
     // the map, a few dozen ever simulated). Tames, KOs and anything already
     // aggroed stay live; hysteresis keeps the edge from flickering.
-    const wildIdle = !this.ridden && (this.state === 'idle' || this.state === 'wander' || this.state === 'flee')
+    const wildIdle = !this.ridden && (this.state === 'idle' || this.state === 'wander' || this.state === 'flee' || this.state === 'dead')
     if (this.dormant) {
       // (the main loop only calls a dormant dino every 8th frame)
       if (this.distToPlayer < DORMANT_WAKE || !wildIdle) {
@@ -333,14 +422,49 @@ export class Dino {
       // KCC's contact offset + capsule hemisphere read as hovering otherwise.
       pos.lerpVectors(this.mover.prevPosition, this.mover.position, Dino.renderAlpha)
       pos.y -= this.mover.feetOffset + 0.12
-      this.object.rotation.y = this.heading
+      this.object.rotation.y = this.heading + (this.species.facingOffset ?? 0)
       const planar = Math.hypot(this.mover.intent.vx, this.mover.intent.vz)
       this.speed = planar
       this.animate(dt, planar / this.species.runSpeed, planar > this.species.walkSpeed * 1.4)
       return
     }
 
+    // perception: what's around me, every ~0.5 s
+    this.thinkT -= dt
+    this.satiety -= dt
+    if (senses && this.thinkT <= 0) {
+      this.thinkT = 0.45 + Math.random() * 0.15
+      this.think(senses, playerPos)
+    }
+
     switch (this.state) {
+      case 'dead': {
+        // a carcass: lies where it fell for a while, then is gone
+        this.deadT -= dt
+        this.speed = 0
+        this.animate(dt, 0, false)
+        this.mixer?.update(0)
+        if (this.deadT <= 0) this.object.visible = false
+        return
+      }
+      case 'feed': {
+        // eating: stand over the kill, chew (the attack clip, slowed), then walk off full
+        this.deadT -= dt
+        this.speed = Math.max(0, this.speed - 8 * dt)
+        this.attackCooldown -= dt
+        if (this.attackCooldown <= 0) {
+          this.attackCooldown = 2.6
+          const a = this.actions.attack
+          if (a) { a.reset().setLoop(THREE.LoopOnce, 1); a.timeScale = 0.6; a.play() }
+        }
+        if (this.deadT <= 0) {
+          this.satiety = 120 + Math.random() * 120
+          this.state = 'idle'
+          this.stateT = 3
+          this.foe = null
+        }
+        break
+      }
       case 'ko': {
         // torpor drains; wake up if it empties before the tame completes
         this.torpor -= this.species.torporDrain * dt
@@ -364,23 +488,53 @@ export class Dino {
         }
         break
       }
-      case 'aggro': {
+      case 'aggro':
+      case 'hunt': {
+        // aggro = fighting (the player, or a dino that struck first / stands its
+        // ground); hunt = a carnivore running down prey. Same chase, different exits.
         this.stateT -= dt
-        const d = pos.distanceTo(playerPos)
-        if (this.stateT <= 0 || d > 40) {
+        const foe = this.foe
+        const foeGone = foe && (foe.state === 'dead' || foe.state === 'ko' || foe.dormant || !foe.object.visible)
+        const tgt = foe && !foeGone ? foe.object.position : playerPos
+        const d = pos.distanceTo(tgt)
+        const reach = this.species.attackRange + (foe ? foe.species.height * 0.45 : 0)
+        const giveUp = this.state === 'hunt' ? 110 : 45
+        if (foe && foe.state === 'dead' && this.species.diet === 'carnivore' && foe.species.diet === 'herbivore' && d < reach + 3) {
+          // the kill: eat
+          this.state = 'feed'
+          this.deadT = 14 + Math.random() * 8
+          this.waypoints.length = 0
+          break
+        }
+        if (this.stateT <= 0 || d > giveUp || foeGone) {
           this.state = 'idle'
           this.stateT = 2
+          this.foe = null
           this.waypoints.length = 0
-        } else if (d <= this.species.attackRange) {
+        } else if (d <= reach) {
           this.speed = Math.max(0, this.speed - 10 * dt)
           this.waypoints.length = 0
+          // face the target while biting
+          const want = Math.atan2(tgt.x - pos.x, tgt.z - pos.z)
+          let dd = want - this.heading
+          while (dd > Math.PI) dd -= Math.PI * 2
+          while (dd < -Math.PI) dd += Math.PI * 2
+          this.heading += THREE.MathUtils.clamp(dd, -this.species.turnRate * dt, this.species.turnRate * dt)
           if (this.attackCooldown <= 0) {
             this.attackCooldown = 1.4
-            this.actions.attack?.reset().setLoop(THREE.LoopOnce, 1).play()
-            attackPlayer(this.species.attackDamage)
+            const a = this.actions.attack
+            if (a) { a.reset().setLoop(THREE.LoopOnce, 1); a.timeScale = 1; a.play() }
+            if (foe && !foeGone) {
+              foe.takeHitFrom(this, this.species.attackDamage)
+              senses?.onHit(foe.object.position.x, foe.object.position.y + foe.species.height * 0.5, foe.object.position.z, this.species.attackDamage > 30)
+            } else {
+              attackPlayer(this.species.attackDamage)
+              senses?.onHit(playerPos.x, playerPos.y + 1.2, playerPos.z, this.species.attackDamage > 30)
+            }
           }
         } else {
-          this.seekVia(playerPos, dt, this.species.runSpeed)
+          if (foe && !foeGone) this.seek(tgt.x, tgt.z, dt, this.species.runSpeed)
+          else this.seekVia(tgt, dt, this.species.runSpeed)
         }
         break
       }
@@ -431,8 +585,15 @@ export class Dino {
     const hFront = heightAt(pos.x + fx, pos.z + fz)
     const hBack = heightAt(pos.x - fx, pos.z - fz)
     pos.y = (hFront + hBack) / 2 - 0.06 // slight embed: convex micro-ground floated feet
-    this.object.rotation.y = this.heading
+    this.object.rotation.y = this.heading + (this.species.facingOffset ?? 0)
     this.object.rotation.x = THREE.MathUtils.clamp(Math.atan2(hBack - hFront, 1.6), -0.3, 0.3)
+    // the procedural topple (no death clip): roll onto the side, sink a little
+    const wantT = this.toppleWanted ? 1 : 0
+    if (this.topple !== wantT) this.topple = THREE.MathUtils.clamp(this.topple + (wantT ? dt / 0.8 : -dt / 0.5), 0, 1)
+    if (this.topple > 0) {
+      this.object.rotation.z = -1.35 * this.topple
+      pos.y -= this.species.height * 0.18 * this.topple
+    } else this.object.rotation.z = 0
     const running = this.speed > this.species.walkSpeed * 1.4
     this.animate(dt, this.speed / (running ? this.species.runSpeed : this.species.walkSpeed), running)
   }
@@ -442,19 +603,124 @@ export class Dino {
     if (this.species.temperament !== 'aggressive' || this.species.aggroRange <= 0) return false
     if (this.object.position.distanceTo(playerPos) > this.species.aggroRange) return false
     this.state = 'aggro'
+    this.foe = null
     this.stateT = 12
-    this.actions.attack // (roar happens via flavor clip on entry when present)
     this.flavorActions[1]?.reset().play() // call_alert if loaded
     return true
   }
 
+  /**
+   * THE THINK: the ecology. Every half second an awake wild dino looks around:
+   *  · a hungry carnivore picks the nearest herbivore it can take (not much
+   *    taller than itself, not tamed) inside its hunt range and runs it down
+   *  · a herbivore that sees a carnivore inside its fear range bolts — unless
+   *    it is defensive and the predator is no bigger than it: then it turns
+   *    and charges
+   * Only idle/wandering animals think; fights and flights run their course.
+   */
+  private think(senses: Senses, playerPos: THREE.Vector3): void {
+    if (this.state !== 'idle' && this.state !== 'wander') return
+    if (this.ridden) return
+    const pos = this.object.position
+    const sp = this.species
+    if (sp.diet === 'carnivore') {
+      if (this.satiety > 0) return
+      const range = Math.max(sp.aggroRange * 2.5, 45)
+      let best: Dino | null = null
+      let bd = range
+      for (const o of senses.awake) {
+        if (o === this || o.species.diet !== 'herbivore' || o.state === 'tamed' || o.state === 'dead' || o.state === 'ko' || o.ridden) continue
+        if (o.species.height > sp.height * 1.6) continue
+        if (o.species.hp > sp.hp * 2.5) continue // a terror bird doesn't pick a stegosaurus
+        const d = pos.distanceTo(o.object.position)
+        if (d < bd) { bd = d; best = o }
+      }
+      if (best) {
+        this.state = 'hunt'
+        this.foe = best
+        this.stateT = 30
+        this.flavorActions[1]?.reset().play()
+      }
+      return
+    }
+    // herbivore: fear
+    const fear = 22 + sp.height * 4
+    let threat: Dino | null = null
+    let td = fear
+    for (const o of senses.awake) {
+      if (o === this || o.species.diet !== 'carnivore' || o.state === 'tamed' || o.state === 'dead' || o.state === 'ko') continue
+      const d = pos.distanceTo(o.object.position)
+      if (d < td) { td = d; threat = o }
+    }
+    if (!threat) return
+    const smaller = threat.species.height <= sp.height * 0.95
+    if (sp.temperament === 'defensive' && smaller) {
+      // a trike does not run from a raptor: it ignores it until it comes close, then charges
+      if (td < 16) {
+        this.state = 'aggro'
+        this.foe = threat
+        this.stateT = 14
+        this.flavorActions[0]?.reset().play()
+      }
+    } else {
+      this.fleeFrom(threat.object.position.x, threat.object.position.z, 7)
+    }
+    void playerPos
+  }
+
+  private fleeFrom(fromX: number, fromZ: number, secs: number): void {
+    const pos = this.object.position
+    const ax = pos.x - fromX, az = pos.z - fromZ
+    const len = Math.hypot(ax, az) || 1
+    this.state = 'flee'
+    this.stateT = secs
+    this.foe = null
+    this.target.set(pos.x + (ax / len) * 60, 0, pos.z + (az / len) * 60)
+    this.waypoints.length = 0
+  }
+
+  /** Struck by another dino: herbivores flee or (defensive) fight back; carnivores fight back. */
+  takeHitFrom(attacker: Dino, damage: number): void {
+    if (this.state === 'dead' || this.state === 'ko' || this.state === 'tamed') {
+      if (this.state === 'tamed') this.hp -= damage // a tame can be hurt; it fights back below
+      else return
+    }
+    this.hp -= damage
+    if (this.hp <= 0) { this.die(); return }
+    if (this.state === 'tamed') return
+    if (this.state === 'hunt' && this.foe === attacker) { this.stateT = Math.max(this.stateT, 12); return } // prey fighting back doesn't break the hunt
+    // a much bigger animal striking you is a reason to run, whatever your temper
+    const outsized = attacker.species.height > this.species.height * 1.25
+    if (this.species.temperament === 'skittish' || outsized) {
+      this.fleeFrom(attacker.object.position.x, attacker.object.position.z, 7)
+    } else {
+      this.state = 'aggro'
+      this.foe = attacker
+      this.stateT = 14
+    }
+  }
+
+  /** Killed: a carcass for a while, then gone. */
+  private die(): void {
+    this.state = 'dead'
+    this.deadT = 75
+    this.speed = 0
+    this.foe = null
+    this.waypoints.length = 0
+    this.playKo()
+  }
+
   /** Packmates join a fight: called by the herd manager when one aggros. */
-  joinPack(): void {
+  joinPack(foe: Dino | null): void {
     if (this.state === 'idle' || this.state === 'wander') {
       this.state = 'aggro'
+      this.foe = foe
       this.stateT = 10
     }
   }
+
+  /** who this one is fighting/chasing (null = the player, when aggro/hunt) */
+  get currentFoe(): Dino | null { return this.foe }
 
   /** Seek toward a target via the navmesh: repath periodically, steer along
    *  waypoints, fall back to direct seek when no route exists. */
@@ -512,7 +778,10 @@ export class Dino {
     if (idle) idle.weight = 1 - this.moveWeight
     if (walk) {
       walk.weight = this.moveWeight * (1 - this.runBlend)
-      walk.timeScale = 0.6 + target * 0.7
+      // a species whose walk slot fell back to its run clip (the T-Rex, the
+      // trike's run→walk the other way) plays it at half tempo
+      const sameAsRun = run && walk.getClip() === run.getClip()
+      walk.timeScale = (0.6 + target * 0.7) * (sameAsRun && this.species.runSpeed > this.species.walkSpeed * 2 ? 0.55 : 1)
     }
     if (run) run.weight = this.moveWeight * this.runBlend
     // distance-throttled animation (the classic skinned-crowd win): far dinos
@@ -535,22 +804,38 @@ export class Dino {
 
   private playKo(): void {
     const ko = this.actions.ko
-    if (ko) {
+    // a real collapse clip? (the T-Rex GLB has no death — its slot fell back to
+    // a roar; the Mammoth's to its idle) — otherwise topple procedurally
+    if (ko && /die|death|knock|lying|fall|ko\b/i.test(ko.getClip().name)) {
       ko.reset().setLoop(THREE.LoopOnce, 1).play()
       ko.clampWhenFinished = true
+      this.toppleWanted = false
+    } else {
+      this.toppleWanted = true
     }
   }
 
   private stopKo(): void {
     this.actions.ko?.stop()
+    this.toppleWanted = false
   }
+
+  /** herd pull: main.ts sets this each think from the awake set (same species, within 60 m) */
+  herdX = NaN
+  herdZ = NaN
 
   private pickWanderTarget(): void {
     for (let tries = 0; tries < 12; tries++) {
       const a = Math.random() * Math.PI * 2
       const r = 8 + Math.random() * 45
-      const x = this.home.x + Math.sin(a) * r
-      const z = this.home.z + Math.cos(a) * r
+      let x = this.home.x + Math.sin(a) * r
+      let z = this.home.z + Math.cos(a) * r
+      // herbivores drift with their herd: half-way toward the herd's centre
+      if (this.species.diet === 'herbivore' && Number.isFinite(this.herdX)) {
+        x = (x + this.herdX) * 0.5
+        z = (z + this.herdZ) * 0.5
+        this.home.set((this.home.x * 3 + this.herdX) / 4, 0, (this.home.z * 3 + this.herdZ) / 4)
+      }
       if (heightAt(x, z) < SEA_LEVEL + 1) continue
       if (normalAt(x, z, this.tmpN).y < 0.72) continue
       this.target.set(x, 0, z)

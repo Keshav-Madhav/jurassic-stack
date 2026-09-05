@@ -10,13 +10,15 @@ import { Input } from './input'
 import { Player } from './player'
 import { ThirdPersonCamera } from './camera'
 import { DayNight, DAY_LENGTH_S } from './daynight'
-import { Dino } from './dinos'
+import { Dino, clipNamesByModel, type Senses } from './dinos'
 import { SPECIES } from './species'
 import { Scatter, setLodBands } from './scatter'
 import { Building, type PieceKind } from './building'
 import { Ruins } from './ruins'
 import { Keystones } from './keystones'
 import { Beacon } from './beacon'
+import { WorldBorder } from './border'
+import { HitFx } from './hit-fx'
 import { Inventory } from './inventory'
 import { ITEMS, type ItemId } from './items'
 import { Hud } from './hud'
@@ -123,25 +125,32 @@ async function boot(): Promise<void> {
   // the caldera door: a stone slab sealing the gate arch until all five
   // keystones are set (the arc's lock)
   const gateSite = worldMeta!.ruinSites.find((r) => r.tag === 'caldera-gate')!
-  // (sized to the 15 m arch: 12 × 15.5 m slab)
+  // the slab stands IN the Ravine's mouth, 36 m north of the site, where the
+  // slot's rock walls rise on both sides — sized past the 16 m slot (18 × 17)
+  // so its edges sit inside the walls. (It hung in a free-standing arch 14 m
+  // out on the apron before, and the slot ran on angled beside it: you just
+  // walked round — user screenshot 23, M19.) Two invisible jambs bridge any
+  // sliver between slab and wall.
+  const doorZ = gateSite.z - 36
+  const doorGroundY = heightAt(gateSite.x, doorZ)
   const doorMesh = new THREE.Mesh(
-    new THREE.BoxGeometry(12, 15.5, 1.6),
+    new THREE.BoxGeometry(18, 17, 1.6),
     new THREE.MeshStandardMaterial({ color: 0x3c3a38, roughness: 0.95 }),
   )
-  const doorGroundY = heightAt(gateSite.x, gateSite.z)
-  // the slab fills the arch, which stands 19 m north of the site (against the face)
-  const doorZ = gateSite.z - 19
-  doorMesh.position.set(gateSite.x, doorGroundY + 7.4, doorZ)
+  doorMesh.position.set(gateSite.x, doorGroundY + 8.0, doorZ)
   doorMesh.castShadow = true
   doorMesh.receiveShadow = true
   scene.add(doorMesh)
   let doorOpen = save?.doorOpen ?? false
   let doorAnim = 0
   const doorCollider = physics.world.createCollider(
-    RAPIER.ColliderDesc.cuboid(6, 7.75, 0.8).setTranslation(gateSite.x, doorGroundY + 7.4, doorZ),
+    RAPIER.ColliderDesc.cuboid(9, 8.5, 0.8).setTranslation(gateSite.x, doorGroundY + 8.0, doorZ),
   )
+  for (const side of [-1, 1]) {
+    physics.world.createCollider(RAPIER.ColliderDesc.cuboid(4, 14, 1.2).setTranslation(gateSite.x + side * 12, doorGroundY + 10, doorZ))
+  }
   if (doorOpen) {
-    doorMesh.position.y = doorGroundY - 8.5
+    doorMesh.position.y = doorGroundY - 9.5
     physics.world.removeCollider(doorCollider, false)
   }
 
@@ -154,6 +163,16 @@ async function boot(): Promise<void> {
   physics.world.createCollider(RAPIER.ColliderDesc.cylinder(3.5, 1.6).setTranslation(beaconSite.x, beacon.groundY + 2.7 + 3.5, beaconSite.z))
   let beaconLit = save?.beaconLit ?? false
   if (beaconLit) beacon.light(true)
+
+  // hit feedback: blood on every landed blow
+  const hitFx = new HitFx()
+  scene.add(hitFx.group)
+  hitFx.group.name = 'hitfx'
+
+  // the world border: walls at 1.96 km, a hex veil over the last 120 m
+  const border = new WorldBorder(physics)
+  scene.add(border.group)
+  border.group.name = 'border'
 
   const building = new Building(physics)
   scene.add(building.group)
@@ -257,8 +276,9 @@ async function boot(): Promise<void> {
     return best
   }
 
+  let god = false // QA: the taming gate punches a raptor that punches back
   const hurtPlayer = (damage: number): void => {
-    if (creative) return
+    if (creative || god) return
     playerHp -= damage
     vignette.classList.add('hurt')
     setTimeout(() => vignette.classList.remove('hurt'), 220)
@@ -289,14 +309,16 @@ async function boot(): Promise<void> {
 
     player.playSwing(held)
     // dino in reach and roughly ahead? spear damages, fists build torpor
-    const target = nearestDino(REACH, (d) => d.state !== 'ko' && d.state !== 'tamed')
+    const target = nearestDino(REACH, (d) => d.state !== 'ko' && d.state !== 'tamed' && d.state !== 'dead')
     if (target) {
       const from = feetPos()
       if (creative) target.takeHit(0, 999, from.x, from.z) // creative: instant KO
       else if (held === 'spear') target.takeHit(12, 5, from.x, from.z)
       else if (held === 'hatchet') target.takeHit(7, 4, from.x, from.z)
       else target.takeHit(2, 8, from.x, from.z) // fists: ~20 punches to KO
-      hud.toast(target.state === 'ko' ? `${target.species.name} knocked out!` : `Hit ${target.species.name} (torpor ${Math.round(target.torpor)}/${target.species.torporMax})`)
+      const tp = target.object.position
+      hitFx.burst(tp.x, tp.y + target.species.height * 0.5, tp.z, held === 'spear')
+      hud.toast(target.state === 'ko' ? `${target.species.name} knocked out!` : target.state === 'dead' ? `${target.species.name} killed` : `Hit ${target.species.name} (torpor ${Math.round(target.torpor)}/${target.species.torporMax})`)
       return true
     }
 
@@ -343,7 +365,7 @@ async function boot(): Promise<void> {
     }
     // the caldera door
     const f0 = feetPos()
-    if (!doorOpen && Math.hypot(f0.x - gateSite.x, f0.z - gateSite.z) < 8) {
+    if (!doorOpen && Math.hypot(f0.x - gateSite.x, f0.z - doorZ) < 11) {
       if (keystones.collectedCount >= keystones.total) {
         doorOpen = true
         doorAnim = 4
@@ -733,7 +755,30 @@ async function boot(): Promise<void> {
       riding: () => riding !== null,
       pieces: () => building.pieces.length,
       dinoStates: () => dinos.map((d) => ({ state: d.state, torpor: d.torpor, saddled: d.saddled })),
+      /** QA: the awake ecology — who is doing what to whom */
+      ecology: () => awake.filter((d) => d.state !== 'idle' && d.state !== 'wander').map((d) => ({ sp: d.species.id, state: d.state, hp: Math.round(d.hp), x: Math.round(d.object.position.x), z: Math.round(d.object.position.z), foe: d.currentFoe ? d.currentFoe.species.id : d.state === 'aggro' || d.state === 'hunt' ? 'player' : null })),
+      /** QA: drop a wild dino of a species here */
+      spawnDino: (id: string, x: number, z: number) => { const d = spawnDino(id, x, z); return d.index },
       dinoCalib: () => dinos.map((d) => ({ sp: d.species.id, ...d.debugCalib })),
+      /** QA: every species' clip resolution + the model's full clip list */
+      animAudit: () => {
+        const out: Record<string, { clips: string[]; slots: Record<string, string | null>; height: number }> = {}
+        for (const d of dinos) {
+          if (out[d.species.id]) continue
+          const slots = d.clipReport()
+          if (Object.values(slots).every((v) => v === null)) continue // not loaded yet
+          out[d.species.id] = { clips: clipNamesByModel.get(d.species.model) ?? [], slots, height: d.species.height }
+        }
+        return out
+      },
+      /** QA: per species, where the high parts (head) sit vs the heading — negative means the rig walks backwards */
+      facingAudit: () => {
+        const out: Record<string, number> = {}
+        for (const d of dinos) { if (out[d.species.id] !== undefined) continue; const h = d.headSide(); if (h !== null) out[d.species.id] = +h.toFixed(2) }
+        return out
+      },
+      /** QA: nearest dino of a species → its position and heading (for a side-on walking portrait) */
+      dinoPose: (id: string) => { const d = nearestDino(Infinity, (x) => x.species.id === id); return d ? { x: d.object.position.x, y: d.object.position.y, z: d.object.position.z, heading: d.facing, state: d.state, speed: d.speedNow } : null },
       /** QA: draw state of the nearest dino of a species */
       dinoInfo: (id: string) => { const d = nearestDino(Infinity, (x) => x.species.id === id); return d ? d.drawInfo() : null },
       /** QA: every loaded dino's rendered height vs its species height — offenders beyond ±15% */
@@ -796,6 +841,16 @@ async function boot(): Promise<void> {
         cam.snap()
         return true
       },
+      /** QA: stand 2.2 m south of dino #index, facing it (the taming gate follows ONE animal) */
+      gotoDinoIndex: (index: number) => {
+        const d = dinos[index]
+        if (!d || !d.object.visible) return false
+        const px = d.object.position.x, pz = d.object.position.z + 2.2
+        player.mover.teleport(px, heightAt(px, pz) + 1.2, pz)
+        cam.yaw = 0
+        cam.snap()
+        return true
+      },
       /** QA: stand `dist` m south of the nearest dino of a species, facing it */
       gotoSpecies: (id: string, dist = 8) => {
         const d = nearestDino(Infinity, (x) => x.species.id === id)
@@ -823,6 +878,7 @@ async function boot(): Promise<void> {
         return bd
       },
       setCreative: (on: boolean) => setCreative(on),
+      setGod: (on: boolean) => { god = on },
       keystoneCount: () => keystones.collectedCount,
       doorOpen: () => doorOpen,
       grantAllKeystones: () => {
@@ -833,7 +889,7 @@ async function boot(): Promise<void> {
       },
       keystoneSites: () => keystones.sites.map((k) => ({ tag: k.tag, x: k.x, z: k.z, collected: k.collected })),
       /** where the caldera-gate slab stands (gates/QA read the world, not constants) */
-      gateSite: () => ({ x: gateSite.x, z: gateSite.z }),
+      gateSite: () => ({ x: gateSite.x, z: gateSite.z, doorZ }),
       beaconSite: () => ({ x: beaconSite.x, z: beaconSite.z, y: beacon.groundY }),
       beaconLit: () => beaconLit,
       ravinePath: () => worldMeta!.ravine.path,
@@ -920,6 +976,7 @@ async function boot(): Promise<void> {
   let perfRender = 0
   let shadowEvery = 1
   const awake: Dino[] = []
+  const senses: Senses = { awake, onHit: (x, y, z, heavy) => hitFx.burst(x, y, z, heavy) }
   let lastVisX = Infinity
   let lastVisZ = Infinity
   const perfSec = { dinos: 0, scatter: 0, grass: 0, terrain: 0, physics: 0 }
@@ -1015,21 +1072,34 @@ async function boot(): Promise<void> {
     // distance tests a frame were a millisecond of nothing happening
     for (const d of dinos) {
       if (d.dormant && ((frameCount + d.index) & 7) !== 0) continue
-      d.update(dt, pFeet, hurtPlayer)
+      d.update(dt, pFeet, hurtPlayer, senses)
     }
+    hitFx.update(dt)
     perfSec.dinos = perfSec.dinos * 0.95 + (performance.now() - tD0) * 0.05
     frameSec.dinos = performance.now() - tD0
     // the AWAKE set once per frame — the pair loops below are n² and 1500²
     // with a `continue` per dormant dino was still a million iterations
     awake.length = 0
     for (const d of dinos) if (!d.dormant && d.object.visible) awake.push(d)
+    // herds: every half second each herbivore learns where its kind stands (60 m)
+    if (frameCount % 30 === 0) {
+      for (const a of awake) {
+        if (a.species.diet !== 'herbivore') continue
+        let sx = 0, sz = 0, n = 0
+        for (const b of awake) {
+          if (b === a || b.species !== a.species || b.state === 'dead') continue
+          if (a.object.position.distanceTo(b.object.position) < 60) { sx += b.object.position.x; sz += b.object.position.z; n++ }
+        }
+        if (n) { a.herdX = sx / n; a.herdZ = sz / n } else { a.herdX = NaN; a.herdZ = NaN }
+      }
+    }
     // pack aggro: a wild raptor entering aggro pulls packmates in range
     for (const d of awake) {
       if (d.state !== 'aggro') continue
       for (const o of awake) {
-        if (o === d || o.state === 'tamed' || o.state === 'ko') continue
+        if (o === d || o.state === 'tamed' || o.state === 'ko' || o.state === 'dead') continue
         if (o.species.id === d.species.id && o.object.position.distanceTo(d.object.position) < d.species.packRange) {
-          o.joinPack()
+          o.joinPack(d.currentFoe)
         }
       }
     }
@@ -1120,14 +1190,20 @@ async function boot(): Promise<void> {
 
     keystones.update(dt)
     beacon.update(dt, cam.camera.position)
+    {
+      const fb = feetPos()
+      border.update(dt, fb)
+      // belt and braces behind the border colliders (a teleport, a mount)
+      if (WorldBorder.clamp(fb) && !riding) player.mover.teleport(fb.x, player.mover.position.y, fb.z)
+    }
     if (doorAnim > 0) {
       doorAnim -= dt
-      doorMesh.position.y = Math.max(doorGroundY - 8.5, doorMesh.position.y - dt * 4)
+      doorMesh.position.y = Math.max(doorGroundY - 9.5, doorMesh.position.y - dt * 4)
     }
     // context prompt
     const fk = feetPos()
     const nearKey = keystones.sites.find((k) => !k.collected && Math.hypot(k.x - fk.x, k.z - fk.z) < 5)
-    const nearGate = !doorOpen && Math.hypot(fk.x - gateSite.x, fk.z - gateSite.z) < 8
+    const nearGate = !doorOpen && Math.hypot(fk.x - gateSite.x, fk.z - doorZ) < 11
     const nearBeacon = !beaconLit && Math.hypot(fk.x - beaconSite.x, fk.z - beaconSite.z) < 11
     if (riding) hud.prompt('E — dismount')
     else if (nearBeacon) hud.prompt(keystones.collectedCount >= keystones.total ? 'E — light the beacon' : 'the brazier is cold')
@@ -1176,8 +1252,10 @@ async function boot(): Promise<void> {
   // forest. Watch the frame time; step the pixel ratio down toward 0.7 when a
   // second of frames runs long, back up when it runs short. Rare steps (the
   // buffer reallocation is itself a hitch), hysteresis between the bands.
+  // (floor raised 0.7 → 1.0 CSS px: 0.7 was visibly soft — user, M19 — and
+  // the scale only steps down under a real, sustained drop now)
   const PR_CAP = Math.min(devicePixelRatio, 1.3)
-  const PR_MIN = Math.min(0.7, PR_CAP)
+  const PR_MIN = Math.min(1.0, PR_CAP)
   let pixelRatio = PR_CAP
   let prAccum = 0
   let prN = 0
@@ -1193,8 +1271,8 @@ async function boot(): Promise<void> {
     prAccum = 0
     prN = 0
     let next = pixelRatio
-    if (avg > 19.5) next = Math.max(PR_MIN, pixelRatio * 0.85)
-    else if (avg < 15.5 && pixelRatio < PR_CAP) next = Math.min(PR_CAP, pixelRatio * 1.08)
+    if (avg > 22) next = Math.max(PR_MIN, pixelRatio * 0.88)
+    else if (avg < 16 && pixelRatio < PR_CAP) next = Math.min(PR_CAP, pixelRatio * 1.08)
     if (Math.abs(next - pixelRatio) < 0.01) { prCooldown = 1; return }
     prCooldown = next < pixelRatio ? 2 : 3.5 // climb back slowly
     pixelRatio = next

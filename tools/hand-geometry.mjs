@@ -156,11 +156,13 @@ export const SHELVES = [
 // along the traced path (switchbacks keep it walkable), walls are the cone.
 export const RAVINE = {
   halfWidth: 8,
-  wallSlope: 2.4, // rise per metre out from the floor's edge (67°) — steep, but the rock texture still reads
+  wallSlope: 3.5, // rise per metre out from the floor's edge (74°) — 2.4 (67°) left a 40° ramp beside the door where the cap cut the wall shelf (M19)
   floorStart: 71,
   floorEnd: 175,
+  // the first leg runs straight north so the slot at the DOOR (z −912) is
+  // square to the arch — an angled start left half the slot open beside the slab
   path: [
-    { x: 0, z: -896 }, { x: 22, z: -930 }, { x: 62, z: -968 }, { x: 112, z: -1012 }, { x: 128, z: -1060 },
+    { x: 0, z: -890 }, { x: 0, z: -928 }, { x: 24, z: -950 }, { x: 62, z: -975 }, { x: 112, z: -1012 }, { x: 128, z: -1060 },
     { x: 100, z: -1104 }, { x: 52, z: -1136 }, { x: 14, z: -1162 }, { x: 0, z: -1196 },
   ],
 }

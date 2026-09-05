@@ -9,7 +9,7 @@ export class Ambience {
   private windFilter: BiquadFilterNode | null = null
   private birdGain: GainNode | null = null
   private bugGain: GainNode | null = null
-  private bugOsc: OscillatorNode | null = null
+  private singers = [3400, 3900, 4300, 4700].map((f) => ({ f, next: 0 }))
   private nextBird = 0
   private t = 0
   private started = false
@@ -54,30 +54,14 @@ export class Ambience {
     this.birdGain.gain.value = 0.5
     this.birdGain.connect(this.master)
 
-    // insects: a soft chirring tremolo, night only. The tremolo MULTIPLIES —
-    // the first cut wired the LFO straight into the level gain, which summed
-    // ±0.5 onto it: a 3 kHz sawtooth at half volume, day and night, the
-    // "constant piercing ringing" (M18). Now: osc → bandpass → tremolo stage
-    // (gain = 0.5 bias + 0.5 LFO, so 0..1) → level (0 by day) → master
-    this.bugOsc = ctx.createOscillator()
-    this.bugOsc.type = 'triangle'
-    this.bugOsc.frequency.value = 2400
-    const bugFilter = ctx.createBiquadFilter()
-    bugFilter.type = 'bandpass'
-    bugFilter.frequency.value = 2600
-    bugFilter.Q.value = 4
-    const tremStage = ctx.createGain()
-    tremStage.gain.value = 0.5 // the bias; the LFO adds ±0.5 to it
-    const trem = ctx.createOscillator()
-    trem.frequency.value = 11
-    const tremDepth = ctx.createGain()
-    tremDepth.gain.value = 0.5
-    trem.connect(tremDepth).connect(tremStage.gain)
+    // insects at night: CHIRPS, not a tone. A continuous oscillator — even
+    // tremolo'd and quiet — is a ring in the ear after a minute (user, M18/19).
+    // Crickets are short pulsed bursts at random from a few "singers", each
+    // its own pitch, with silence between: the level bus here, the bursts in
+    // chirp()
     this.bugGain = ctx.createGain()
     this.bugGain.gain.value = 0
-    this.bugOsc.connect(bugFilter).connect(tremStage).connect(this.bugGain).connect(this.master)
-    this.bugOsc.start()
-    trem.start()
+    this.bugGain.connect(this.master)
   }
 
   private chirp(): void {
@@ -98,6 +82,27 @@ export class Ambience {
       o.start(t0)
       o.stop(t0 + 0.14)
     }
+  }
+
+  /** one cricket burst: 6–9 pulses of a soft high sine, 28 pulses a second */
+  private cricket(freq: number): void {
+    const ctx = this.ctx!
+    const now = ctx.currentTime
+    const pulses = 6 + Math.floor(Math.random() * 4)
+    const o = ctx.createOscillator()
+    o.type = 'sine'
+    o.frequency.value = freq * (0.97 + Math.random() * 0.06)
+    const g = ctx.createGain()
+    g.gain.setValueAtTime(0, now)
+    for (let i = 0; i < pulses; i++) {
+      const t0 = now + i / 28
+      g.gain.setValueAtTime(0, t0)
+      g.gain.linearRampToValueAtTime(0.028, t0 + 0.006)
+      g.gain.linearRampToValueAtTime(0, t0 + 0.024)
+    }
+    o.connect(g).connect(this.bugGain!)
+    o.start(now)
+    o.stop(now + pulses / 28 + 0.05)
   }
 
   /** The beacon's swell: a slow major chord that blooms and fades over ~7 s. */
@@ -134,8 +139,17 @@ export class Ambience {
       this.chirp()
       this.nextBird = this.t + 2 + Math.random() * 9 * (1.4 - daylight)
     }
-    // insects at night (a level, smoothed so dusk doesn't switch them on)
+    // insects at night: each singer chirps every 0.6–2.4 s, more of them the
+    // darker it is; the bus level fades with dusk
     const night = 1 - Math.min(1, daylight * 3)
-    this.bugGain.gain.setTargetAtTime(0.02 * night, this.ctx.currentTime, 0.5)
+    this.bugGain.gain.setTargetAtTime(0.5 * night, this.ctx.currentTime, 0.5)
+    if (night > 0.05) {
+      for (const s of this.singers) {
+        if (this.t > s.next) {
+          if (Math.random() < 0.35 + 0.65 * night) this.cricket(s.f)
+          s.next = this.t + 0.6 + Math.random() * 1.8
+        }
+      }
+    }
   }
 }
