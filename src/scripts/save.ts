@@ -25,6 +25,7 @@ export interface SaveFile {
   doorOpen?: boolean
   beaconLit?: boolean
   alphaSlain?: boolean
+  survival?: { food: number; water: number; stamina: number }
   /** island days lived (fractional) */
   days?: number
   inventory: unknown

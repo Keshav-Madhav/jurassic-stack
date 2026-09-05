@@ -747,7 +747,21 @@ export class Dino {
     this.speed = 0
     this.foe = null
     this.waypoints.length = 0
+    this.harvestLeft = Math.max(2, Math.round(this.species.height * 2.2)) // a raptor gives 3 swings, a rex 10
     this.playKo()
+  }
+
+  /** swings of meat + hide left in this carcass (dead only) */
+  harvestLeft = 0
+
+  /** Harvest a carcass with a blade: one swing → meat (+ hide every other). Returns what came off, or null. */
+  harvest(): { rawmeat: number; hide: number } | null {
+    if (this.state !== 'dead' || this.harvestLeft <= 0) return null
+    this.harvestLeft--
+    const big = this.species.height >= 3
+    const out = { rawmeat: big ? 2 : 1, hide: this.harvestLeft % 2 === 0 ? 1 : 0 }
+    if (this.harvestLeft <= 0) { this.object.visible = false; this.deadT = 0 }
+    return out
   }
 
   /** Packmates join a fight: called by the herd manager when one aggros. */

@@ -21,7 +21,7 @@ export class Hud {
   fps = 0
   panelOpen = false
 
-  constructor(root: HTMLElement, private inv: Inventory, private onCraft: (id: ItemId) => void) {
+  constructor(private root: HTMLElement, private inv: Inventory, private onCraft: (id: ItemId) => void) {
     root.innerHTML = `
       <div id="hud-stats">
         <span id="hud-fps">-- fps</span>
@@ -34,10 +34,16 @@ export class Hud {
       <div id="hud-crosshair">·</div>
       <div id="hud-prompt"></div>
       <div id="hud-toast"></div>
+      <div id="hud-vitals">
+        <div class="bar hp"><i></i><b>♥</b></div>
+        <div class="bar food"><i></i><b>🍖</b></div>
+        <div class="bar water"><i></i><b>💧</b></div>
+        <div class="bar stamina"><i></i><b>⚡</b></div>
+      </div>
       <div id="hud-hotbar"></div>
       <div id="hud-panel" hidden></div>
       <div id="hud-credits" hidden></div>
-      <div id="hud-help">WASD · LMB use · E interact · F eat 🫐 · N wayfinder · TAB inventory · C creative · bushes→🫐</div>
+      <div id="hud-help">WASD · SHIFT sprint · LMB use · E interact/drink/cook · F eat · N wayfinder · TAB inventory · C creative</div>
     `
     this.fpsEl = root.querySelector('#hud-fps')!
     this.posEl = root.querySelector('#hud-pos')!
@@ -60,8 +66,25 @@ export class Hud {
     this.modeEl.hidden = !on
   }
 
-  tick(dt: number, x: number, y: number, z: number, timeOfDay: number, hp: number, yawDeg?: number): void {
+  private vitals = { hp: 0, food: 0, water: 0, stamina: 0 }
+
+  tick(dt: number, x: number, y: number, z: number, timeOfDay: number, hp: number, yawDeg?: number, stats?: { food: number; water: number; stamina: number; winded: boolean }): void {
     this.frames++
+    // the vitals strip (every frame: the bars are cheap and stamina moves fast)
+    const set = (k: 'hp' | 'food' | 'water' | 'stamina', v: number, low: boolean) => {
+      const r = Math.max(0, Math.min(100, v))
+      if (Math.abs(this.vitals[k] - r) < 0.4) return
+      this.vitals[k] = r
+      const el = this.root.querySelector(`#hud-vitals .bar.${k}`) as HTMLElement
+      ;(el.firstElementChild as HTMLElement).style.width = `${r}%`
+      el.classList.toggle('low', low)
+    }
+    set('hp', hp, hp < 30)
+    if (stats) {
+      set('food', stats.food, stats.food < 20)
+      set('water', stats.water, stats.water < 20)
+      set('stamina', stats.stamina, stats.winded)
+    }
     this.accum += dt
     if (this.accum >= 0.5) {
       this.fps = Math.round(this.frames / this.accum)

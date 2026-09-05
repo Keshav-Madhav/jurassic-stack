@@ -19,6 +19,7 @@ import { Keystones } from './keystones'
 import { Beacon } from './beacon'
 import { WorldBorder } from './border'
 import { HitFx } from './hit-fx'
+import { Survival, FOODS, type FoodId } from './survival'
 import { Inventory } from './inventory'
 import { ITEMS, type ItemId } from './items'
 import { Hud } from './hud'
@@ -93,6 +94,8 @@ async function boot(): Promise<void> {
 
   const inventory = new Inventory()
   if (save) inventory.restore(save.inventory as ReturnType<Inventory['serialize']>)
+  const survival = new Survival()
+  survival.restore(save?.survival)
 
   const scatter = new Scatter()
   await scatter.load(renderer)
@@ -285,6 +288,15 @@ async function boot(): Promise<void> {
     return aimPoint
   }
 
+  /** water you can reach from here: a surface within 1.6 m of the feet, at the feet or a step ahead */
+  const nearWaterFor = (feet: THREE.Vector3): boolean => {
+    const fwdX = -Math.sin(cam.yaw), fwdZ = -Math.cos(cam.yaw)
+    for (const r of [0, 1.5, 3, 4.5]) {
+      const wl = water.waterLevelAt(feet.x + fwdX * r, feet.z + fwdZ * r)
+      if (wl !== null && wl > feet.y - 2.2 && wl < feet.y + 1.2) return true
+    }
+    return false
+  }
   const nearestDino = (range: number, filter: (d: Dino) => boolean, atX?: number, atZ?: number): Dino | null => {
     const from = feetPos()
     let best: Dino | null = null
@@ -334,6 +346,21 @@ async function boot(): Promise<void> {
     }
 
     player.playSwing(held)
+    // a carcass in reach: a blade harvests it (meat, hide)
+    if (held === 'hatchet' || held === 'spear') {
+      const carcass = nearestDino(REACH + 1.5, (d) => d.state === 'dead' && d.harvestLeft > 0)
+      if (carcass) {
+        const got = carcass.harvest()
+        if (got) {
+          inventory.add('rawmeat', got.rawmeat)
+          if (got.hide) inventory.add('hide', got.hide)
+          const cp = carcass.object.position
+          hitFx.burst(cp.x, cp.y + carcass.species.height * 0.3, cp.z, false)
+          hud.toast(`${ITEMS.rawmeat.icon} +${got.rawmeat} raw meat${got.hide ? ` · ${ITEMS.hide.icon} +1 hide` : ''}${carcass.harvestLeft ? '' : ' — the carcass is spent'}`)
+          return true
+        }
+      }
+    }
     // dino in reach and roughly ahead? spear damages, fists build torpor
     const target = nearestDino(REACH, (d) => d.state !== 'ko' && d.state !== 'tamed' && d.state !== 'dead')
     if (target) {
@@ -442,6 +469,20 @@ async function boot(): Promise<void> {
       hud.toast(tamed ? `${ko.species.name} tamed!` : `Feeding… ${Math.min(100, Math.round(ko.tameProgress))}%`)
       return true
     }
+    // cook: raw meat at a campfire
+    if (inventory.count('rawmeat') > 0 && building.nearFire(f0.x, f0.z)) {
+      const n = Math.min(5, inventory.count('rawmeat'))
+      inventory.remove('rawmeat', n)
+      inventory.add('cookedmeat', n)
+      hud.toast(`Cooked ${n} meat ${ITEMS.cookedmeat.icon}`)
+      return true
+    }
+    // drink: any water within reach of the feet
+    if (nearWaterFor(f0)) {
+      const got = survival.drink()
+      hud.toast(got > 0.5 ? `Drank · water ${Math.round(survival.water)}` : 'Not thirsty')
+      return true
+    }
     // saddle / mount a tamed dino
     const tame = nearestDino(INTERACT_RANGE, (d) => d.state === 'tamed')
     if (tame) {
@@ -503,11 +544,15 @@ async function boot(): Promise<void> {
     if (e.code === 'KeyT') daynight.setTime(daynight.time + 1 / 24)
     if (e.code === 'KeyC') setCreative(!creative)
     if (e.code === 'KeyF' && !riding) {
-      if (inventory.remove('berry', 1)) {
-        playerHp = Math.min(100, playerHp + 15)
-        hud.toast(`Ate a berry (+15 ♥ → ${Math.ceil(playerHp)})`)
+      // eat the held food if it is one, else the best in the pack (cooked > berry > raw)
+      const heldFood = inventory.held && inventory.held in FOODS ? (inventory.held as FoodId) : null
+      const pick = heldFood ?? (['cookedmeat', 'berry', 'rawmeat'] as FoodId[]).find((f) => inventory.count(f) > 0) ?? null
+      if (pick && inventory.remove(pick, 1)) {
+        const f = survival.eat(pick)
+        playerHp = Math.max(1, Math.min(100, playerHp + f.hp))
+        hud.toast(`Ate ${ITEMS[pick].name.toLowerCase()} ${ITEMS[pick].icon} · food ${Math.round(survival.food)} · ♥ ${Math.ceil(playerHp)}${pick === 'rawmeat' ? ' (raw — cook it at a fire)' : ''}`)
       } else {
-        hud.toast('No berries — punch a bush')
+        hud.toast('Nothing to eat — berries from bushes, meat from a carcass')
       }
     }
     if (e.code === 'Space' && !e.repeat) {
@@ -562,6 +607,7 @@ async function boot(): Promise<void> {
     doorOpen,
     beaconLit,
     alphaSlain,
+    survival: survival.serialize(),
     }
   }
   setInterval(() => void saveGame(collectSave()), 30_000)
@@ -923,6 +969,9 @@ async function boot(): Promise<void> {
       beaconSite: () => ({ x: beaconSite.x, z: beaconSite.z, y: beacon.groundY }),
       beaconLit: () => beaconLit,
       alphaSlain: () => alphaSlain,
+      survival: () => ({ ...survival.serialize(), winded: survival.winded }),
+      setSurvival: (s: { food?: number; water?: number; stamina?: number }) => { if (s.food !== undefined) survival.food = s.food; if (s.water !== undefined) survival.water = s.water; if (s.stamina !== undefined) survival.stamina = s.stamina },
+      nearWater: () => nearWaterFor(feetPos()),
       alphaInfo: () => gatekeeper ? gatekeeper.drawInfo() : null,
       ravinePath: () => worldMeta!.ravine.path,
       spawn: () => ({ x: SPAWN.x, z: SPAWN.z }),
@@ -1032,7 +1081,7 @@ async function boot(): Promise<void> {
     dt = Math.min(dt, 0.1)
     swingT -= dt
     camKick = Math.max(0, camKick - dt * 0.3)
-    if (playerHp < 100) playerHp = Math.min(100, playerHp + dt * 1.5)
+    if (playerHp < 100 && survival.food > 20 && survival.water > 20) playerHp = Math.min(100, playerHp + dt * 1.5)
 
     const focus = riding?.mover ? riding.mover.position : player.mover.position
 
@@ -1220,6 +1269,15 @@ async function boot(): Promise<void> {
     const held = inventory.held
     building.updateGhost(held && ITEMS[held].placeable ? (held as PieceKind) : null, held && ITEMS[held].placeable ? updateAim() : null)
 
+    // survival: drains, stamina, starvation
+    player.sprintAllowed = survival.canSprint
+    survival.sprinting = !riding && player.sprinting
+    survival.moving = riding ? Math.hypot(riding.mover?.intent.vx ?? 0, riding.mover?.intent.vz ?? 0) > 0.1 : player.moving
+    const starve = survival.update(dt, creative)
+    if (starve < 0) {
+      playerHp = Math.max(0, playerHp + starve)
+      if (playerHp <= 0) hurtPlayer(1) // the respawn path
+    }
     keystones.update(dt, feetPos().setY(feetPos().y + 1.3))
     if (gatekeeper && !alphaSlain && gatekeeper.state === 'dead') {
       alphaSlain = true
@@ -1242,7 +1300,11 @@ async function boot(): Promise<void> {
     const nearKey = keystones.sites.find((k) => !k.collected && Math.hypot(k.x - fk.x, k.z - fk.z) < 5)
     const nearGate = !doorOpen && Math.hypot(fk.x - gateSite.x, fk.z - doorZ) < 11
     const nearBeacon = !beaconLit && Math.hypot(fk.x - beaconSite.x, fk.z - beaconSite.z) < 11
+    const canCook = inventory.count('rawmeat') > 0 && building.nearFire(fk.x, fk.z)
+    const canDrink = !riding && nearWaterFor(fk) && survival.water < 99
     if (riding) hud.prompt('E — dismount')
+    else if (canCook) hud.prompt('E — cook the meat')
+    else if (canDrink) hud.prompt('E — drink')
     else if (nearBeacon) hud.prompt(keystones.enough ? 'E — light the beacon' : 'the brazier is cold')
     else if (nearGate) hud.prompt(keystones.enough ? 'E — set the keystones' : `sealed — ${keystones.collectedCount}/${keystones.needed} keystones`)
     else if (nearKey) hud.prompt('E — take the keystone')
@@ -1259,7 +1321,7 @@ async function boot(): Promise<void> {
       }
     }
 
-    hud.tick(dt, focus.x, focus.y, focus.z, daynight.time, playerHp, (-cam.yaw * 180) / Math.PI)
+    hud.tick(dt, focus.x, focus.y, focus.z, daynight.time, playerHp, (-cam.yaw * 180) / Math.PI, survival)
     frameCount++
     // shadows EVERY frame: the every-third-frame update was the jitter — a
     // frame with the shadow pass was ~5 ms heavier than its neighbours, so at

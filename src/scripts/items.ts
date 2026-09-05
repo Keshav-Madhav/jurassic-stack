@@ -1,7 +1,7 @@
 // Item + recipe definitions. Pure data — the crafting system, HUD, and save
 // file all read from here. Icons are emoji for now (legible, zero asset work).
 export type ItemId =
-  | 'wood' | 'stone' | 'fiber' | 'flint' | 'berry'
+  | 'wood' | 'stone' | 'fiber' | 'flint' | 'berry' | 'rawmeat' | 'cookedmeat' | 'hide'
   | 'hatchet' | 'spear'
   | 'campfire' | 'foundation' | 'wall' | 'ceiling'
   | 'saddle'
@@ -20,6 +20,9 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   fiber: { id: 'fiber', name: 'Fiber', icon: '🌾' },
   flint: { id: 'flint', name: 'Flint', icon: '🔻' },
   berry: { id: 'berry', name: 'Berry', icon: '🫐' },
+  rawmeat: { id: 'rawmeat', name: 'Raw Meat', icon: '🥩' },
+  cookedmeat: { id: 'cookedmeat', name: 'Cooked Meat', icon: '🍖' },
+  hide: { id: 'hide', name: 'Hide', icon: '🟫' },
   hatchet: { id: 'hatchet', name: 'Hatchet', icon: '🪓' },
   spear: { id: 'spear', name: 'Spear', icon: '🔱' },
   campfire: { id: 'campfire', name: 'Campfire', icon: '🔥', placeable: true },
@@ -42,5 +45,5 @@ export const RECIPES: Recipe[] = [
   { output: 'foundation', count: 1, cost: { wood: 8, fiber: 4 } },
   { output: 'wall', count: 1, cost: { wood: 5, fiber: 2 } },
   { output: 'ceiling', count: 1, cost: { wood: 6, fiber: 3 } },
-  { output: 'saddle', count: 1, cost: { fiber: 20, wood: 4, stone: 2 } },
+  { output: 'saddle', count: 1, cost: { fiber: 12, hide: 6, wood: 4 } }, // hide off a carcass: the hunt feeds the saddle (M21)
 ]

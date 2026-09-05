@@ -293,6 +293,13 @@ redwoods and the volcano reveal themselves as you go inland. This revises the M2
 from minute one" pillar on purpose: the user asked for fog that hides the far skyline from a fresh
 spawn, and the arc gains a first reveal. The beach statue still points the way.
 
+**Survival (M21, 2026-09-06).** Food, water, stamina — tuned for the 10-minute day (a full stomach
+~1.5 days, a full waterskin under a day), stamina gating the sprint (9 s burst, 6 s refill, winded
+under 25). Carcasses harvest into raw meat + hide, campfires cook, the saddle costs hide: kill → skin
+→ cook → ride is now one loop. Still to come: cold on the ranges (fur off mammoths, PLAN beat 4),
+torpor as a player stat, water/food from more sources (fruit trees, springs), and a hunger drive for
+the dinos themselves.
+
 **The ecology (M19, 2026-09-05).** The species table gained `diet` and a third temperament
 (`defensive`), and the one generic brain gained a half-second *think*: carnivores hunt what they can
 take and feed on the kill, skittish herbivores flee, defensive ones stand their ground against anything

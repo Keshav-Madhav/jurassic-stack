@@ -44,6 +44,11 @@ export class Player {
   riding = false
   /** Creative flight (double-tap space in creative mode). Auto-lands on ground contact. */
   flying = false
+  /** survival gates this: a winded player cannot sprint */
+  sprintAllowed = true
+  /** what the last fixed step did (survival reads these) */
+  sprinting = false
+  moving = false
   private facing = 0
   private mixer: THREE.AnimationMixer | null = null
   private actions = new Map<ClipSlot, THREE.AnimationAction>()
@@ -206,8 +211,14 @@ export class Player {
     }
 
     if (override) {
-      this.mover.intent.vx = override.vx
-      this.mover.intent.vz = override.vz
+      // the QA override: a speed past walking counts as a sprint (survival),
+      // and a winded player is held to walking pace like anyone else
+      const mag = Math.hypot(override.vx, override.vz)
+      const k = mag > WALK_SPEED + 0.1 && !this.sprintAllowed ? WALK_SPEED / mag : 1
+      this.mover.intent.vx = override.vx * k
+      this.mover.intent.vz = override.vz * k
+      this.moving = mag > 0.1
+      this.sprinting = mag > WALK_SPEED + 0.1 && this.sprintAllowed && !this.swimming
       if (override.vx || override.vz) this.facing = Math.atan2(override.vx, override.vz)
       this.applyStep(dt, gravityY, waterLevel, current)
       return
@@ -219,12 +230,11 @@ export class Player {
     if (input.down('KeyA')) strafe -= 1
     if (input.down('KeyD')) strafe += 1
 
-    const speed = this.swimming
-      ? SWIM_SPEED
-      : input.down('ShiftLeft') || input.down('ShiftRight')
-        ? SPRINT_SPEED
-        : WALK_SPEED
+    const wantSprint = (input.down('ShiftLeft') || input.down('ShiftRight')) && this.sprintAllowed
+    const speed = this.swimming ? SWIM_SPEED : wantSprint ? SPRINT_SPEED : WALK_SPEED
     const len = Math.hypot(fwd, strafe)
+    this.moving = len > 0
+    this.sprinting = len > 0 && wantSprint && !this.swimming
     if (len > 0) {
       const sin = Math.sin(cameraYaw)
       const cos = Math.cos(cameraYaw)

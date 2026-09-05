@@ -49,7 +49,8 @@ check(berry >= 2, `gathered berries (${berry})`)
 check(fiber >= 2, `gathered fiber (${fiber})`)
 
 // ---------- craft (top up mats so the whole chain is testable in one run) ----------
-await g('window.__g.game.give("wood", 40); window.__g.game.give("stone", 12); window.__g.game.give("fiber", 60); window.__g.game.give("flint", 6); window.__g.game.give("berry", 14)')
+// (hide since M21: the saddle is fiber + hide + wood — the hunt feeds the saddle)
+await g('window.__g.game.give("wood", 40); window.__g.game.give("stone", 12); window.__g.game.give("fiber", 60); window.__g.game.give("flint", 6); window.__g.game.give("berry", 14); window.__g.game.give("hide", 6)')
 for (const item of ['hatchet', 'spear', 'foundation', 'wall', 'ceiling', 'saddle', 'campfire']) {
   const ok = await page.evaluate((i) => window.__g.game.craft(i), item)
   check(ok, `crafted ${item}`)
@@ -76,8 +77,9 @@ for (const item of ['foundation', 'wall', 'ceiling', 'campfire']) {
 // (a dormant rig calibrated while detached read stale bone matrices and
 // mammoths spawned the size of the island — user screenshot 20, M18). Pose
 // swings the measure ±40%; the bug was ×50–100
-const sizes = await g('window.__g.game.sizeAudit(0.6)')
-check(sizes.length === 0, `every loaded rig within ±60% of its species height${sizes.length ? ' — offenders: ' + JSON.stringify(sizes.slice(0, 4)) : ''}`)
+// (±100%: a rearing apatosaurus mid-attack measures 1.8× its idle height; the bug was ×50)
+const sizes = await g('window.__g.game.sizeAudit(1.0)')
+check(sizes.length === 0, `every loaded rig within ±100% of its species height${sizes.length ? ' — offenders: ' + JSON.stringify(sizes.slice(0, 4)) : ''}`)
 
 // ---------- tame: punch to KO, feed to tame ----------
 // a raptor specifically: since the 1500-dino population, the nearest idle dino

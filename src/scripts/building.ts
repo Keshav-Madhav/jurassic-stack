@@ -218,6 +218,15 @@ export class Building {
     return this.pieces.length
   }
 
+  /** is there a campfire within `r` of (x, z)? (cooking) */
+  nearFire(x: number, z: number, r = 3.5): boolean {
+    for (const p of this.pieces) {
+      if (p.kind !== 'campfire') continue
+      if (Math.hypot(p.gx * CELL - x, p.gz * CELL - z) < r) return true
+    }
+    return false
+  }
+
   restore(pieces: Piece[]): void {
     for (const p of pieces) this.commit(p)
   }
