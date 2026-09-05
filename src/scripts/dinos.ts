@@ -120,6 +120,11 @@ export class Dino {
         }
         o.castShadow = true
         o.receiveShadow = true
+        // our own distance gate decides what's drawn (DRAW_DIST); three's
+        // per-mesh culling used the BIND-space bounding sphere, which for
+        // rigs with scale tracks on the root sits nowhere near the animal —
+        // the mammoth was culled while you stood in front of it (M18)
+        o.frustumCulled = false
       }
     })
     this.model = model
@@ -184,6 +189,28 @@ export class Dino {
     const model = this.model
     this.object.add(model)
     return () => { this.object.remove(model) }
+  }
+
+  /** QA: how this dino is being drawn right now */
+  drawInfo(): Record<string, unknown> {
+    const m = this.model
+    let meshes = 0, visibleMeshes = 0, minY = Infinity, maxY = -Infinity
+    if (m) {
+      m.updateMatrixWorld(true)
+      m.traverse((o) => {
+        if (!(o instanceof THREE.Mesh)) return
+        meshes++
+        if (o.visible) visibleMeshes++
+      })
+      const b = this.skinnedBounds(m)
+      if (b) { minY = b.min.y; maxY = b.max.y }
+    }
+    return {
+      species: this.species.id, state: this.state, dormant: this.dormant, dist: +this.distToPlayer.toFixed(1),
+      loaded: !!m, attached: !!m?.parent, objectVisible: this.object.visible, modelVisible: m?.visible,
+      meshes, visibleMeshes, scale: m ? +m.scale.x.toFixed(4) : null,
+      objectY: +this.object.position.y.toFixed(2), boundsY: [+minY.toFixed(2), +maxY.toFixed(2)],
+    }
   }
 
   /** QA: the rig's rendered height right now (metres), attaching a dormant rig for the measure. */

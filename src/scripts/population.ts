@@ -66,7 +66,7 @@ const HABITATS: Habitat[] = [
   { species: 'pachy', groups: 50, size: [2, 4], minSpawnDist: 200, likes: (_x, _z, f, b) => f < 0.6 && b !== BIOME.DESERT },
   { species: 'parasaur', groups: 40, size: [4, 6], minSpawnDist: 150, likes: (_x, _z, f, b) => f < 0 && b !== BIOME.DESERT && b !== BIOME.SWAMP },
   { species: 'apato', groups: 28, size: [1, 2], minSpawnDist: 400, likes: (_x, _z, f, b) => f < -0.2 && b !== BIOME.DESERT },
-  { species: 'mammoth', groups: 28, size: [2, 3], minSpawnDist: 700, likes: (x, z, f) => (z < -400 || heightAt(x, z) > 60) && f < 0.6 },
+  { species: 'mammoth', groups: 28, size: [2, 3], minSpawnDist: 700, likes: (x, z, f, b) => (z < -400 || heightAt(x, z) > 60) && f < 0.6 && b !== BIOME.DESERT },
 ]
 
 /**

@@ -734,6 +734,8 @@ async function boot(): Promise<void> {
       pieces: () => building.pieces.length,
       dinoStates: () => dinos.map((d) => ({ state: d.state, torpor: d.torpor, saddled: d.saddled })),
       dinoCalib: () => dinos.map((d) => ({ sp: d.species.id, ...d.debugCalib })),
+      /** QA: draw state of the nearest dino of a species */
+      dinoInfo: (id: string) => { const d = nearestDino(Infinity, (x) => x.species.id === id); return d ? d.drawInfo() : null },
       /** QA: every loaded dino's rendered height vs its species height — offenders beyond ±15% */
       sizeAudit: (tolerance = 0.15) => {
         const out: { sp: string; want: number; got: number; dormant: boolean }[] = []
