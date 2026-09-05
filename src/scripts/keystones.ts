@@ -24,7 +24,8 @@ export class Keystones {
     const meta = worldMeta!
     const geo = new THREE.IcosahedronGeometry(0.55, 0)
     for (const site of meta.ruinSites) {
-      if (site.tag === 'caldera-gate') continue // the lock, not a key
+      // only the arc's five sites carry keystones (the minor ruins are scenery)
+      if (site.tag === 'caldera-gate' || !site.keystone) continue
       const mat = new THREE.MeshStandardMaterial({
         color: 0x76e8ff,
         emissive: 0x2fa8d8,

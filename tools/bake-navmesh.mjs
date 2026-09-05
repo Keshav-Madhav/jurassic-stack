@@ -26,28 +26,38 @@ for (let iz = 0; iz < vside; iz++) {
     positions[o + 2] = -half + gz * res
   }
 }
-const indices = new Uint32Array((vside - 1) * (vside - 1) * 6)
-let w = 0
+// The volcano's cone (inside 330 m of the vent) is left OUT of the input: it
+// is unreachable by design (M8's gate is the way in), and its rippled flanks
+// fragmented into so many polygons that the whole volcano TILE failed
+// ("Failed to create Detour navmesh data") and vanished — taking the gate's
+// apron at its foot with it. The sea floor is left out too.
+const VENT = meta.volcano
+const skipVertex = (i) => {
+  const x = positions[i * 3], y = positions[i * 3 + 1], z = positions[i * 3 + 2]
+  return y < -1.5 || Math.hypot(x - VENT.x, z - VENT.z) < 330
+}
+const tmp = []
 for (let iz = 0; iz < vside - 1; iz++) {
   for (let ix = 0; ix < vside - 1; ix++) {
     const a = iz * vside + ix
     const b = a + 1
     const c = a + vside
     const d = c + 1
-    indices[w++] = a; indices[w++] = c; indices[w++] = b
-    indices[w++] = b; indices[w++] = c; indices[w++] = d
+    if (skipVertex(a) && skipVertex(b) && skipVertex(c) && skipVertex(d)) continue
+    tmp.push(a, c, b, b, c, d)
   }
 }
+const indices = new Uint32Array(tmp)
 
 console.time('navmesh')
 const { success, navMesh } = generateTiledNavMesh(positions, indices, {
   cs: 1.2,
   ch: 0.25,
-  tileSize: 128,
+  tileSize: 256, // bigger tiles → more polys allowed per tile (the id space is 22 bits shared between tiles and polys)
   walkableSlopeAngle: 50,
   walkableRadius: Math.ceil(0.5 / 1.2),
   walkableHeight: Math.ceil(1.9 / 0.25),
-  walkableClimb: Math.ceil(0.7 / 0.25),
+  walkableClimb: Math.ceil(1.0 / 0.25), // 1 m: the baked ripple no longer fragments slopes into unwalkable steps
   minRegionArea: 8,
   mergeRegionArea: 20,
 })

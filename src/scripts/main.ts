@@ -109,14 +109,16 @@ async function boot(): Promise<void> {
     new THREE.MeshStandardMaterial({ color: 0x3c3a38, roughness: 0.95 }),
   )
   const doorGroundY = heightAt(gateSite.x, gateSite.z)
-  doorMesh.position.set(gateSite.x, doorGroundY + 7.4, gateSite.z)
+  // the slab fills the arch, which stands 19 m north of the site (against the face)
+  const doorZ = gateSite.z - 19
+  doorMesh.position.set(gateSite.x, doorGroundY + 7.4, doorZ)
   doorMesh.castShadow = true
   doorMesh.receiveShadow = true
   scene.add(doorMesh)
   let doorOpen = save?.doorOpen ?? false
   let doorAnim = 0
   const doorCollider = physics.world.createCollider(
-    RAPIER.ColliderDesc.cuboid(6, 7.75, 0.8).setTranslation(gateSite.x, doorGroundY + 7.4, gateSite.z),
+    RAPIER.ColliderDesc.cuboid(6, 7.75, 0.8).setTranslation(gateSite.x, doorGroundY + 7.4, doorZ),
   )
   if (doorOpen) {
     doorMesh.position.y = doorGroundY - 8.5

@@ -875,6 +875,16 @@ export class Scatter {
       const n = this.nodes[id]
       if (!n.alive || this.treeColliders.has(n.id)) continue
       const rock = n.kind === 'rock' || n.kind === 'boulder' || n.kind === 'outcrop'
+      if (rock) {
+        // rock gets the shape you see: a convex hull of the prop's own
+        // vertices, scaled and turned like the instance (a cylinder stood you
+        // in mid-air beside a boulder and on a flat invisible lid on top)
+        const desc = this.hullFor(n)
+        if (desc) {
+          this.treeColliders.set(n.id, physics.world.createCollider(desc))
+          continue
+        }
+      }
       const half = rock ? n.scale * 0.32 : n.scale * 0.5
       const radius = n.kind === 'outcrop' ? n.scale * 0.3 : rock ? n.scale * 0.42 : n.kind === 'elder' ? n.scale * 0.05 : n.kind === 'redwood' ? n.scale * 0.04 : Math.max(0.3, n.scale * 0.045)
       const col = physics.world.createCollider(
@@ -883,6 +893,34 @@ export class Scatter {
       this.treeColliders.set(n.id, col)
       }
     }
+  }
+
+  /** hull points per kind+variant, in the normalized prop's space (cached) */
+  private hullPoints = new Map<string, Float32Array>()
+  private hullFor(n: ScatterNode): RAPIER.ColliderDesc | null {
+    const kv = `${n.kind}#${n.variant}`
+    let base = this.hullPoints.get(kv)
+    if (!base) {
+      const key = groupKeyOf(n.kind, n.variant, n.x, n.z)
+      const geo = this.props.get(key)?.meshes[0]?.geometry
+      if (!geo) return null
+      const pos = geo.getAttribute('position')
+      // every ~3rd vertex is plenty for a hull; rocks are lumpy, not spiky
+      const stride = Math.max(1, Math.floor(pos.count / 160))
+      const pts: number[] = []
+      for (let i = 0; i < pos.count; i += stride) pts.push(pos.getX(i), pos.getY(i), pos.getZ(i))
+      base = new Float32Array(pts)
+      this.hullPoints.set(kv, base)
+    }
+    const c = Math.cos(n.rotY), s = Math.sin(n.rotY)
+    const out = new Float32Array(base.length)
+    for (let i = 0; i < base.length; i += 3) {
+      const x = base[i] * n.scale, y = base[i + 1] * n.scale, z = base[i + 2] * n.scale
+      out[i] = x * c + z * s
+      out[i + 1] = y
+      out[i + 2] = -x * s + z * c
+    }
+    return RAPIER.ColliderDesc.convexHull(out)?.setTranslation(n.x, n.y, n.z) ?? null
   }
 
   private chunkKeyOf(n: ScatterNode): number {

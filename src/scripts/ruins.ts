@@ -62,15 +62,49 @@ const LAYOUTS: Record<string, PiecePlan[]> = {
   // unseal, M8) at the head of a 70 m causeway of columns, two guardian
   // statues facing the approach — readable from the far end of the corridor
   'caldera-gate': [
-    { model: 'Arch', dx: 0, dz: 0, h: 15, rotY: 0 },
-    { model: 'Column', dx: -11, dz: 3, h: 9 },
-    { model: 'Column', dx: 11, dz: 3, h: 9 },
-    { model: 'Statue', dx: -7, dz: 12, h: 7, rotY: Math.PI },
-    { model: 'Statue', dx: 7, dz: 12, h: 7, rotY: Math.PI },
-    { model: 'Column', dx: -9, dz: 24, h: 7 }, { model: 'Column', dx: 9, dz: 24, h: 7 },
-    { model: 'Column', dx: -9, dz: 38, h: 7 }, { model: 'Column', dx: 9, dz: 38, h: 5, toppled: true },
-    { model: 'Column', dx: -9, dz: 52, h: 6.5, toppled: true }, { model: 'Column', dx: 9, dz: 52, h: 7 },
-    { model: 'Column', dx: -9, dz: 66, h: 7 }, { model: 'Column', dx: 9, dz: 66, h: 7 },
+    { model: 'Arch', dx: 0, dz: -19, h: 15, rotY: 0 }, // set against the rock face behind the apron
+    { model: 'Column', dx: -12, dz: -14, h: 9 },
+    { model: 'Column', dx: 12, dz: -14, h: 9 },
+    { model: 'Statue', dx: -7, dz: 4, h: 7, rotY: Math.PI },
+    { model: 'Statue', dx: 7, dz: 4, h: 7, rotY: Math.PI },
+    { model: 'Column', dx: -9, dz: 18, h: 7 }, { model: 'Column', dx: 9, dz: 18, h: 7 },
+    { model: 'Column', dx: -9, dz: 32, h: 7 }, { model: 'Column', dx: 9, dz: 32, h: 5, toppled: true },
+    { model: 'Column', dx: -9, dz: 46, h: 6.5, toppled: true }, { model: 'Column', dx: 9, dz: 46, h: 7 },
+    { model: 'Column', dx: -9, dz: 60, h: 7 }, { model: 'Column', dx: 9, dz: 60, h: 7 },
+  ],
+}
+
+/** Minor-ruin layouts by kind (hand-geometry gives each site a `layout`). */
+const LAYOUTS_BY_KIND: Record<string, PiecePlan[]> = {
+  columns: [
+    { model: 'Column', dx: -6, dz: 0, h: 4.6 }, { model: 'Column', dx: -2, dz: 0, h: 4.2 },
+    { model: 'Column', dx: 2, dz: 0, h: 3.2, toppled: true }, { model: 'Column', dx: 6, dz: 0, h: 4.8 },
+  ],
+  arch: [
+    { model: 'Arch', dx: 0, dz: 0, h: 6.5, rotY: 0.4 },
+    { model: 'Column', dx: -6, dz: 3, h: 4 }, { model: 'Column', dx: 6, dz: -2, h: 2.8, toppled: true },
+  ],
+  shrine: [
+    { model: 'Column', dx: -4, dz: -4, h: 3.8 }, { model: 'Column', dx: 4, dz: -4, h: 3.8 },
+    { model: 'Column', dx: -4, dz: 4, h: 3.8 }, { model: 'Column', dx: 4, dz: 4, h: 2.6, toppled: true },
+    { model: 'Statue', dx: 0, dz: 0, h: 3.6 },
+  ],
+  circle: [
+    { model: 'Column', dx: 6, dz: 0, h: 4.2 }, { model: 'Column', dx: 3, dz: 5.2, h: 4.2 },
+    { model: 'Column', dx: -3, dz: 5.2, h: 3, toppled: true }, { model: 'Column', dx: -6, dz: 0, h: 4.2 },
+    { model: 'Column', dx: -3, dz: -5.2, h: 4.2 }, { model: 'Column', dx: 3, dz: -5.2, h: 4.2 },
+  ],
+  obelisk: [
+    { model: 'Column', dx: 0, dz: 0, h: 9.5 },
+    { model: 'Column', dx: 5, dz: 3, h: 3.4, toppled: true }, { model: 'Column', dx: -4, dz: -5, h: 3, toppled: true },
+  ],
+  statue: [
+    { model: 'Statue', dx: 0, dz: 0, h: 4.2 },
+    { model: 'Column', dx: 3.5, dz: 2, h: 2.8, toppled: true },
+  ],
+  watch: [
+    { model: 'Column', dx: -3, dz: 0, h: 7.5 }, { model: 'Column', dx: 3, dz: 0, h: 7.5 },
+    { model: 'Arch', dx: 0, dz: -5, h: 5.5, rotY: 0 }, { model: 'Column', dx: 0, dz: 6, h: 3, toppled: true },
   ],
 }
 
@@ -89,7 +123,7 @@ export class Ruins {
     )
 
     for (const site of meta.ruinSites) {
-      const layout = LAYOUTS[site.tag]
+      const layout = LAYOUTS[site.tag] ?? (site.layout ? LAYOUTS_BY_KIND[site.layout] : undefined)
       if (!layout) continue
       for (const plan of layout) {
         const src = models.get(plan.model)!

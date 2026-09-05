@@ -138,7 +138,13 @@ export const HOLM = [
 // A traced polygon held at height `h` (feathered 40 m outward): the flat
 // ground a range otherwise never offers — the Alpine Tarn's cirque bench.
 export const SHELVES = [
-  { name: 'tarn-bench', h: 232, shore: [[-1320, 300], [-1260, 268], [-1200, 300], [-1180, 360], [-1210, 420], [-1270, 442], [-1320, 402], [-1342, 350]] },
+  { name: 'tarn-bench', h: 232, edge: 40, shore: [[-1320, 300], [-1260, 268], [-1200, 300], [-1180, 360], [-1210, 420], [-1270, 442], [-1320, 402], [-1342, 350]] },
+  // THE GATE PORTAL — cut INTO the volcano's south flank: a flat apron at the
+  // foot of a 33 m rock face, the arch set against the face. From the
+  // corridor the mountain has a door in it (user: "the gate isn't dug into
+  // the volcano, it looks like any other ruin")
+  { name: 'gate-apron', h: 71, edge: 70, shore: [[-48, -850], [48, -850], [52, -906], [-52, -906]] },
+  { name: 'gate-wall', h: 104, edge: 12, shore: [[-80, -909], [80, -909], [80, -1010], [-80, -1010]] },
 ]
 
 // ---------- THE LASSO: one river, three parts ----------
@@ -417,12 +423,32 @@ export const BIOMES = [
 // The bake asserts each is flat, dry, open and off the river; the navmesh
 // bake asserts a path from spawn. (Glades for the ones inside woods below.)
 export const RUINS = [
-  { tag: 'beach-statue', x: 180, z: 1500 }, // the spawn beach's east end, pointing inland
-  { tag: 'coast-shrine', x: 560, z: 1480 }, // the root of East Head, looking over the Estuary Bay
-  { tag: 'forest-temple', x: -60, z: 380 }, // the Holm glade, heart of the ring
-  { tag: 'highland-arch', x: 660, z: -240 }, // the terrace on the inflow's east bank, under the east foothills
-  { tag: 'foothill-vault', x: -760, z: -320 }, // the shelf between the west foothills and the pines
-  { tag: 'caldera-gate', x: 0, z: -690 }, // the volcano's south foot, on the open approach
+  // THE ARC — five keystone sites and the gate (layouts by tag in ruins.ts)
+  { tag: 'beach-statue', x: 180, z: 1500, keystone: true }, // the spawn beach's east end, pointing inland
+  { tag: 'coast-shrine', x: 560, z: 1480, keystone: true }, // the root of East Head, looking over the Estuary Bay
+  { tag: 'forest-temple', x: -60, z: 380, keystone: true }, // the Holm glade, heart of the ring
+  { tag: 'highland-arch', x: 660, z: -240, keystone: true }, // the terrace on the inflow's east bank
+  { tag: 'foothill-vault', x: -760, z: -320, keystone: true }, // the shelf between the west foothills and the pines
+  { tag: 'caldera-gate', x: 0, z: -876 }, // mid-apron; the arch stands 19 m north against the rock face
+  // THE REST OF THE LOST CITY — minor ruins across the 4 km (layouts by kind):
+  // a broken ring on the plain, a watch over the estuary, an obelisk in the
+  // dunes, shrines by the lake, arches in the pines, columns in the swamp…
+  { tag: 'plain-circle', x: -250, z: 1000, layout: 'circle' },
+  { tag: 'south-mound-columns', x: 550, z: 938, layout: 'columns' },
+  { tag: 'estuary-watch', x: 850, z: 1240, layout: 'watch' },
+  { tag: 'spit-columns', x: 1472, z: 1372, layout: 'columns' },
+  { tag: 'coast-statue', x: 1498, z: 1034, layout: 'statue' },
+  { tag: 'dune-obelisk', x: -950, z: 1150, layout: 'obelisk' },
+  { tag: 'dune-shrine', x: -700, z: 1280, layout: 'shrine' },
+  { tag: 'aster-shrine', x: -814, z: 44, layout: 'shrine' }, // the lake's north-east bay
+  { tag: 'ring-west-watch', x: -620, z: 420, layout: 'watch' },
+  { tag: 'holm-north-shrine', x: -60, z: 110, layout: 'shrine' },
+  { tag: 'swamp-columns', x: 780, z: 640, layout: 'columns' },
+  { tag: 'foothill-circle', x: 1084, z: 86, layout: 'circle' }, // up on the east foothills
+  { tag: 'pine-arch-west', x: -500, z: -520, layout: 'arch' },
+  { tag: 'pine-arch-east', x: 360, z: -620, layout: 'arch' },
+  { tag: 'horns-watch', x: -916, z: -1048, layout: 'watch' },
+  { tag: 'wellspring-columns', x: 1030, z: -1174, layout: 'columns' }, // above the gorge, by the pool
 ]
 
 export const CLEARINGS = [
@@ -440,6 +466,17 @@ export const CLEARINGS = [
   [[-120, 1250], [-60, 1230], [20, 1250], [50, 1300], [20, 1350], [-50, 1365], [-110, 1330], [-135, 1285]],
   // the bank meadow — open ground on the Eastbank above the inflow
   [[860, -80], [920, -100], [980, -70], [990, -10], [950, 40], [880, 40], [850, -20]],
+  // glades for the minor ruins that stand in woods
+  [[-850, 10], [-820, -5], [-780, 10], [-770, 45], [-790, 78], [-830, 82], [-855, 50]],          // aster-shrine
+  [[-660, 395], [-630, 380], [-590, 395], [-580, 425], [-600, 455], [-640, 460], [-665, 430]],   // ring-west-watch
+  [[-100, 85], [-70, 70], [-30, 85], [-20, 115], [-40, 145], [-80, 150], [-105, 120]],           // holm-north-shrine
+  [[-540, -545], [-510, -560], [-470, -545], [-460, -515], [-480, -485], [-520, -480], [-545, -510]], // pine-arch-west
+  [[320, -645], [350, -660], [390, -645], [400, -615], [380, -585], [340, -580], [315, -610]],   // pine-arch-east
+  [[-940, -1075], [-910, -1090], [-870, -1075], [-860, -1045], [-880, -1015], [-920, -1010], [-945, -1040]], // horns-watch
+  [[995, -1200], [1025, -1215], [1065, -1200], [1075, -1170], [1055, -1140], [1015, -1135], [990, -1165]],   // wellspring-columns
+  [[1050, 60], [1080, 45], [1120, 60], [1130, 90], [1110, 120], [1070, 125], [1045, 95]],          // foothill-circle
+  [[520, 905], [550, 890], [590, 905], [600, 935], [580, 965], [540, 970], [515, 940]],          // south-mound-columns
+  [[-730, 1255], [-700, 1240], [-660, 1255], [-650, 1285], [-670, 1315], [-710, 1320], [-735, 1290]], // dune-shrine
 ]
 
 /** Signed distance to a traced polygon: negative inside. */

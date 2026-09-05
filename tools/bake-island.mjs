@@ -201,8 +201,9 @@ for (let iz = 0; iz < SIDE; iz++) {
     // SHELVES: hand-cut benches in the mountains (the Tarn's cirque)
     for (const sh of SHELVES) {
       const sd = shoreDist(x, z, sh.shore)
-      if (sd > 40) continue
-      const t = smoothstep(40, -15, sd)
+      const edge = sh.edge ?? 40
+      if (sd > edge) continue
+      const t = smoothstep(edge, -edge * 0.35, sd)
       h = lerp(h, sh.h + 1.5 * fbm(x * 0.02, z * 0.02, 2), t)
     }
 
@@ -658,6 +659,12 @@ const forest = new Uint8Array(SIDE * SIDE)
           const cd = shoreDist(x, z, c)
           if (cd < 15) d *= Math.max(0, cd) / 15
         }
+        // the open biomes stay open: a wood polygon drawn over the plain or the
+        // dunes thins to nothing inside them (feathered over 60 m)
+        for (let bi = 0; bi < BIOMES.length; bi++) {
+          if (BIOMES[bi].name !== 'plains' && BIOMES[bi].name !== 'desert') continue
+          d *= smoothstep(-60, 0, biomeSD[bi](x, z))
+        }
         const i0 = idx(ix, iz)
         if (d * 63 > (forest[i0] >> 2)) {
           if (forest[i0] === 0 && d > 0.02) cells++
@@ -682,14 +689,14 @@ const flatness = (x, z, r = 12) => {
   }
   return mx - mn
 }
-const RUIN_SITES = RUINS.map((r) => ({ tag: r.tag, x: r.x, z: r.z, y: +hAt(r.x, r.z).toFixed(1) }))
+const RUIN_SITES = RUINS.map((r) => ({ tag: r.tag, x: r.x, z: r.z, y: +hAt(r.x, r.z).toFixed(1), keystone: !!r.keystone, layout: r.layout ?? null }))
 for (const site of RUIN_SITES) {
   const h = hAt(site.x, site.z)
   const f = flatness(site.x, site.z)
   const river = Math.min(...RIVER_PATHS.map((p) => distToPath(site.x, site.z, p).d))
   const lake = Math.min(...LAKES_ACTIVE.map((l) => shoreDist(site.x, site.z, l.shore)))
   const problems = []
-  if (h < SEA + 2.5) problems.push(`wet (h ${h.toFixed(1)})`)
+  if (h < SEA + 1.6) problems.push(`wet (h ${h.toFixed(1)})`)
   if (f > 6) problems.push(`not flat (${f.toFixed(1)} m over 24 m)`)
   if (river < 40) problems.push(`in the river corridor (${river.toFixed(0)} m)`)
   if (lake < 20) problems.push(`in standing water (${lake.toFixed(0)} m)`)

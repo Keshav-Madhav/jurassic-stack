@@ -41,7 +41,7 @@ export function shoreDist(px: number, pz: number, shore: [number, number][]): nu
   }
   return inside ? -minD : minD
 }
-export interface RuinSite { tag: string; x: number; z: number; y: number }
+export interface RuinSite { tag: string; x: number; z: number; y: number; keystone?: boolean; layout?: string | null }
 /** One part of the river: a flowing leg or the dead-water ring. */
 export interface RiverPart {
   name: string

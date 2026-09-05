@@ -843,69 +843,310 @@
       "tag": "beach-statue",
       "x": 180,
       "z": 1500,
-      "y": 2.9
+      "y": 2.9,
+      "keystone": true,
+      "layout": null
     },
     {
       "tag": "coast-shrine",
       "x": 560,
       "z": 1480,
-      "y": 4.6
+      "y": 4.6,
+      "keystone": true,
+      "layout": null
     },
     {
       "tag": "forest-temple",
       "x": -60,
       "z": 380,
-      "y": 36
+      "y": 36,
+      "keystone": true,
+      "layout": null
     },
     {
       "tag": "highland-arch",
       "x": 660,
       "z": -240,
-      "y": 32.9
+      "y": 32.9,
+      "keystone": true,
+      "layout": null
     },
     {
       "tag": "foothill-vault",
       "x": -760,
       "z": -320,
-      "y": 45.3
+      "y": 45.3,
+      "keystone": true,
+      "layout": null
     },
     {
       "tag": "caldera-gate",
       "x": 0,
-      "z": -690,
-      "y": 36.3
+      "z": -876,
+      "y": 72.1,
+      "keystone": false,
+      "layout": null
+    },
+    {
+      "tag": "plain-circle",
+      "x": -250,
+      "z": 1000,
+      "y": 13.6,
+      "keystone": false,
+      "layout": "circle"
+    },
+    {
+      "tag": "south-mound-columns",
+      "x": 550,
+      "z": 938,
+      "y": 49.2,
+      "keystone": false,
+      "layout": "columns"
+    },
+    {
+      "tag": "estuary-watch",
+      "x": 850,
+      "z": 1240,
+      "y": 6.4,
+      "keystone": false,
+      "layout": "watch"
+    },
+    {
+      "tag": "spit-columns",
+      "x": 1472,
+      "z": 1372,
+      "y": 2.4,
+      "keystone": false,
+      "layout": "columns"
+    },
+    {
+      "tag": "coast-statue",
+      "x": 1498,
+      "z": 1034,
+      "y": 1.7,
+      "keystone": false,
+      "layout": "statue"
+    },
+    {
+      "tag": "dune-obelisk",
+      "x": -950,
+      "z": 1150,
+      "y": 7.6,
+      "keystone": false,
+      "layout": "obelisk"
+    },
+    {
+      "tag": "dune-shrine",
+      "x": -700,
+      "z": 1280,
+      "y": 13.9,
+      "keystone": false,
+      "layout": "shrine"
+    },
+    {
+      "tag": "aster-shrine",
+      "x": -814,
+      "z": 44,
+      "y": 50.6,
+      "keystone": false,
+      "layout": "shrine"
+    },
+    {
+      "tag": "ring-west-watch",
+      "x": -620,
+      "z": 420,
+      "y": 32.1,
+      "keystone": false,
+      "layout": "watch"
+    },
+    {
+      "tag": "holm-north-shrine",
+      "x": -60,
+      "z": 110,
+      "y": 36.9,
+      "keystone": false,
+      "layout": "shrine"
+    },
+    {
+      "tag": "swamp-columns",
+      "x": 780,
+      "z": 640,
+      "y": 4.3,
+      "keystone": false,
+      "layout": "columns"
+    },
+    {
+      "tag": "foothill-circle",
+      "x": 1084,
+      "z": 86,
+      "y": 92.5,
+      "keystone": false,
+      "layout": "circle"
+    },
+    {
+      "tag": "pine-arch-west",
+      "x": -500,
+      "z": -520,
+      "y": 34.8,
+      "keystone": false,
+      "layout": "arch"
+    },
+    {
+      "tag": "pine-arch-east",
+      "x": 360,
+      "z": -620,
+      "y": 44.3,
+      "keystone": false,
+      "layout": "arch"
+    },
+    {
+      "tag": "horns-watch",
+      "x": -916,
+      "z": -1048,
+      "y": 61.5,
+      "keystone": false,
+      "layout": "watch"
+    },
+    {
+      "tag": "wellspring-columns",
+      "x": 1030,
+      "z": -1174,
+      "y": 47.4,
+      "keystone": false,
+      "layout": "columns"
     }
   ],
   "ruins": [
     {
       "tag": "beach-statue",
       "x": 180,
-      "z": 1500
+      "z": 1500,
+      "keystone": true
     },
     {
       "tag": "coast-shrine",
       "x": 560,
-      "z": 1480
+      "z": 1480,
+      "keystone": true
     },
     {
       "tag": "forest-temple",
       "x": -60,
-      "z": 380
+      "z": 380,
+      "keystone": true
     },
     {
       "tag": "highland-arch",
       "x": 660,
-      "z": -240
+      "z": -240,
+      "keystone": true
     },
     {
       "tag": "foothill-vault",
       "x": -760,
-      "z": -320
+      "z": -320,
+      "keystone": true
     },
     {
       "tag": "caldera-gate",
       "x": 0,
-      "z": -690
+      "z": -876
+    },
+    {
+      "tag": "plain-circle",
+      "x": -250,
+      "z": 1000,
+      "layout": "circle"
+    },
+    {
+      "tag": "south-mound-columns",
+      "x": 550,
+      "z": 938,
+      "layout": "columns"
+    },
+    {
+      "tag": "estuary-watch",
+      "x": 850,
+      "z": 1240,
+      "layout": "watch"
+    },
+    {
+      "tag": "spit-columns",
+      "x": 1472,
+      "z": 1372,
+      "layout": "columns"
+    },
+    {
+      "tag": "coast-statue",
+      "x": 1498,
+      "z": 1034,
+      "layout": "statue"
+    },
+    {
+      "tag": "dune-obelisk",
+      "x": -950,
+      "z": 1150,
+      "layout": "obelisk"
+    },
+    {
+      "tag": "dune-shrine",
+      "x": -700,
+      "z": 1280,
+      "layout": "shrine"
+    },
+    {
+      "tag": "aster-shrine",
+      "x": -814,
+      "z": 44,
+      "layout": "shrine"
+    },
+    {
+      "tag": "ring-west-watch",
+      "x": -620,
+      "z": 420,
+      "layout": "watch"
+    },
+    {
+      "tag": "holm-north-shrine",
+      "x": -60,
+      "z": 110,
+      "layout": "shrine"
+    },
+    {
+      "tag": "swamp-columns",
+      "x": 780,
+      "z": 640,
+      "layout": "columns"
+    },
+    {
+      "tag": "foothill-circle",
+      "x": 1084,
+      "z": 86,
+      "layout": "circle"
+    },
+    {
+      "tag": "pine-arch-west",
+      "x": -500,
+      "z": -520,
+      "layout": "arch"
+    },
+    {
+      "tag": "pine-arch-east",
+      "x": 360,
+      "z": -620,
+      "layout": "arch"
+    },
+    {
+      "tag": "horns-watch",
+      "x": -916,
+      "z": -1048,
+      "layout": "watch"
+    },
+    {
+      "tag": "wellspring-columns",
+      "x": 1030,
+      "z": -1174,
+      "layout": "columns"
     }
   ],
   "swamp": {
@@ -3118,7 +3359,307 @@
         850,
         -20
       ]
+    ],
+    [
+      [
+        -850,
+        10
+      ],
+      [
+        -820,
+        -5
+      ],
+      [
+        -780,
+        10
+      ],
+      [
+        -770,
+        45
+      ],
+      [
+        -790,
+        78
+      ],
+      [
+        -830,
+        82
+      ],
+      [
+        -855,
+        50
+      ]
+    ],
+    [
+      [
+        -660,
+        395
+      ],
+      [
+        -630,
+        380
+      ],
+      [
+        -590,
+        395
+      ],
+      [
+        -580,
+        425
+      ],
+      [
+        -600,
+        455
+      ],
+      [
+        -640,
+        460
+      ],
+      [
+        -665,
+        430
+      ]
+    ],
+    [
+      [
+        -100,
+        85
+      ],
+      [
+        -70,
+        70
+      ],
+      [
+        -30,
+        85
+      ],
+      [
+        -20,
+        115
+      ],
+      [
+        -40,
+        145
+      ],
+      [
+        -80,
+        150
+      ],
+      [
+        -105,
+        120
+      ]
+    ],
+    [
+      [
+        -540,
+        -545
+      ],
+      [
+        -510,
+        -560
+      ],
+      [
+        -470,
+        -545
+      ],
+      [
+        -460,
+        -515
+      ],
+      [
+        -480,
+        -485
+      ],
+      [
+        -520,
+        -480
+      ],
+      [
+        -545,
+        -510
+      ]
+    ],
+    [
+      [
+        320,
+        -645
+      ],
+      [
+        350,
+        -660
+      ],
+      [
+        390,
+        -645
+      ],
+      [
+        400,
+        -615
+      ],
+      [
+        380,
+        -585
+      ],
+      [
+        340,
+        -580
+      ],
+      [
+        315,
+        -610
+      ]
+    ],
+    [
+      [
+        -940,
+        -1075
+      ],
+      [
+        -910,
+        -1090
+      ],
+      [
+        -870,
+        -1075
+      ],
+      [
+        -860,
+        -1045
+      ],
+      [
+        -880,
+        -1015
+      ],
+      [
+        -920,
+        -1010
+      ],
+      [
+        -945,
+        -1040
+      ]
+    ],
+    [
+      [
+        995,
+        -1200
+      ],
+      [
+        1025,
+        -1215
+      ],
+      [
+        1065,
+        -1200
+      ],
+      [
+        1075,
+        -1170
+      ],
+      [
+        1055,
+        -1140
+      ],
+      [
+        1015,
+        -1135
+      ],
+      [
+        990,
+        -1165
+      ]
+    ],
+    [
+      [
+        1050,
+        60
+      ],
+      [
+        1080,
+        45
+      ],
+      [
+        1120,
+        60
+      ],
+      [
+        1130,
+        90
+      ],
+      [
+        1110,
+        120
+      ],
+      [
+        1070,
+        125
+      ],
+      [
+        1045,
+        95
+      ]
+    ],
+    [
+      [
+        520,
+        905
+      ],
+      [
+        550,
+        890
+      ],
+      [
+        590,
+        905
+      ],
+      [
+        600,
+        935
+      ],
+      [
+        580,
+        965
+      ],
+      [
+        540,
+        970
+      ],
+      [
+        515,
+        940
+      ]
+    ],
+    [
+      [
+        -730,
+        1255
+      ],
+      [
+        -700,
+        1240
+      ],
+      [
+        -660,
+        1255
+      ],
+      [
+        -650,
+        1285
+      ],
+      [
+        -670,
+        1315
+      ],
+      [
+        -710,
+        1320
+      ],
+      [
+        -735,
+        1290
+      ]
     ]
   ],
-  "bakedAt": "2026-09-04T20:01:20.883Z"
+  "bakedAt": "2026-09-05T06:07:49.472Z"
 }
