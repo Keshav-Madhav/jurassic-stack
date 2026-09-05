@@ -584,7 +584,7 @@ export class Scatter {
               // and cap the lightness (Rock1 read as white chalk in the sun)
               if (mat.map) { mat.map = null; mat.color.setScalar(0.4); mat.needsUpdate = true }
               const lum = mat.color.r * 0.3 + mat.color.g * 0.6 + mat.color.b * 0.1
-              mat.color.setRGB(1, 1.02, 1.06).multiplyScalar(THREE.MathUtils.clamp(lum * 0.8 + 0.1, 0.16, 0.36))
+              mat.color.setRGB(1, 1.0, 1.02).multiplyScalar(THREE.MathUtils.clamp(lum * 0.6 + 0.08, 0.13, 0.27)) // weathered stone, not chalk
             }
           : kind === 'bush'
             ? (mat: THREE.MeshStandardMaterial) => {

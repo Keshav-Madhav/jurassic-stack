@@ -404,3 +404,8 @@ Findings and fixes, each measured with the new jitter meter (`__g.frameStats()`,
 - [x] **Treelines**: feathers widened to 90–120 m and the drawn wood line wobbles ±40% of the feather in the bake (tongues and bays, not a band); COPSES grow in the open where a slow noise peaks (0.18 km² of thickets); 4% of open cells carry a lone tree — no wood ends at a line any more
 - [x] **The grass field** (`grass.ts`): a streamed carpet of painted grass cards (three crossed quads, six tris, a canvas-painted blade sprite) generated per 48 m tile from a hash around the viewer — 7×7 tiles, ~25K tufts in view, one tile built per frame; thinner under a closed canopy, a few dry tufts in the dunes, none in water. The scatter keeps a modest harvestable sprinkle
 - [x] Jitter meter: 0 hitches standing / walking / sprinting / flying, max 16.8 ms. 73/73
+
+### M14 — 500 DINOS, ELEVEN SPECIES (user: "more dinos, maybe 500, and variety")
+- [x] Seven species wired from the intaken roster, clip maps read off each GLB: **Carnotaurus** (the sprinter), **Allosaurus** (the north's second apex), **Terror Bird** (flocks on the plain and dune edges), **Pachycephalosaurus** (skittish headbutter), **Parasaurolophus** (herds on the plain, the first easy ride), **Apatosaurus** (8.5 m sauropod), **Mammoth** (highlands, pairs and threes). Dilophosaurus/Sauropelta/Spinosaurus wait on rigs with real clips
+- [x] Population 200 → 500 by habitat (carnivores by wood and latitude, herbivores by open ground, mammoths above 60 m or north of the pines); a parasaur herd grazes the south plain by spawn. Dormancy keeps it at 60 fps; jitter meter clean at every speed
+- [x] `__g.game.gotoSpecies(id)` for portraits; stone recolour darkened again (boulders read as chalk in the sun). 73/73

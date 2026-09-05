@@ -54,21 +54,26 @@ interface Habitat {
 }
 
 const HABITATS: Habitat[] = [
-  // raptor packs hunt the woods and their edges — everywhere but the desert
-  { species: 'raptor', groups: 24, size: [3, 4], minSpawnDist: 220, likes: (_x, _z, f, b) => f > -0.5 && b !== BIOME.DESERT },
-  // trike herds graze open ground and wood edges, never the swamp
-  { species: 'trike', groups: 14, size: [3, 5], minSpawnDist: 160, likes: (_x, _z, f, b) => f < 0.2 && b !== BIOME.SWAMP },
-  // stego pairs browse the wood edges
-  { species: 'stego', groups: 20, size: [2, 2], minSpawnDist: 160, likes: (_x, _z, f) => f < 0.5 },
-  // rexes walk alone in the north — the danger gradient the arc is built on
-  { species: 'trex', groups: 14, size: [1, 1], minSpawnDist: 900, likes: (_x, z, f) => z < -200 && f < 0.3 },
+  // carnivores
+  { species: 'raptor', groups: 28, size: [3, 4], minSpawnDist: 220, likes: (_x, _z, f, b) => f > -0.5 && b !== BIOME.DESERT },
+  { species: 'carno', groups: 14, size: [1, 2], minSpawnDist: 500, likes: (_x, _z, f, b) => f < 0.4 && b !== BIOME.SWAMP },
+  { species: 'allo', groups: 12, size: [1, 1], minSpawnDist: 800, likes: (_x, z, f) => z < -100 && f < 0.5 },
+  { species: 'trex', groups: 16, size: [1, 1], minSpawnDist: 900, likes: (_x, z, f) => z < -200 && f < 0.3 },
+  { species: 'terrorbird', groups: 12, size: [3, 4], minSpawnDist: 380, likes: (_x, _z, f, b) => f < -0.2 && b !== BIOME.SWAMP },
+  // herbivores
+  { species: 'trike', groups: 16, size: [3, 5], minSpawnDist: 160, likes: (_x, _z, f, b) => f < 0.2 && b !== BIOME.SWAMP },
+  { species: 'stego', groups: 22, size: [2, 2], minSpawnDist: 160, likes: (_x, _z, f) => f < 0.5 },
+  { species: 'pachy', groups: 18, size: [2, 4], minSpawnDist: 200, likes: (_x, _z, f, b) => f < 0.6 && b !== BIOME.DESERT },
+  { species: 'parasaur', groups: 14, size: [4, 6], minSpawnDist: 150, likes: (_x, _z, f, b) => f < 0 && b !== BIOME.DESERT && b !== BIOME.SWAMP },
+  { species: 'apato', groups: 10, size: [1, 2], minSpawnDist: 400, likes: (_x, _z, f, b) => f < -0.2 && b !== BIOME.DESERT },
+  { species: 'mammoth', groups: 10, size: [2, 3], minSpawnDist: 700, likes: (x, z, f) => (z < -400 || heightAt(x, z) > 60) && f < 0.6 },
 ]
 
 /**
  * Lay out the wild roster. `extra` are hand-placed spawns added first (the
  * spawn-beach raptor pack the taming loop relies on, the herd on the plain).
  */
-export function wildPopulation(seed = 20260904, target = 200): WildSpawn[] {
+export function wildPopulation(seed = 20260904, target = 500): WildSpawn[] {
   const rand = mulberry32(seed)
   const out: WildSpawn[] = []
   // the spawn-beach raptors: three, but spread out — a tight pack all
@@ -77,6 +82,8 @@ export function wildPopulation(seed = 20260904, target = 200): WildSpawn[] {
   // a herd on the south plain, and a few stegos at the Southwood's edge
   for (const [dx, dz] of [[-220, -560], [-232, -548], [-208, -572], [-244, -566], [-216, -540]]) out.push({ species: 'trike', x: SPAWN.x + dx, z: SPAWN.z + dz })
   for (const [dx, dz] of [[260, -160], [268, -172], [-380, -240], [-392, -228], [120, -420], [132, -412]]) out.push({ species: 'stego', x: SPAWN.x + dx, z: SPAWN.z + dz })
+  // a parasaur herd grazing the south plain — the first easy ride
+  for (const [dx, dz] of [[-300, -620], [-312, -608], [-288, -632], [-322, -628], [-296, -600]]) out.push({ species: 'parasaur', x: SPAWN.x + dx, z: SPAWN.z + dz })
   for (const [x, z] of [[300, -900], [-500, -800], [900, -400], [-900, -600]]) out.push({ species: 'trex', x, z })
 
   for (const hab of HABITATS) {

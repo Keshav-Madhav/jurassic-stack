@@ -694,6 +694,17 @@ async function boot(): Promise<void> {
         cam.snap()
         return true
       },
+      /** QA: stand `dist` m south of the nearest dino of a species, facing it */
+      gotoSpecies: (id: string, dist = 8) => {
+        const d = nearestDino(Infinity, (x) => x.species.id === id)
+        if (!d) return null
+        const px = d.object.position.x
+        const pz = d.object.position.z + dist
+        player.mover.teleport(px, heightAt(px, pz) + 1.2, pz)
+        cam.yaw = 0
+        cam.snap()
+        return { x: d.object.position.x, z: d.object.position.z, state: d.state, dormant: d.dormant }
+      },
       lookAtNearestNode: () => {
         const from = feetPos()
         let best: { x: number; y: number; z: number } | null = null
