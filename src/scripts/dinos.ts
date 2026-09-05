@@ -20,9 +20,26 @@ const loader = new GLTFLoader()
 loader.setMeshoptDecoder(MeshoptDecoder)
 const modelCache = new Map<string, Promise<{ scene: THREE.Group; animations: THREE.AnimationClip[] }>>()
 
+// Rig clones are paced: 500 dinos resolving off one model load used to clone
+// 500 skeletons in a single microtask flush — a quarter-second hitch on a
+// live connection right as the world came up. A few per frame instead.
+const cloneQueue: (() => void)[] = []
+let clonePump = false
+function pumpClones(): void {
+  for (let i = 0; i < 4 && cloneQueue.length; i++) cloneQueue.shift()!()
+  if (cloneQueue.length) requestAnimationFrame(pumpClones)
+  else clonePump = false
+}
+function whenMyTurn(): Promise<void> {
+  return new Promise((resolve) => {
+    cloneQueue.push(resolve)
+    if (!clonePump) { clonePump = true; requestAnimationFrame(pumpClones) }
+  })
+}
 async function loadModel(url: string) {
   if (!modelCache.has(url)) modelCache.set(url, loader.loadAsync(url))
   const gltf = await modelCache.get(url)!
+  await whenMyTurn()
   return { scene: (await import('three/addons/utils/SkeletonUtils.js')).clone(gltf.scene) as THREE.Group, animations: gltf.animations }
 }
 
