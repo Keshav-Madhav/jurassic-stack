@@ -28,12 +28,16 @@ export class Ambience {
     const buf = ctx.createBuffer(1, ctx.sampleRate * 4, ctx.sampleRate)
     const d = buf.getChannelData(0)
     let last = 0
+    let peak = 0
     for (let i = 0; i < d.length; i++) {
       // pink-ish: integrate a little so the hiss has body
       const w = Math.random() * 2 - 1
       last = last * 0.97 + w * 0.03
       d[i] = last * 6 + w * 0.15
+      peak = Math.max(peak, Math.abs(d[i]))
     }
+    // normalised: the raw sum ran past ±1 and clipped at the output — a hard, sandy edge on the wind
+    for (let i = 0; i < d.length; i++) d[i] /= peak
     const noise = ctx.createBufferSource()
     noise.buffer = buf
     noise.loop = true
@@ -50,24 +54,28 @@ export class Ambience {
     this.birdGain.gain.value = 0.5
     this.birdGain.connect(this.master)
 
-    // insects: a buzzing tremolo
+    // insects: a soft chirring tremolo, night only. The tremolo MULTIPLIES —
+    // the first cut wired the LFO straight into the level gain, which summed
+    // ±0.5 onto it: a 3 kHz sawtooth at half volume, day and night, the
+    // "constant piercing ringing" (M18). Now: osc → bandpass → tremolo stage
+    // (gain = 0.5 bias + 0.5 LFO, so 0..1) → level (0 by day) → master
     this.bugOsc = ctx.createOscillator()
-    this.bugOsc.type = 'sawtooth'
-    this.bugOsc.frequency.value = 3200
+    this.bugOsc.type = 'triangle'
+    this.bugOsc.frequency.value = 2400
     const bugFilter = ctx.createBiquadFilter()
     bugFilter.type = 'bandpass'
-    bugFilter.frequency.value = 3600
-    bugFilter.Q.value = 6
+    bugFilter.frequency.value = 2600
+    bugFilter.Q.value = 4
+    const tremStage = ctx.createGain()
+    tremStage.gain.value = 0.5 // the bias; the LFO adds ±0.5 to it
+    const trem = ctx.createOscillator()
+    trem.frequency.value = 11
+    const tremDepth = ctx.createGain()
+    tremDepth.gain.value = 0.5
+    trem.connect(tremDepth).connect(tremStage.gain)
     this.bugGain = ctx.createGain()
     this.bugGain.gain.value = 0
-    const trem = ctx.createOscillator()
-    trem.frequency.value = 9
-    const tremGain = ctx.createGain()
-    tremGain.gain.value = 0.5
-    const tremBias = ctx.createGain()
-    tremBias.gain.value = 1
-    trem.connect(tremGain).connect(this.bugGain.gain)
-    this.bugOsc.connect(bugFilter).connect(this.bugGain).connect(this.master)
+    this.bugOsc.connect(bugFilter).connect(tremStage).connect(this.bugGain).connect(this.master)
     this.bugOsc.start()
     trem.start()
   }
@@ -79,12 +87,12 @@ export class Ambience {
     for (let i = 0; i < notes; i++) {
       const o = ctx.createOscillator()
       const g = ctx.createGain()
-      const f0 = 1800 + Math.random() * 2200
+      const f0 = 1400 + Math.random() * 1600
       const t0 = now + i * (0.09 + Math.random() * 0.08)
       o.frequency.setValueAtTime(f0, t0)
       o.frequency.exponentialRampToValueAtTime(f0 * (1.2 + Math.random() * 0.6), t0 + 0.07)
       g.gain.setValueAtTime(0, t0)
-      g.gain.linearRampToValueAtTime(0.08, t0 + 0.015)
+      g.gain.linearRampToValueAtTime(0.05, t0 + 0.015)
       g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.11)
       o.connect(g).connect(this.birdGain!)
       o.start(t0)
@@ -126,8 +134,8 @@ export class Ambience {
       this.chirp()
       this.nextBird = this.t + 2 + Math.random() * 9 * (1.4 - daylight)
     }
-    // insects at night
+    // insects at night (a level, smoothed so dusk doesn't switch them on)
     const night = 1 - Math.min(1, daylight * 3)
-    this.bugGain.gain.value = 0.012 * night
+    this.bugGain.gain.setTargetAtTime(0.02 * night, this.ctx.currentTime, 0.5)
   }
 }

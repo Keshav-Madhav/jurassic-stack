@@ -12,6 +12,7 @@ import * as THREE from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { heightAt, lodFloorAt, normalAt, forestMaskAt, forestKindAt, biomeAt, shoreDist, BIOME, FOREST_KIND, SEA_LEVEL, HALF_SIZE, SPAWN, VOLCANO, worldMeta } from './heightmap'
 import { buildCanopyTree, buildElderTree, buildMushroom, buildRedwood, buildMangrove, buildDriedBush, buildCactus, buildReeds, buildPebbles, buildStones, buildSticks, buildOutcrop, buildGrassCard, buildFarPine } from './trees'
 import { captureImpostor } from './impostor'
@@ -205,22 +206,31 @@ const GROUND_COVER = new Set<NodeKind>(['grass', 'fern', 'flower', 'mushroom', '
 /** small clutter vanishes sooner than bushes — a pebble is nothing at 100 m */
 const COVER_DIST_OVERRIDE: Partial<Record<NodeKind, number>> = { pebbles: 110, sticks: 120, stones: 200, mushroom: 150, flower: 200, grass: 140 }
 /** Cover cells beyond this range from the player are hidden entirely. */
-const COVER_DRAW_DIST = 290
+let COVER_DRAW_DIST = 290
 /** Tree LOD bands (viewer → cell box): the full model inside FAR; the built
  *  kinds' coarse twin (20-tri leaf masses) to MID; beyond that the IMPOSTOR —
  *  three textured cards carrying the real model's side and top views,
  *  captured at load (impostor.ts). Kinds without a coarse twin go straight
  *  to cards at FAR. (User: "trees become billboards too soon" — the bands
  *  were 180 m → cards.) */
-const TREE_LOD_FAR = 240
-const TREE_LOD_MID = 480
+let TREE_LOD_FAR = 240
+let TREE_LOD_MID = 480
+/** QA/tuning: move the LOD bands at runtime (call scatter.updateVisibility after) */
+export function setLodBands(bands: { far?: number; mid?: number; cover?: number }): { far: number; mid: number; cover: number } {
+  if (bands.far !== undefined) TREE_LOD_FAR = bands.far
+  if (bands.mid !== undefined) TREE_LOD_MID = bands.mid
+  if (bands.cover !== undefined) COVER_DRAW_DIST = bands.cover
+  return { far: TREE_LOD_FAR, mid: TREE_LOD_MID, cover: COVER_DRAW_DIST }
+}
 /** kinds that get impostors (everything tall enough to matter at a distance) */
 const IMPOSTOR_KINDS = new Set<NodeKind>(['tree', 'elder', 'redwood', 'pine', 'palm', 'deadtree', 'willow', 'mangrove', 'outcrop'])
 /** Small solid props (boulders, logs) vanish beyond this — a 2 m rock is a
  *  pixel at 600 m, but 2,000 of them at full geometry are not free. */
-const SMALL_SOLID_DRAW_DIST = 600
-const SMALL_SOLID = new Set<NodeKind>(['rock', 'boulder'])
-const SMALL_SOLID_DIST: Partial<Record<NodeKind, number>> = { rock: 600, boulder: 1000 }
+// (rocks to 600 m and boulders to 1000 m cost 124 draw calls at the wood line
+// for ~800 stones nobody could see — M18 draw audit)
+const SMALL_SOLID_DRAW_DIST = 420
+const SMALL_SOLID = new Set<NodeKind>(['rock', 'boulder', 'outcrop'])
+const SMALL_SOLID_DIST: Partial<Record<NodeKind, number>> = { rock: 220, boulder: 420, outcrop: 480 }
 /** outcrops keep their far twin (coarse stones) to the horizon */
 
 function mulberry32(seed: number): () => number {
@@ -342,6 +352,7 @@ class InstancedProp {
     })
     const groundY = Number.isFinite(centralMinY) ? centralMinY : box.min.y
 
+    let parts: { geo: THREE.BufferGeometry; mat: THREE.MeshStandardMaterial }[] = []
     root.traverse((o) => {
       if (!(o instanceof THREE.Mesh)) return
       const geo = toFloatGeometry(o.geometry as THREE.BufferGeometry)
@@ -370,6 +381,36 @@ class InstancedProp {
         mat.color.lerp(new THREE.Color(0x14300f), 0.55)
       }
       if (this.recolor) this.recolor(mat)
+      parts.push({ geo, mat })
+    })
+    // UNTEXTURED submeshes fold into one vertex-coloured geometry: a prop's
+    // draw calls are per submesh per cell, and the mossy log GLB's five flat
+    // materials were 25 draw calls for 49 logs at the wood line (M18 audit)
+    const plain = parts.filter((p) => !p.mat.map && !p.mat.alphaMap && !p.mat.vertexColors)
+    if (plain.length >= 2) {
+      const merged: THREE.BufferGeometry[] = []
+      for (const p of plain) {
+        const g = p.geo
+        for (const name of Object.keys(g.attributes)) if (name !== 'position' && name !== 'normal') g.deleteAttribute(name)
+        const n = g.getAttribute('position').count
+        const col = new Float32Array(n * 3)
+        for (let i = 0; i < n; i++) { col[i * 3] = p.mat.color.r; col[i * 3 + 1] = p.mat.color.g; col[i * 3 + 2] = p.mat.color.b }
+        g.setAttribute('color', new THREE.BufferAttribute(col, 3))
+        if (!g.getAttribute('normal')) g.computeVertexNormals()
+        merged.push(g.index ? g.toNonIndexed() : g)
+      }
+      const one = mergeGeometries(merged, false)
+      if (one) {
+        const mat = plain[0].mat.clone()
+        mat.color.set(0xffffff)
+        mat.vertexColors = true
+        mat.map = null
+        mat.needsUpdate = true
+        parts = parts.filter((p) => !plain.includes(p))
+        parts.push({ geo: one, mat })
+      }
+    }
+    for (const { geo, mat } of parts) {
       const im = new THREE.InstancedMesh(geo, mat, capacity)
       im.count = 0
       im.frustumCulled = true // per-supercell now — computeBounds() after fill
@@ -378,7 +419,7 @@ class InstancedProp {
       im.receiveShadow = true
       this.meshes.push(im)
       group.add(im)
-    })
+    }
   }
 
   /** During the fill everything is written, so whole-buffer uploads are
@@ -534,6 +575,8 @@ export class Scatter {
    *  tree's triangles each frame, 11M of them, zero-scaled or not) */
   private mids = new Map<string, InstancedProp>()
   private order = new Map<string, number[]>()
+  /** per mid twin (`kind#cell`): node id → instance slot */
+  private midIndex = new Map<string, Map<number, number>>()
   private propMeta = new Map<string, { minX: number; maxX: number; minZ: number; maxZ: number; cover: boolean; small: boolean }>()
   private treeColliders = new Map<number, RAPIER.Collider>()
   private activeChunks = new Set<number>()
@@ -650,28 +693,40 @@ export class Scatter {
         }
         if (!sample || !cells.length) continue
         this.impostors.set(`${kind}#${variant}`, SlotSet.impostor(renderer, sample, cells, this.nodes, this.group))
-        // the mid band: a coarse twin for the built kinds (and the pine's
-        // cones), one instanced mesh per cell, hidden until its band comes
-        const ref = KIND_MODELS[kind][variant]
-        let farRoot: THREE.Object3D | null = null
-        if (ref.gen === 'canopy') farRoot = buildCanopyTree(ref.seed ?? 1, true)
-        else if (ref.gen === 'elder') farRoot = buildElderTree(ref.seed ?? 1, true)
-        else if (ref.gen === 'redwood') farRoot = buildRedwood(ref.seed ?? 1, true)
-        else if (ref.gen === 'mangrove') farRoot = buildMangrove(ref.seed ?? 1, true)
-        else if (ref.gen === 'outcrop') farRoot = buildOutcrop(ref.seed ?? 1, true)
-        else if (kind === 'pine') farRoot = buildFarPine(new THREE.Color(0x27521f), new THREE.Color(0x5a3c30), 7)
-        if (farRoot) {
-          for (const c of cells) {
-            const twin = new InstancedProp(farRoot, Math.max(c.ids.length, 1), this.group, true)
-            c.ids.forEach((nodeId, i) => {
-              const n = this.nodes[nodeId]
-              twin.setInstance(i, n.x, n.y, n.z, n.scale, n.rotY, n.tint)
-            })
-            twin.computeBounds()
-            for (const m of twin.meshes) m.visible = false
-            this.mids.set(`${kind}#${variant}#${c.cell}`, twin)
-          }
-        }
+      }
+      // the mid band: ONE coarse twin per kind (the 20-tri masses don't need
+      // the variants' differences), one instanced mesh per cell holding every
+      // variant's nodes, hidden until its band comes. Per kind+variant it was
+      // ~90 draw calls of leaf blobs in the 240–480 m ring (M18 draw audit)
+      const ref = KIND_MODELS[kind][0]
+      let farRoot: THREE.Object3D | null = null
+      if (ref.gen === 'canopy') farRoot = buildCanopyTree(ref.seed ?? 1, true)
+      else if (ref.gen === 'elder') farRoot = buildElderTree(ref.seed ?? 1, true)
+      else if (ref.gen === 'redwood') farRoot = buildRedwood(ref.seed ?? 1, true)
+      else if (ref.gen === 'mangrove') farRoot = buildMangrove(ref.seed ?? 1, true)
+      else if (ref.gen === 'outcrop') farRoot = buildOutcrop(ref.seed ?? 1, true)
+      else if (kind === 'pine') farRoot = buildFarPine(new THREE.Color(0x27521f), new THREE.Color(0x5a3c30), 7)
+      if (!farRoot) continue
+      const byCell = new Map<string, number[]>()
+      for (const [key, ids] of this.order) {
+        if (parseGroupKey(key).kind !== kind) continue
+        const cell = key.slice(key.lastIndexOf('#') + 1)
+        const list = byCell.get(cell) ?? []
+        for (const id of ids) list.push(id)
+        byCell.set(cell, list)
+      }
+      for (const [cell, ids] of byCell) {
+        const twin = new InstancedProp(farRoot, Math.max(ids.length, 1), this.group, true)
+        const index = new Map<number, number>()
+        ids.forEach((nodeId, i) => {
+          const n = this.nodes[nodeId]
+          twin.setInstance(i, n.x, n.y, n.z, n.scale, n.rotY, n.tint)
+          index.set(nodeId, i)
+        })
+        twin.computeBounds()
+        for (const m of twin.meshes) m.visible = false
+        this.mids.set(`${kind}#${cell}`, twin)
+        this.midIndex.set(`${kind}#${cell}`, index)
       }
     }
   }
@@ -696,10 +751,15 @@ export class Scatter {
       }
       const { kind, variant } = parseGroupKey(key)
       const set = this.impostors.get(`${kind}#${variant}`)
-      if (!set) continue
-      const mid = this.mids.get(key)
-      const band = d < TREE_LOD_FAR ? 0 : mid && d < TREE_LOD_MID ? 1 : 2
+      if (!set) {
+        // no cards for this kind (cacti, dead trees, palms, willows, mangroves):
+        // it simply ends at the mid band — it drew island-wide before
+        for (const m of this.props.get(key)!.meshes) m.visible = d < TREE_LOD_MID
+        continue
+      }
       const cell = key.slice(key.lastIndexOf('#') + 1)
+      const mid = this.mids.get(`${kind}#${cell}`)
+      const band = d < TREE_LOD_FAR ? 0 : mid && d < TREE_LOD_MID ? 1 : 2
       for (const m of this.props.get(key)!.meshes) m.visible = band === 0
       if (mid) for (const m of mid.meshes) m.visible = band === 1
       set.setCell(cell, band === 2)
@@ -898,10 +958,12 @@ export class Scatter {
     if (visible) prop.setInstance(idx, node.x, node.y, node.z, node.scale, node.rotY, node.tint)
     else prop.hideInstance(idx, node.x, node.y, node.z)
     this.impostors.get(`${node.kind}#${node.variant}`)?.setNode(node, visible)
-    const mid = this.mids.get(key)
-    if (mid) {
-      if (visible) mid.setInstance(idx, node.x, node.y, node.z, node.scale, node.rotY, node.tint)
-      else mid.hideInstance(idx, node.x, node.y, node.z)
+    const midKey = `${node.kind}#${key.slice(key.lastIndexOf('#') + 1)}`
+    const mid = this.mids.get(midKey)
+    const mi = this.midIndex.get(midKey)?.get(node.id)
+    if (mid && mi !== undefined) {
+      if (visible) mid.setInstance(mi, node.x, node.y, node.z, node.scale, node.rotY, node.tint)
+      else mid.hideInstance(mi, node.x, node.y, node.z)
     }
   }
 

@@ -46,10 +46,21 @@ async function loadModel(url: string) {
 /** wild dinos beyond SLEEP go dormant; they wake inside WAKE */
 const DORMANT_SLEEP = 680
 const DORMANT_WAKE = 600
+/** an awake dino's rig is only attached (drawn, matrices walked) inside this;
+ *  a 3 m animal at 400 m is a few pixels, and the 40-odd awake rigs in the
+ *  600 m ring were 170 draw calls whichever way you faced (M18 draw audit) */
+const DRAW_DIST = 380
+const DRAW_HYST = 30
 
 export class Dino {
   /** interpolation factor between the last two physics steps (main loop sets it each frame) */
   static renderAlpha = 1
+  /** main.ts hooks this: called once per SPECIES with the first calibrated
+   *  rig, to compile its shaders and upload its textures before the rig is
+   *  ever drawn (the 1500 rigs load over ~6 s after the scene's warm-up;
+   *  a species' first appearance was a 150 ms compile stall — M18) */
+  static onFirstRig: ((speciesId: string, model: THREE.Object3D) => void) | null = null
+  private static warmed = new Set<string>()
   readonly object = new THREE.Group()
   /** the loaded rig — hidden (not `object`, which doubles as "alive") while dormant */
   private model: THREE.Object3D | null = null
@@ -112,10 +123,12 @@ export class Dino {
       }
     })
     this.model = model
-    // a dormant rig is DETACHED, not hidden: three.js walks every Object3D
-    // in the scene each frame to update world matrices, visible or not, and
-    // 1500 rigs × ~100 bones was 30 ms of CPU a frame (M15 jitter meter)
-    if (!this.dormant) this.object.add(model)
+    // attached for calibration below — a dormant rig is then DETACHED, not
+    // hidden: three.js walks every Object3D in the scene each frame to update
+    // world matrices, visible or not, and 1500 rigs × ~100 bones was 30 ms of
+    // CPU a frame (M15 jitter meter). Calibrating a detached rig read stale
+    // bone matrices and scaled mammoths to the size of the island (M18).
+    this.object.add(model)
 
     this.mixer = new THREE.AnimationMixer(model)
     for (const slot of ['idle', 'walk', 'run', 'attack', 'ko'] as const) {
@@ -158,6 +171,30 @@ export class Dino {
       }
       this.debugCalib = { rawH: +(bounds.max.y - bounds.min.y).toFixed(2), scale: +s.toFixed(3) }
     }
+    if (Dino.onFirstRig && !Dino.warmed.has(this.species.id)) {
+      Dino.warmed.add(this.species.id)
+      Dino.onFirstRig(this.species.id, model)
+    }
+    if (this.dormant) this.object.remove(model)
+  }
+
+  /** Warm-up: attach the rig for one compile pass; returns a detach callback (or null if already attached / not loaded). */
+  attachForWarmup(): (() => void) | null {
+    if (!this.model || this.model.parent) return null
+    const model = this.model
+    this.object.add(model)
+    return () => { this.object.remove(model) }
+  }
+
+  /** QA: the rig's rendered height right now (metres), attaching a dormant rig for the measure. */
+  measuredHeight(): number | null {
+    if (!this.model) return null
+    const detached = !this.model.parent
+    if (detached) this.object.add(this.model)
+    this.object.updateMatrixWorld(true)
+    const b = this.skinnedBounds(this.model)
+    if (detached) this.object.remove(this.model)
+    return b ? b.max.y - b.min.y : null
   }
 
   debugCalib: { rawH: number; scale: number } | null = null
@@ -247,6 +284,12 @@ export class Dino {
       this.dormant = true
       if (this.model) this.object.remove(this.model)
       return
+    }
+    // draw distance: attach/detach the rig like dormancy does (hysteresis)
+    if (this.model && !this.ridden) {
+      const attached = !!this.model.parent
+      if (attached && this.distToPlayer > DRAW_DIST + DRAW_HYST) this.object.remove(this.model)
+      else if (!attached && this.distToPlayer < DRAW_DIST) this.object.add(this.model)
     }
     // skinned casters are expensive in the shadow pass — only nearby dinos cast
     const wantShadow = this.distToPlayer < 110
@@ -451,6 +494,7 @@ export class Dino {
     const every = d > 260 ? 8 : d > 120 ? 3 : 1
     this.mixerSkip += 1
     this.mixerAccum += dt
+    if (this.model && !this.model.parent) return // not drawn: no bones to pose
     if (this.mixerSkip >= every) {
       this.mixer?.update(this.mixerAccum)
       this.mixerSkip = 0

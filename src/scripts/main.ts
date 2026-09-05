@@ -12,7 +12,7 @@ import { ThirdPersonCamera } from './camera'
 import { DayNight, DAY_LENGTH_S } from './daynight'
 import { Dino } from './dinos'
 import { SPECIES } from './species'
-import { Scatter } from './scatter'
+import { Scatter, setLodBands } from './scatter'
 import { Building, type PieceKind } from './building'
 import { Ruins } from './ruins'
 import { Keystones } from './keystones'
@@ -51,10 +51,12 @@ async function boot(): Promise<void> {
   const daynight = new DayNight(renderer, scene)
   const terrain = new Terrain()
   scene.add(terrain.group)
+  terrain.group.name = 'terrain'
 
   const water = new WaterSystem()
   water.build()
   scene.add(water.group)
+  water.group.name = 'water'
 
   const physics = new Physics()
   await physics.init()
@@ -94,23 +96,28 @@ async function boot(): Promise<void> {
   await scatter.load(renderer)
   const grass = new GrassField()
   scene.add(grass.group)
+  grass.group.name = 'grass'
   const skyExtras = new SkyExtras()
   scene.add(skyExtras.group)
+  skyExtras.group.name = 'skyExtras'
   const ambience = new Ambience()
   // audio needs a gesture: the first click / key starts the soundscape
   const startAudio = () => { ambience.start(); window.removeEventListener('pointerdown', startAudio); window.removeEventListener('keydown', startAudio) }
   window.addEventListener('pointerdown', startAudio)
   window.addEventListener('keydown', startAudio)
   scene.add(scatter.group)
+  scatter.group.name = 'scatter'
   if (save) scatter.restore(save.deadNodes as { id: number; respawnAt: number }[])
 
   const ruins = new Ruins()
   await ruins.build(physics)
   scene.add(ruins.group)
+  ruins.group.name = 'ruins'
 
   const keystones = new Keystones()
   keystones.build()
   scene.add(keystones.group)
+  keystones.group.name = 'keystones'
   if (save?.keystones) keystones.restore(save.keystones as string[])
 
   // the caldera door: a stone slab sealing the gate arch until all five
@@ -142,6 +149,7 @@ async function boot(): Promise<void> {
   const beaconSite = worldMeta!.ruinSites.find((r) => r.tag === 'crater-beacon')!
   const beacon = new Beacon(beaconSite.x, heightAt(beaconSite.x, beaconSite.z), beaconSite.z)
   scene.add(beacon.group)
+  beacon.group.name = 'beacon'
   physics.world.createCollider(RAPIER.ColliderDesc.cylinder(1.4, 7.4).setTranslation(beaconSite.x, beacon.groundY + 1.4, beaconSite.z))
   physics.world.createCollider(RAPIER.ColliderDesc.cylinder(3.5, 1.6).setTranslation(beaconSite.x, beacon.groundY + 2.7 + 3.5, beaconSite.z))
   let beaconLit = save?.beaconLit ?? false
@@ -149,6 +157,7 @@ async function boot(): Promise<void> {
 
   const building = new Building(physics)
   scene.add(building.group)
+  building.group.name = 'building'
   if (save) building.restore(save.pieces as ReturnType<Building['serialize']>)
 
   if (save) daynight.setTime(save.time)
@@ -551,6 +560,40 @@ async function boot(): Promise<void> {
     terrainWorker: () => terrain.workerState(),
     /** QA: fog distance multiplier (aerials use 6) */
     setFog: (scale: number) => { daynight.fogScale = scale },
+    scene,
+    setLod: (bands: { far?: number; mid?: number; cover?: number }) => { const r = setLodBands(bands); lastVisX = Infinity; return r },
+    /** QA: what the camera is about to draw — visible, in-frustum meshes per scene group (≈ draw calls before multi-material splits) */
+    drawAudit: () => {
+      const c = cam.camera
+      c.updateMatrixWorld()
+      const frustum = new THREE.Frustum().setFromProjectionMatrix(new THREE.Matrix4().multiplyMatrices(c.projectionMatrix, c.matrixWorldInverse))
+      const out: Record<string, { meshes: number; calls: number; tris: number }> = {}
+      const walk = (o: THREE.Object3D, family: string) => {
+        if (!o.visible) return
+        const fam = o.parent === scene ? (o.name || ((o as THREE.Mesh).isMesh ? 'loose-mesh' : 'dino/other')) : family
+        if ((o as THREE.Mesh).isMesh && (o as THREE.Mesh).geometry) {
+          const m = o as THREE.Mesh
+          const inView = !m.frustumCulled || frustum.intersectsObject(m)
+          if (inView) {
+            const mats = Array.isArray(m.material) ? m.material.length : 1
+            const geo = m.geometry
+            const triCount = (geo.index ? geo.index.count : geo.attributes.position.count) / 3
+            const inst = (m as THREE.InstancedMesh).isInstancedMesh ? (m as THREE.InstancedMesh).count : 1
+            const row = (out[fam] ??= { meshes: 0, calls: 0, tris: 0 })
+            row.meshes++
+            row.calls += mats
+            row.tris += triCount * inst
+          }
+        }
+        for (const c of o.children) walk(c, fam)
+      }
+      for (const c of scene.children) walk(c, c.name || 'dino/other')
+      for (const r of Object.values(out)) r.tris = Math.round(r.tris)
+      return out
+    },
+    setPixelRatio: (r: number) => { adaptive = false; pixelRatio = r; renderer.setPixelRatio(r); renderer.setSize(innerWidth, innerHeight) },
+    pixelRatio: () => pixelRatio,
+    setAdaptive: (on: boolean) => { adaptive = on },
     /** QA: shadow cadence + map size */
     setShadow: (every: number, size?: number) => {
       shadowEvery = Math.max(1, every)
@@ -561,7 +604,9 @@ async function boot(): Promise<void> {
       const a = frameTimes.slice().sort((p, q) => p - q)
       frameTimes.length = 0
       const pick = (f: number) => a.length ? +a[Math.min(a.length - 1, Math.floor(f * a.length))].toFixed(1) : 0
-      return { n: a.length, p50: pick(0.5), p95: pick(0.95), p99: pick(0.99), max: a.length ? +a[a.length - 1].toFixed(1) : 0, over25: a.filter((v) => v > 25).length }
+      const worst = worstFrame
+      worstFrame = null
+      return { n: a.length, p50: pick(0.5), p95: pick(0.95), p99: pick(0.99), max: a.length ? +a[a.length - 1].toFixed(1) : 0, over25: a.filter((v) => v > 25).length, worst }
     },
     renderInfo: () => ({
       calls: renderer.info.render.calls,
@@ -689,6 +734,16 @@ async function boot(): Promise<void> {
       pieces: () => building.pieces.length,
       dinoStates: () => dinos.map((d) => ({ state: d.state, torpor: d.torpor, saddled: d.saddled })),
       dinoCalib: () => dinos.map((d) => ({ sp: d.species.id, ...d.debugCalib })),
+      /** QA: every loaded dino's rendered height vs its species height — offenders beyond ±15% */
+      sizeAudit: (tolerance = 0.15) => {
+        const out: { sp: string; want: number; got: number; dormant: boolean }[] = []
+        for (const d of dinos) {
+          const got = d.measuredHeight()
+          if (got === null) continue
+          if (Math.abs(got - d.species.height) / d.species.height > tolerance) out.push({ sp: d.species.id, want: d.species.height, got: +got.toFixed(2), dormant: d.dormant })
+        }
+        return out
+      },
       nearestNodeDist: () => {
         const from = feetPos()
         let best = Infinity
@@ -797,6 +852,64 @@ async function boot(): Promise<void> {
   }
   ;(window as unknown as { __g: typeof dbg }).__g = dbg
 
+  // --- shader warm-up ---
+  // three.js compiles a program the first time a material/object combination
+  // is drawn; on this scene (instanced props of 20 kinds, 11 skinned species,
+  // mid twins, impostor cards, grass, water) that was a 100–150 ms stall the
+  // first time each came into view — felt as a hard hitch on the first turn
+  // or the first walk out of the meadow (M18). Compile everything up front:
+  // every hidden cell made visible, one rig of each species attached, one
+  // compile pass + one shadow-mapped frame for the depth variants.
+  {
+    const t0 = performance.now()
+    const toggled: THREE.Object3D[] = []
+    scene.traverse((o) => { if (!o.visible) { o.visible = true; toggled.push(o) } })
+    const detach: (() => void)[] = []
+    const seen = new Set<string>()
+    for (const d of dinos) {
+      if (seen.has(d.species.id)) continue
+      const undo = d.attachForWarmup()
+      if (undo) { seen.add(d.species.id); detach.push(undo) }
+    }
+    renderer.compile(scene, cam.camera)
+    renderer.shadowMap.needsUpdate = true
+    renderer.render(scene, cam.camera)
+    // textures upload on first DRAW, not compile — anything frustum-culled in
+    // that one frame would still stall later. Push every texture up now.
+    const uploadTextures = (root: THREE.Object3D) => {
+      root.traverse((o) => {
+        const m = (o as THREE.Mesh).material
+        if (!m) return
+        for (const mat of Array.isArray(m) ? m : [m]) {
+          for (const v of Object.values(mat as unknown as Record<string, unknown>)) {
+            if (v && (v as THREE.Texture).isTexture) renderer.initTexture(v as THREE.Texture)
+          }
+        }
+      })
+    }
+    uploadTextures(scene)
+    for (const undo of detach) undo()
+    for (const o of toggled) o.visible = false
+    // species that finish loading later: compile + upload as each arrives (the
+    // rig is attached to its dino at this point; a shadow-mapped frame with
+    // the light's box moved onto it compiles the skinned depth variant too)
+    Dino.onFirstRig = (id, model) => {
+      const t = performance.now()
+      const saved = daynight.shadowFocus()
+      model.updateMatrixWorld(true)
+      const p = new THREE.Vector3()
+      model.getWorldPosition(p)
+      daynight.focusShadow(p.x, p.z)
+      renderer.compile(scene, cam.camera)
+      renderer.shadowMap.needsUpdate = true
+      renderer.render(scene, cam.camera)
+      daynight.focusShadow(saved.x, saved.z)
+      uploadTextures(model)
+      if (import.meta.env.DEV) console.log(`warm ${id}: ${(performance.now() - t).toFixed(0)} ms`)
+    }
+    console.log(`shader warm-up: ${renderer.info.programs?.length ?? '?'} programs in ${(performance.now() - t0).toFixed(0)} ms`)
+  }
+
   // --- main loop ---
   let accumulator = 0
   let last = performance.now()
@@ -808,6 +921,9 @@ async function boot(): Promise<void> {
   let lastVisX = Infinity
   let lastVisZ = Infinity
   const perfSec = { dinos: 0, scatter: 0, grass: 0, terrain: 0, physics: 0 }
+  /** this frame's raw section times + the worst frame since the last read (the hitch hunt) */
+  const frameSec = { dinos: 0, scatter: 0, grass: 0, terrain: 0, physics: 0, update: 0, render: 0, newProgs: 0, newTex: 0 }
+  let worstFrame: { ms: number; sec: typeof frameSec; z: number } | null = null
   // frame-time histogram for the jitter hunt: max / p95 since the last read
   const frameTimes: number[] = []
 
@@ -873,6 +989,7 @@ async function boot(): Promise<void> {
       accumulator -= FIXED_DT
     }
     perfSec.physics = perfSec.physics * 0.95 + (performance.now() - tP0) * 0.05
+    frameSec.physics = performance.now() - tP0
     const alpha = accumulator / FIXED_DT
 
     // THE JITTER FIX: everything the eye follows — the camera target, the
@@ -899,6 +1016,7 @@ async function boot(): Promise<void> {
       d.update(dt, pFeet, hurtPlayer)
     }
     perfSec.dinos = perfSec.dinos * 0.95 + (performance.now() - tD0) * 0.05
+    frameSec.dinos = performance.now() - tD0
     // the AWAKE set once per frame — the pair loops below are n² and 1500²
     // with a `continue` per dormant dino was still a million iterations
     awake.length = 0
@@ -962,9 +1080,11 @@ async function boot(): Promise<void> {
       }
     }
     perfSec.scatter = perfSec.scatter * 0.95 + (performance.now() - tS) * 0.05
+    frameSec.scatter = performance.now() - tS
     tS = performance.now()
     grass.update(freeCam ? freeCam.x : focus.x, freeCam ? freeCam.z : focus.z)
     perfSec.grass = perfSec.grass * 0.95 + (performance.now() - tS) * 0.05
+    frameSec.grass = performance.now() - tS
     water.update(dt)
     daynight.camera = cam.camera
     daynight.setFocus(focus.x, focus.z)
@@ -974,6 +1094,7 @@ async function boot(): Promise<void> {
     tS = performance.now()
     terrain.update(freeCam ? freeCam.x : focus.x, freeCam ? freeCam.z : focus.z)
     perfSec.terrain = perfSec.terrain * 0.95 + (performance.now() - tS) * 0.05
+    frameSec.terrain = performance.now() - tS
 
     // camera follows whoever is being driven (or the QA free camera)
     if (freeCam) {
@@ -1031,13 +1152,53 @@ async function boot(): Promise<void> {
     // The cost is made steady instead (smaller map, casters only near).
     if (frameCount % shadowEvery === 0) renderer.shadowMap.needsUpdate = true
     const t1 = performance.now()
+    const progsBefore = renderer.info.programs?.length ?? 0
+    const texBefore = renderer.info.memory.textures
     renderer.render(scene, cam.camera)
     const t2 = performance.now()
+    frameSec.newProgs = (renderer.info.programs?.length ?? 0) - progsBefore
+    frameSec.newTex = renderer.info.memory.textures - texBefore
     perfUpdate = perfUpdate * 0.95 + (t1 - t0) * 0.05
     perfRender = perfRender * 0.95 + (t2 - t1) * 0.05
+    frameSec.update = t1 - t0
+    frameSec.render = t2 - t1
+    if (!worstFrame || t2 - t0 > worstFrame.ms) worstFrame = { ms: t2 - t0, sec: { ...frameSec }, z: feetPos().z }
+    adaptResolution(dt * 1000)
     dbg.ready = true
   }
   requestAnimationFrame(frame)
+
+  // ADAPTIVE RESOLUTION: the render is fill-bound on a Retina display (the
+  // user's 2000×1500 CSS-px window at 1.3× is 5M pixels of cutout foliage,
+  // twice) and the frame rate dropped hard whenever the view filled with
+  // forest. Watch the frame time; step the pixel ratio down toward 0.7 when a
+  // second of frames runs long, back up when it runs short. Rare steps (the
+  // buffer reallocation is itself a hitch), hysteresis between the bands.
+  const PR_CAP = Math.min(devicePixelRatio, 1.3)
+  const PR_MIN = Math.min(0.7, PR_CAP)
+  let pixelRatio = PR_CAP
+  let prAccum = 0
+  let prN = 0
+  let prCooldown = 4 // seconds; the first seconds after load are noise
+  let adaptive = true
+  function adaptResolution(frameMs: number): void {
+    if (!adaptive) return
+    prAccum += frameMs
+    prN++
+    prCooldown -= frameMs / 1000
+    if (prCooldown > 0 || prN < 45) return
+    const avg = prAccum / prN
+    prAccum = 0
+    prN = 0
+    let next = pixelRatio
+    if (avg > 19.5) next = Math.max(PR_MIN, pixelRatio * 0.85)
+    else if (avg < 15.5 && pixelRatio < PR_CAP) next = Math.min(PR_CAP, pixelRatio * 1.08)
+    if (Math.abs(next - pixelRatio) < 0.01) { prCooldown = 1; return }
+    prCooldown = next < pixelRatio ? 2 : 3.5 // climb back slowly
+    pixelRatio = next
+    renderer.setPixelRatio(pixelRatio)
+    renderer.setSize(innerWidth, innerHeight)
+  }
 
   // periodic node respawns
   setInterval(() => scatter.tickRespawns(physics), 1000)

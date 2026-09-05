@@ -51,6 +51,12 @@ Vercel. **No React, no framework.**
   feature, not a follow-up. `tools/qa-crater.mjs` shoots the finale (ravine, crater, beacon lit,
   credits). When reachability fails, `NAV_PROBE="x,z;x,z" node tools/bake-navmesh.mjs` adds probe
   targets, and the navmesh is written regardless so `findClosestPoint`/`computePath` can bisect it.
+- **Draw calls are the frame budget** (M18): this scene is CPU-bound on `renderer.render` — ~15 µs a
+  call — so the wood-line view must stay near 400 calls (`tools/qa-draw.mjs` prints calls per family
+  and per scatter kind). Anything new that draws: give it a distance it stops at, fold submeshes,
+  batch per 256 m cell. Anything new with a material or texture: it must exist in the scene (even
+  hidden) before the load-time warm-up in `main.ts`, or hook `Dino.onFirstRig`-style — a first-sight
+  compile is a 100–200 ms stall. Never calibrate or measure a rig that isn't attached to the scene.
 - **Hand shelves and cuts are re-laid after erosion.** Anything the player must walk (the Ravine
   floor, the crater bench, the gate apron) is asserted again in the `reassert` pass — droplets and
   talus turn a designed ramp into steps the navmesh won't climb.

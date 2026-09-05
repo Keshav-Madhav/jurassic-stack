@@ -72,6 +72,13 @@ for (const item of ['foundation', 'wall', 'ceiling', 'campfire']) {
   check(placed >= expected, `placed ${item} (pieces=${placed})`)
 }
 
+// ---------- every rig at its species height ----------
+// (a dormant rig calibrated while detached read stale bone matrices and
+// mammoths spawned the size of the island — user screenshot 20, M18). Pose
+// swings the measure ±40%; the bug was ×50–100
+const sizes = await g('window.__g.game.sizeAudit(0.6)')
+check(sizes.length === 0, `every loaded rig within ±60% of its species height${sizes.length ? ' — offenders: ' + JSON.stringify(sizes.slice(0, 4)) : ''}`)
+
 // ---------- tame: punch to KO, feed to tame ----------
 // a raptor specifically: since the 1500-dino population, the nearest idle dino
 // on the spawn beach is as often a trike, whose torpor 45 punches can't reach

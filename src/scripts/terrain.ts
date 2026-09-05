@@ -155,6 +155,10 @@ export class Terrain {
             float sum = max(w.r + w.g + w.b + w.a, 1e-4);
             w /= sum;
             vec3 tex = tiled(uGrass, uv) * w.r + tiled(uDirt, uv) * w.g + tiled(uRock, uv) * w.b + tiled(uSand, uv) * w.a;
+            // snow: the palette goes near-white above the snowline; flatten the
+            // (yellow sand) texture under it so it reads as snow, not beige
+            float snowy = smoothstep(0.6, 0.78, dot(vec3(vColor), vec3(0.3333)));
+            tex = mix(tex, vec3(0.5, 0.51, 0.53), snowy);
             // vertex color carries the palette; texture supplies detail.
             // 2.2 ≈ recenter the albedo around 1 so the palette's value holds.
             diffuseColor.rgb = vec3(vColor) * tex * 2.2;

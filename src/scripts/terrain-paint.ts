@@ -3,22 +3,25 @@
 // meshes) and by terrain-worker.ts (which builds LOD upgrades off the main
 // thread so a gallop across chunk borders never hitches the frame).
 import * as THREE from 'three'
-import { heightAt, normalAt, forestMaskAt, biomeAt, shoreDist, BIOME, worldMeta, HALF_SIZE, SEA_LEVEL } from './heightmap'
+import { heightAt, normalAt, forestMaskAt, biomeAt, shoreDist, BIOME, VOLCANO, worldMeta, HALF_SIZE, SEA_LEVEL } from './heightmap'
 
 export const CHUNK_SIZE = 128
 export const CHUNKS_PER_SIDE = (HALF_SIZE * 2) / CHUNK_SIZE // 32
 export const LOD_QUADS = [64, 32, 16, 8]
 /** Skirt depth grows with LOD coarseness — 4m skirts couldn't cover mesa
  *  walls where a coarse chunk borders a fine one (backlog #8: LOD holes). */
-export const skirtDepthForStep = (step: number) => 5 + (step / 2) * 3 // 2 m step → 8 m … 16 m step → 29 m
+// (deepened M18: on the ranges' 60° flanks a coarse neighbour's edge sat more
+// than 29 m off the fine one and the sky showed through as white slivers)
+export const skirtDepthForStep = (step: number) => 8 + step * 4 // 2 m step → 16 m … 16 m step → 72 m
 
 const C_DEEP = new THREE.Color(0x24312a) // underwater
 const C_SAND = new THREE.Color(0xa08753)
 const C_GRASS_LUSH = new THREE.Color(0x1f3d18) // dark rich green
 const C_GRASS_LIGHT = new THREE.Color(0x35571f)
 const C_GRASS_DRY = new THREE.Color(0x555a28) // olive dry patches
-const C_ROCK = new THREE.Color(0x5e5c58) // weathered gray
-const C_ROCK_STEEP = new THREE.Color(0x44423f)
+const C_ROCK = new THREE.Color(0x6b6762) // weathered gray (lifted: the ranges read as coal heaps at noon — M18)
+const C_ROCK_STEEP = new THREE.Color(0x504c47)
+const C_ALPINE = new THREE.Color(0x6a6350) // high scree and thin turf between the rock and the snow
 const C_FLOOR = new THREE.Color(0x3a2e1f) // forest floor: dirt + leaf litter
 const C_FLOOR_LIT = new THREE.Color(0x51402a)
 const C_MUD = new THREE.Color(0x453827) // wet banks
@@ -67,9 +70,9 @@ function waterEdgeDistExact(x: number, z: number): number {
   }
   return best
 }
-const C_BASALT = new THREE.Color(0x453d36) // volcano flanks
-const C_CINDER = new THREE.Color(0x332c27) // summit
-const C_SNOW = new THREE.Color(0xcdd4d8) // mountain caps
+const C_BASALT = new THREE.Color(0x4a423b) // volcano flanks
+const C_CINDER = new THREE.Color(0x3a332e) // summit
+const C_SNOW = new THREE.Color(0xe6ebef) // mountain caps
 
 const _c = new THREE.Color()
 const _c2 = new THREE.Color()
@@ -108,8 +111,9 @@ function splatAt(x: number, z: number, h: number, ny: number, out: THREE.Vector4
       sand = sand * (1 - t) + t * sandy
       grass *= 1 - t
     }
-    if (h > 55) {
-      const t = Math.min(1, (h - 55) / 55)
+    if (h > 110) {
+      // alpine: turf gives way to scree (rock texture) with height
+      const t = Math.min(1, (h - 110) / 60)
       rock += t
       grass *= 1 - t
       dirt *= 1 - t
@@ -121,6 +125,16 @@ function splatAt(x: number, z: number, h: number, ny: number, out: THREE.Vector4
     grass *= 1 - t
     dirt *= 1 - t
     sand *= 1 - t
+  }
+  // snow: the sand texture is the smoothest of the four — a snowfield's surface
+  if (h > 170 && Math.hypot(x - VOLCANO.x, z - VOLCANO.z) > 560) {
+    const line = Math.min(1, Math.max(0, (h - 185 - varTFor(x, z) * 22) / 30))
+    const hold = Math.min(1, Math.max(0, (ny - 0.38) / 0.3))
+    const t = line * hold * 0.94
+    sand = sand * (1 - t) + t
+    rock *= 1 - t
+    grass *= 1 - t
+    dirt *= 1 - t
   }
   return out.set(grass, dirt, rock, sand)
 }
@@ -184,20 +198,31 @@ function groundColorAt(x: number, z: number, h: number, ny: number, out: THREE.C
     }
     // beach→grass blend band
     if (h < 3.6) out.lerp(_c2.copy(C_SAND), (3.6 - h) / 1.2 * 0.6)
-    // altitude: fade toward volcanic rock
-    if (h > 55) out.lerp(C_BASALT, THREE.MathUtils.clamp((h - 55) / 55, 0, 1))
-    if (h > 130) out.lerp(C_CINDER, THREE.MathUtils.clamp((h - 130) / 60, 0, 1))
-    // snow caps on the ranges (not the volcano cone: hot rock stays dark) —
-    // dithered snowline via the variation noise
-    const dvv = Math.hypot(x - 0, z - -620)
-    if (h > 112 && dvv > 330) {
-      out.lerp(C_SNOW, THREE.MathUtils.clamp((h - 112 - varT * 10) / 22, 0, 0.92))
-    }
+    // altitude on the RANGES: turf thins to alpine scree above ~110 m. (An
+    // older rule faded everything above 55 m to basalt and above 130 m to
+    // near-black cinder — meant for the v1 volcano, it painted both ranges as
+    // coal heaps and the snow rule below never survived the slope rule — M18)
+    if (h > 110) out.lerp(_c.copy(C_ALPINE).offsetHSL(0, 0, varT * 0.03), THREE.MathUtils.clamp((h - 110) / 60, 0, 1))
+  }
+  // the volcano's cone is its own rock: basalt flanks, cinder toward the rim
+  const dvv = Math.hypot(x - VOLCANO.x, z - VOLCANO.z)
+  if (dvv < 560 && h > 30) {
+    const cone = THREE.MathUtils.clamp((560 - dvv) / 160, 0, 1) * THREE.MathUtils.clamp((h - 30) / 40, 0, 1)
+    out.lerp(C_BASALT, cone)
+    if (h > 150) out.lerp(C_CINDER, cone * THREE.MathUtils.clamp((h - 150) / 80, 0, 1))
   }
   // slope: rock faces override
   if (ny < 0.82) {
     const t = THREE.MathUtils.clamp((0.82 - ny) / 0.2, 0, 1)
     out.lerp(_c.copy(ny < 0.62 ? C_ROCK_STEEP : C_ROCK).offsetHSL(0, 0, varT * 0.025), t)
+  }
+  // snow on the ranges above ~200 m (PLAN), a dithered snowline, holding on
+  // any slope a snowfield holds (ny > 0.55) and thinning off the cliffs; the
+  // volcano stays bare — hot rock
+  if (h > 170 && dvv > 560) {
+    const line = THREE.MathUtils.clamp((h - 185 - varT * 22) / 30, 0, 1)
+    const hold = THREE.MathUtils.clamp((ny - 0.38) / 0.3, 0, 1)
+    out.lerp(C_SNOW, line * hold * 0.94)
   }
   return out
 }

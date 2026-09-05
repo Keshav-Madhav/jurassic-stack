@@ -38,22 +38,25 @@ const NOON: Grade = {
   sun: new THREE.Color(0xffefcf),
   sunIntensity: 2.9,
   rimIntensity: 0,
-  turbidity: 6,
-  rayleigh: 1.8,
+  // a deep noon blue (turbidity 6 / rayleigh 1.8 washed the zenith nearly
+  // white, and the clouds read as grey smudges against it — M18)
+  turbidity: 2.6,
+  rayleigh: 1.1,
 }
 
 const GOLDEN: Grade = {
   exposure: 0.6,
-  fog: new THREE.Color(0xe8884e),
+  fog: new THREE.Color(0xdd9a68),
   fogNear: 130, fogFar: 1300,
-  hemiSky: new THREE.Color(0xffa858),
+  hemiSky: new THREE.Color(0xf2b27a),
   hemiGround: new THREE.Color(0x2c3a26),
-  hemiIntensity: 1.05,
-  sun: new THREE.Color(0xff7a2e),
-  sunIntensity: 3.6,
-  rimIntensity: 0.8,
-  turbidity: 10,
-  rayleigh: 3.2,
+  hemiIntensity: 1.0,
+  // less magenta in the key: grey rock went pink at 17:00 (user screenshot 20)
+  sun: new THREE.Color(0xff9c58),
+  sunIntensity: 3.2,
+  rimIntensity: 0.6,
+  turbidity: 7,
+  rayleigh: 2.2,
 }
 
 const NIGHT: Grade = {
@@ -175,6 +178,19 @@ export class DayNight {
     sc.mapSize.set(size, size)
     sc.map?.dispose()
     sc.map = null
+  }
+
+  /** the current shadow focus (for a warm-up render that moves it and puts it back) */
+  shadowFocus(): { x: number; z: number } {
+    return { x: this.focus.x, z: this.focus.z }
+  }
+
+  /** move the shadow box now (setFocus + re-aim), for the warm-up renders */
+  focusShadow(x: number, z: number): void {
+    this.setFocus(x, z)
+    this.sunLight.position.copy(this.focus).addScaledVector(this.sunDir, 420)
+    this.sunLight.target.position.copy(this.focus)
+    this.sunLight.target.updateMatrixWorld()
   }
 
   setFocus(x: number, z: number): void {
