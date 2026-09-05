@@ -9,7 +9,8 @@ const browser = await chromium.launch({ channel: 'chrome', headless: true, args:
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } })
 await page.goto(url, { waitUntil: 'networkidle' })
 await page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 60000 })
-await page.waitForTimeout(9000)
+// the 1500 rigs clone in over ~10 s; wait until every species has a loaded rig
+await page.waitForFunction('Object.keys(window.__g.game.animAudit()).length >= 11', null, { timeout: 40000 }).catch(() => {})
 const audit = await page.evaluate(() => window.__g.game.animAudit())
 const species = Object.keys(audit)
 check(species.length >= 11, `${species.length} species loaded`)
