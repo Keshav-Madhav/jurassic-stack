@@ -13,12 +13,28 @@ const DECALS = 40
 
 interface Burst { points: THREE.Points; vel: Float32Array; t: number; alive: boolean }
 
+function dropTexture(): THREE.CanvasTexture {
+  const S = 32
+  const c = document.createElement('canvas')
+  c.width = S; c.height = S
+  const g = c.getContext('2d')!
+  const grad = g.createRadialGradient(S / 2, S / 2, 1, S / 2, S / 2, S / 2)
+  grad.addColorStop(0, 'rgba(255,255,255,1)')
+  grad.addColorStop(0.6, 'rgba(255,255,255,0.9)')
+  grad.addColorStop(1, 'rgba(255,255,255,0)')
+  g.fillStyle = grad
+  g.fillRect(0, 0, S, S)
+  return new THREE.CanvasTexture(c)
+}
+
 export class HitFx {
   readonly group = new THREE.Group()
   private bursts: Burst[] = []
   private decals: THREE.Mesh[] = []
   private decalNext = 0
-  private mat = new THREE.PointsMaterial({ color: 0x8c1016, size: 0.22, transparent: true, opacity: 1, depthWrite: false, sizeAttenuation: true })
+  // a soft round drop sprite — an untextured point is a hard square, and a
+  // burst right in front of the camera read as big red blocks over the far bank
+  private mat = new THREE.PointsMaterial({ color: 0x8c1016, size: 0.16, map: dropTexture(), alphaTest: 0.2, transparent: true, opacity: 1, depthWrite: false, sizeAttenuation: true })
   private decalMat = new THREE.MeshBasicMaterial({ color: 0x4a0a0c, transparent: true, opacity: 0.85, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 })
 
   constructor() {
@@ -60,7 +76,7 @@ export class HitFx {
     }
     pos.needsUpdate = true
     ;(b.points.material as THREE.PointsMaterial).opacity = 1
-    ;(b.points.material as THREE.PointsMaterial).size = heavy ? 0.32 : 0.22
+    ;(b.points.material as THREE.PointsMaterial).size = heavy ? 0.24 : 0.16
     b.points.visible = true
     b.t = 0
     b.alive = true
