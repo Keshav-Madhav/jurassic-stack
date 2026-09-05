@@ -508,6 +508,7 @@ async function boot(): Promise<void> {
     fps: () => hud.fps,
     /** ms per frame spent in JS (sim+update) vs the render call — tells CPU-bound from GPU-bound */
     perf: () => ({ update: +perfUpdate.toFixed(2), render: +perfRender.toFixed(2) }),
+    terrainWorker: () => terrain.workerState(),
     /** QA: shadow cadence + map size */
     setShadow: (every: number, size?: number) => {
       shadowEvery = Math.max(1, every)

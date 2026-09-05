@@ -62,6 +62,7 @@ class TerrainBuilder {
   }
 
   get available(): boolean { return !!this.worker && this.ready }
+  get state(): string { return !this.worker ? 'none' : this.ready ? 'ready' : 'loading' }
   get inFlight(): number { return this.waiting.size }
 
   request(originX: number, originZ: number, quads: number, size: number, cb: (a: ChunkArrays) => void): void {
@@ -176,6 +177,9 @@ export class Terrain {
       }
     }
   }
+
+  /** QA: is the geometry worker up? */
+  workerState(): string { return this.builder.state }
 
   /** Re-pick LODs around a focus point; swaps geometry only when a level
    *  changes — and BUILDS at most a few milliseconds of new geometry per
