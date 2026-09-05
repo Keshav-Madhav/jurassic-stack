@@ -779,6 +779,8 @@ async function boot(): Promise<void> {
       },
       /** QA: nearest dino of a species → its position and heading (for a side-on walking portrait) */
       dinoPose: (id: string) => { const d = nearestDino(Infinity, (x) => x.species.id === id); return d ? { x: d.object.position.x, y: d.object.position.y, z: d.object.position.z, heading: d.facing, state: d.state, speed: d.speedNow } : null },
+      /** QA: material flags of one loaded rig per species */
+      rigMaterials: () => { const out: Record<string, string[]> = {}; for (const d of dinos) { if (out[d.species.id]) continue; const r = d.materialReport(); if (r.length) out[d.species.id] = r } return out },
       /** QA: draw state of the nearest dino of a species */
       dinoInfo: (id: string) => { const d = nearestDino(Infinity, (x) => x.species.id === id); return d ? d.drawInfo() : null },
       /** QA: every loaded dino's rendered height vs its species height — offenders beyond ±15% */

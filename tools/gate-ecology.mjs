@@ -17,6 +17,12 @@ for (const [id, a] of Object.entries(audit)) {
   const missing = Object.entries(a.slots).filter(([, v]) => v === null).map(([k]) => k)
   check(missing.length === 0, `${id}: every clip slot resolved${missing.length ? ' — missing ' + missing.join(',') : ''}`)
 }
+// every rig draws opaque: a BLEND material (the Carnotaurus shipped one) has no
+// depth write, so the water sheets painted over it (user screenshot 24)
+const rigs = await page.evaluate(() => window.__g.game.rigMaterials())
+const blended = Object.entries(rigs).filter(([, v]) => v.some((m) => m.includes('transparent=true') || m.includes('depthWrite=false'))).map(([k]) => k)
+check(blended.length === 0, `every rig material opaque with depth write${blended.length ? ' — not: ' + blended.join(',') : ''}`)
+
 const AX = -240, AZ = 1000
 await page.evaluate(([AX, AZ]) => {
   const g = window.__g

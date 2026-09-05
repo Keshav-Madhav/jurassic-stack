@@ -142,6 +142,20 @@ export class Dino {
         }
         o.castShadow = true
         o.receiveShadow = true
+        // OPAQUE, always: the Carnotaurus GLB ships alphaMode BLEND, which
+        // GLTFLoader turns into transparent + no depth write — the rig then
+        // drew in the transparent pass before the water sheets and the river
+        // painted straight over its back (user screenshot 24, M19b)
+        for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+          const mm = m as THREE.MeshStandardMaterial
+          if (mm.transparent || !mm.depthWrite) {
+            mm.transparent = false
+            mm.depthWrite = true
+            mm.opacity = 1
+            if (mm.map) mm.alphaTest = Math.max(mm.alphaTest, 0.4)
+            mm.needsUpdate = true
+          }
+        }
         // culled by a bounding sphere computed from the SKINNED pose after
         // calibration (below) — three's default used the bind-space sphere,
         // which for rigs with scale tracks on the root sits nowhere near the
@@ -281,6 +295,19 @@ export class Dino {
   /** QA: the way it faces/moves (radians, 0 = +z) */
   get facing(): number { return this.heading }
   get speedNow(): number { return this.speed }
+
+  /** QA: the rig's material flags (attached or not) */
+  materialReport(): string[] {
+    const out = new Set<string>()
+    this.model?.traverse((o) => {
+      if (!(o instanceof THREE.Mesh)) return
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        const mm = m as THREE.MeshStandardMaterial
+        out.add(`${mm.type} transparent=${mm.transparent} depthWrite=${mm.depthWrite} alphaTest=${mm.alphaTest} opacity=${mm.opacity} side=${mm.side} skinned=${o instanceof THREE.SkinnedMesh}`)
+      }
+    })
+    return [...out]
+  }
 
   /** QA: how this dino is being drawn right now */
   drawInfo(): Record<string, unknown> {

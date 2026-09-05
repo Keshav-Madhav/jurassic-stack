@@ -85,7 +85,7 @@ export class HitFx {
       const d = this.decals[this.decalNext++ % DECALS]
       const dx = x + (Math.random() - 0.5) * 1.6, dz = z + (Math.random() - 0.5) * 1.6
       d.position.set(dx, heightAt(dx, dz) + 0.03, dz)
-      d.scale.setScalar(0.5 + Math.random() * (heavy ? 1.2 : 0.6))
+      d.scale.setScalar(0.3 + Math.random() * (heavy ? 0.5 : 0.3)) // (the first pools were 4 m across under a carno)
       d.rotation.y = Math.random() * Math.PI
       d.visible = true
       d.userData.t = 0
@@ -105,6 +105,9 @@ export class HitFx {
         arr[i * 3] += b.vel[i * 3] * dt
         arr[i * 3 + 1] += b.vel[i * 3 + 1] * dt
         arr[i * 3 + 2] += b.vel[i * 3 + 2] * dt
+        // drops land: stop on the ground instead of hanging in the grass or sinking
+        const gy = heightAt(arr[i * 3], arr[i * 3 + 2]) + 0.05
+        if (arr[i * 3 + 1] < gy) { arr[i * 3 + 1] = gy; b.vel[i * 3] = 0; b.vel[i * 3 + 1] = 0; b.vel[i * 3 + 2] = 0 }
       }
       pos.needsUpdate = true
       ;(b.points.material as THREE.PointsMaterial).opacity = 1 - Math.pow(b.t / LIFE, 2)
