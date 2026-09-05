@@ -482,3 +482,66 @@ export function buildOutcrop(seed: number, far = false): THREE.Group {
   parts.push(stone(0, 0.62, 0, 0.42, rand, far ? 0 : 1)) // the crown stone
   return finish(parts, `Outcrop_${seed}${far ? '_far' : ''}`)
 }
+
+// ---------- grass cards (the littered floor) ----------
+let grassTex: THREE.CanvasTexture | null = null
+/** A painted grass sprite: a spray of tapered blades, dark base → lit tips. */
+function grassTexture(): THREE.CanvasTexture {
+  if (grassTex) return grassTex
+  const S = 128
+  const c = document.createElement('canvas')
+  c.width = S; c.height = S
+  const g = c.getContext('2d')!
+  g.clearRect(0, 0, S, S)
+  const rand = mulberry32(4242)
+  for (let i = 0; i < 26; i++) {
+    const x0 = 10 + rand() * (S - 20)
+    const lean = (rand() - 0.5) * 34
+    const h = S * (0.55 + rand() * 0.45)
+    const w = 3 + rand() * 4
+    const grad = g.createLinearGradient(0, S, 0, S - h)
+    grad.addColorStop(0, `rgb(${22 + rand() * 12},${48 + rand() * 14},${16})`)
+    grad.addColorStop(1, `rgb(${70 + rand() * 40},${120 + rand() * 40},${36 + rand() * 20})`)
+    g.fillStyle = grad
+    g.beginPath()
+    g.moveTo(x0 - w, S)
+    g.quadraticCurveTo(x0 + lean * 0.4, S - h * 0.55, x0 + lean, S - h)
+    g.quadraticCurveTo(x0 + lean * 0.5, S - h * 0.5, x0 + w, S)
+    g.closePath()
+    g.fill()
+  }
+  grassTex = new THREE.CanvasTexture(c)
+  grassTex.colorSpace = THREE.SRGBColorSpace
+  grassTex.wrapS = grassTex.wrapT = THREE.ClampToEdgeWrapping
+  return grassTex
+}
+
+/**
+ * A grass tuft as three crossed cards, unit height. Six triangles, so the
+ * ground can be LITTERED with them (hundreds of thousands) for the price of
+ * a few hundred of the old 62-tri modelled tufts.
+ */
+export function buildGrassCard(seed: number): THREE.Group {
+  const rand = mulberry32(seed)
+  const parts: THREE.BufferGeometry[] = []
+  const n = 3
+  for (let i = 0; i < n; i++) {
+    const w = 0.9 + rand() * 0.3
+    const plane = new THREE.PlaneGeometry(w, 1, 1, 1).toNonIndexed()
+    plane.translate(0, 0.5, 0)
+    plane.rotateY((i / n) * Math.PI + (rand() - 0.5) * 0.3)
+    // normals up: grass shades like the ground it grows from, not like a wall
+    const nor = plane.getAttribute('normal')
+    for (let k = 0; k < nor.count; k++) nor.setXYZ(k, 0, 1, 0)
+    parts.push(plane)
+  }
+  const geo = mergeGeometries(parts, false)!
+  for (const p of parts) p.dispose()
+  const mat = new THREE.MeshStandardMaterial({ map: grassTexture(), alphaTest: 0.5, side: THREE.DoubleSide, roughness: 1, metalness: 0 })
+  const mesh = new THREE.Mesh(geo, mat)
+  mesh.name = `GrassCard_${seed}`
+  const g = new THREE.Group()
+  g.add(mesh)
+  g.updateMatrixWorld(true)
+  return g
+}

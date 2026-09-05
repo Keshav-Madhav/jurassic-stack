@@ -24,6 +24,7 @@ import { heightAt, loadHeightmap, worldMeta, SPAWN } from './heightmap'
 import { loadNavmesh, findPath } from './navmesh'
 import { WaterSystem } from './water'
 import { wildPopulation } from './population'
+import { GrassField } from './grass'
 
 const SWING_COOLDOWN = 0.45
 const REACH = 3.2
@@ -88,6 +89,8 @@ async function boot(): Promise<void> {
 
   const scatter = new Scatter()
   await scatter.load(renderer)
+  const grass = new GrassField()
+  scene.add(grass.group)
   scene.add(scatter.group)
   if (save) scatter.restore(save.deadNodes as { id: number; respawnAt: number }[])
 
@@ -554,6 +557,7 @@ async function boot(): Promise<void> {
         return found
       },
       scatterDebug: () => scatter.debugSummary(),
+      nodesNear: (x: number, z: number, r: number) => scatter.nodesNear(x, z, r),
       floaters: (t: number) => scatter.floaters(t),
       whatIsThere: (nx: number, ny: number) => {
         raycaster.setFromCamera(new THREE.Vector2(nx, ny), cam.camera)
@@ -875,6 +879,7 @@ async function boot(): Promise<void> {
     }
     scatter.ensureCollidersAround(focus.x, focus.z, physics)
     scatter.updateVisibility(freeCam ? freeCam.x : focus.x, freeCam ? freeCam.z : focus.z)
+    grass.update(freeCam ? freeCam.x : focus.x, freeCam ? freeCam.z : focus.z)
     water.update(dt)
     daynight.setFocus(focus.x, focus.z)
     daynight.advance(dt)

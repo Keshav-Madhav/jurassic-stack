@@ -673,7 +673,31 @@ const forest = new Uint8Array(SIDE * SIDE)
       }
     }
   }
-  console.log(`  forest: ${FORESTS.length} woods, ${CLEARINGS.length} glades, ${((cells * RES * RES) / 1e6).toFixed(2)} km² wooded`)
+  // COPSES in the open country: where a slow noise peaks, the open land grows
+  // a thicket (density ~0.4) — so woods blend into fields through scattered
+  // clumps instead of stopping at a line. Not on beaches, not in the open
+  // biomes, not on the cone; pines north of the volcano's latitude, else broadleaf.
+  {
+    const isOpenBiome = (x, z) => BIOMES.some((b, bi) => (b.name === 'plains' || b.name === 'desert') && biomeSD[bi](x, z) < 20)
+    let copse = 0
+    for (let iz = 0; iz < SIDE; iz++) {
+      for (let ix = 0; ix < SIDE; ix++) {
+        const i0 = idx(ix, iz)
+        if (forest[i0] >> 2 > 3) continue
+        const x = worldX(ix), z = worldZ(iz)
+        const h = H[i0]
+        if (h < 4 || h > 150 || coastSD(x, z) > -120) continue
+        if (Math.hypot(x - VOLCANO.x, z - VOLCANO.z) < 620) continue
+        if (isOpenBiome(x, z)) continue
+        const n = fbm(x * 0.0055 + 17, z * 0.0055 + 3, 3)
+        const d = 0.42 * smoothstep(0.22, 0.5, n)
+        if (d < 0.05) continue
+        forest[i0] = (Math.round(d * 63) << 2) | (z < -900 ? KIND_ID.pine : KIND_ID.broadleaf)
+        copse++
+      }
+    }
+    console.log(`  forest: ${FORESTS.length} woods, ${CLEARINGS.length} glades, ${((cells * RES * RES) / 1e6).toFixed(2)} km² wooded + ${((copse * RES * RES) / 1e6).toFixed(2)} km² of copses`)
+  }
 }
 const forestDensityAt = (x, z) => (forest[idx(Math.round((x + HALF) / RES), Math.round((z + HALF) / RES))] >> 2) / 63
 console.timeEnd('forest')

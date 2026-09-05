@@ -158,14 +158,19 @@ export const RIVER = {
       // INFLOW — out of the Wellspring pool in its coastal gorge at the East
       // Range's northern foot, then south down the long valley between the
       // north pines and the range, winding hard across the flats to the Knot
-      name: 'inflow', flow: 1, halfWidth: 11, canyon: [0.02, 0.3],
+      name: 'inflow', flow: 1, halfWidth: 11, canyon: [0.02, 0.24],
+      // BIG SWEEPS, not zigzags: the river leaves the pool south-west, swings
+      // back south-east under the east foothills, bends west across the flats
+      // and comes round south to the Knot — its average line is an S, not a
+      // ruler (user: "curves left then right back to the same direction")
       path: [
-        { x: 1100, z: -1195 }, { x: 1068, z: -1130 }, { x: 1010, z: -1090 }, { x: 1020, z: -1010 },
-        { x: 950, z: -950 }, { x: 900, z: -860 }, { x: 930, z: -770 }, { x: 860, z: -700 },
-        { x: 790, z: -650 }, { x: 800, z: -560 }, { x: 740, z: -500 }, { x: 680, z: -450 },
-        { x: 720, z: -370 }, { x: 660, z: -300 }, { x: 590, z: -260 }, { x: 610, z: -180 },
-        { x: 560, z: -110 }, { x: 490, z: -80 }, { x: 520, z: 0 }, { x: 470, z: 70 },
-        { x: 400, z: 110 }, { x: 430, z: 190 }, { x: 480, z: 250 }, { x: 440, z: 320 }, { x: 400, z: 380 },
+        { x: 1100, z: -1195 }, { x: 1040, z: -1130 }, { x: 960, z: -1060 }, { x: 870, z: -1000 },
+        { x: 780, z: -940 }, { x: 720, z: -870 }, { x: 700, z: -790 }, { x: 730, z: -710 },
+        { x: 790, z: -650 }, { x: 850, z: -590 }, { x: 880, z: -520 }, { x: 860, z: -450 },
+        { x: 800, z: -400 }, { x: 720, z: -370 }, { x: 630, z: -360 }, { x: 560, z: -330 },
+        { x: 520, z: -270 }, { x: 530, z: -200 }, { x: 580, z: -150 }, { x: 640, z: -110 },
+        { x: 690, z: -60 }, { x: 700, z: 10 }, { x: 670, z: 80 }, { x: 610, z: 130 },
+        { x: 540, z: 170 }, { x: 480, z: 220 }, { x: 440, z: 290 }, { x: 410, z: 340 }, { x: 400, z: 380 },
       ],
     },
     {
@@ -187,12 +192,14 @@ export const RIVER = {
       // OUTFLOW — from the Knot south-east in real S-bends through the swamp's
       // delta to the Estuary Bay
       name: 'outflow', flow: 1, halfWidth: 12,
+      // one long S through the marsh: east out of the Knot, a wide bend south
+      // through the Flats, then a sweep east and south-east to the estuary
       path: [
-        { x: 400, z: 380 }, { x: 450, z: 430 }, { x: 440, z: 510 }, { x: 500, z: 570 },
-        { x: 580, z: 580 }, { x: 610, z: 660 }, { x: 560, z: 740 }, { x: 620, z: 810 },
-        { x: 710, z: 830 }, { x: 760, z: 910 }, { x: 720, z: 990 }, { x: 790, z: 1060 },
-        { x: 880, z: 1070 }, { x: 940, z: 1140 }, { x: 920, z: 1220 }, { x: 990, z: 1290 },
-        { x: 1080, z: 1300 }, { x: 1140, z: 1360 }, { x: 1200, z: 1400 },
+        { x: 400, z: 380 }, { x: 450, z: 430 }, { x: 520, z: 470 }, { x: 600, z: 490 },
+        { x: 680, z: 520 }, { x: 740, z: 580 }, { x: 770, z: 660 }, { x: 760, z: 750 },
+        { x: 720, z: 830 }, { x: 700, z: 920 }, { x: 720, z: 1010 }, { x: 780, z: 1080 },
+        { x: 860, z: 1130 }, { x: 950, z: 1160 }, { x: 1040, z: 1200 }, { x: 1110, z: 1270 },
+        { x: 1160, z: 1340 }, { x: 1200, z: 1400 },
       ],
     },
   ],
@@ -257,7 +264,7 @@ export const FORESTS = [
   {
     // THE SOUTHWOOD — first forest, a meadow north of the spawn beach; runs
     // east over the south mounds to the estuary lowland and north to the ring
-    name: 'southwood', kind: 'broadleaf', density: 0.9, edge: 50,
+    name: 'southwood', kind: 'broadleaf', density: 0.9, edge: 110,
     shore: [
       [-600, 1440], [-560, 1290], [-500, 1150], [-440, 1020], [-330, 930], [-200, 890],
       [0, 880], [200, 860], [380, 880], [520, 940], [620, 1050], [680, 1180], [700, 1320],
@@ -268,7 +275,7 @@ export const FORESTS = [
     // THE RINGWOOD — a broad wood over the whole ring country: the Holm, the
     // moat's banks and the land outside it, up to the pines and down to the
     // Southwood, so the river runs through forest, not lawn
-    name: 'ringwood', kind: 'broadleaf', density: 0.85, edge: 50,
+    name: 'ringwood', kind: 'broadleaf', density: 0.85, edge: 120,
     shore: [
       [-640, -120], [-450, -260], [-200, -300], [60, -310], [300, -260], [480, -160], [560, 0],
       [600, 200], [560, 420], [520, 600], [420, 800], [200, 880], [-50, 900], [-300, 880],
@@ -286,7 +293,7 @@ export const FORESTS = [
   {
     // THE WESTWOOD — wraps Lake Aster: between the lake and the ring, north to
     // the pines, south toward the desert, west up the range's foot
-    name: 'westwood', kind: 'broadleaf', density: 0.85, edge: 50,
+    name: 'westwood', kind: 'broadleaf', density: 0.85, edge: 110,
     shore: [
       [-720, -20], [-820, 50], [-940, 60], [-1020, 40], [-1080, 140], [-1060, 300], [-1040, 420],
       [-960, 480], [-860, 500], [-820, 560], [-880, 760], [-780, 900], [-620, 880], [-540, 760],
@@ -296,7 +303,7 @@ export const FORESTS = [
   {
     // THE NORTH PINES, WEST — conifers over the west foothills and the
     // northern rise, up to the caldera approach (kept open east of x -130)
-    name: 'north-pines-west', kind: 'pine', density: 0.85, edge: 50,
+    name: 'north-pines-west', kind: 'pine', density: 0.85, edge: 120,
     shore: [
       [-1000, -560], [-900, -760], [-760, -940], [-560, -1040], [-320, -1000], [-150, -900],
       [-130, -640], [-150, -420], [-260, -260], [-420, -200], [-600, -220], [-760, -300], [-900, -420],
@@ -304,7 +311,7 @@ export const FORESTS = [
   },
   {
     // THE NORTH PINES, EAST — the other half, west of the inflow valley
-    name: 'north-pines-east', kind: 'pine', density: 0.85, edge: 50,
+    name: 'north-pines-east', kind: 'pine', density: 0.85, edge: 120,
     shore: [
       [130, -900], [250, -1000], [420, -1060], [560, -980], [640, -820], [600, -640],
       [560, -480], [500, -330], [400, -240], [280, -260], [150, -420], [130, -700],
@@ -313,7 +320,7 @@ export const FORESTS = [
   {
     // THE EASTBANK — mixed wood on the inflow's east bank up the east
     // foothills to the East Range's foot
-    name: 'eastbank', kind: 'mixed', density: 0.8, edge: 45,
+    name: 'eastbank', kind: 'mixed', density: 0.8, edge: 100,
     shore: [
       [700, -1000], [860, -1080], [980, -960], [1000, -800], [1050, -600], [1100, -400],
       [1120, -200], [1100, 0], [1080, 200], [1000, 380], [880, 420], [780, 300],
@@ -322,7 +329,7 @@ export const FORESTS = [
   },
   {
     // THE WEST RANGE PINES — the range's flanks below the snow
-    name: 'range-pines-west', kind: 'pine', density: 0.7, edge: 40,
+    name: 'range-pines-west', kind: 'pine', density: 0.7, edge: 90,
     shore: [
       [-1150, -950], [-1050, -700], [-1100, -420], [-1140, -150], [-1180, 120], [-1150, 360],
       [-1100, 580], [-1000, 780], [-1120, 820], [-1280, 700], [-1400, 500], [-1450, 250],
@@ -331,7 +338,7 @@ export const FORESTS = [
   },
   {
     // THE EAST RANGE PINES
-    name: 'range-pines-east', kind: 'pine', density: 0.7, edge: 40,
+    name: 'range-pines-east', kind: 'pine', density: 0.7, edge: 90,
     shore: [
       [1100, -1150], [1250, -1200], [1400, -1000], [1450, -800], [1480, -600], [1500, -400],
       [1520, -200], [1500, 0], [1450, 200], [1380, 380], [1250, 420], [1150, 300],
@@ -340,7 +347,7 @@ export const FORESTS = [
   },
   {
     // THE HORNS PINES — over the Northern Horns
-    name: 'horns-pines', kind: 'pine', density: 0.7, edge: 40,
+    name: 'horns-pines', kind: 'pine', density: 0.7, edge: 90,
     shore: [
       [-1150, -1150], [-1000, -1300], [-800, -1400], [-600, -1500], [-400, -1540], [-300, -1440],
       [-450, -1330], [-600, -1240], [-750, -1160], [-900, -1080], [-1050, -1050],
@@ -349,7 +356,7 @@ export const FORESTS = [
   {
     // THE NORTH FOOTHILLS WOOD — mixed, between the volcano's NE flank and the
     // East Range's northern end
-    name: 'north-foothills', kind: 'mixed', density: 0.75, edge: 45,
+    name: 'north-foothills', kind: 'mixed', density: 0.75, edge: 100,
     shore: [
       [400, -1500], [560, -1560], [760, -1480], [900, -1320], [980, -1150], [900, -1020],
       [760, -1030], [620, -1140], [500, -1280], [420, -1400],
@@ -368,7 +375,7 @@ export const FORESTS = [
   {
     // THE SOUTH-EAST WOOD — between the outflow and the east coast, south of
     // the swamp
-    name: 'southeast', kind: 'broadleaf', density: 0.8, edge: 45,
+    name: 'southeast', kind: 'broadleaf', density: 0.8, edge: 100,
     shore: [
       [900, 700], [1000, 520], [1150, 440], [1300, 450], [1420, 600], [1460, 800], [1450, 1000],
       [1350, 1150], [1200, 1250], [1050, 1180], [980, 1000], [900, 850],
@@ -443,12 +450,12 @@ export const RUINS = [
   { tag: 'aster-shrine', x: -814, z: 44, layout: 'shrine' }, // the lake's north-east bay
   { tag: 'ring-west-watch', x: -620, z: 420, layout: 'watch' },
   { tag: 'holm-north-shrine', x: -60, z: 110, layout: 'shrine' },
-  { tag: 'swamp-columns', x: 780, z: 640, layout: 'columns' },
+  { tag: 'swamp-columns', x: 884, z: 720, layout: 'columns' },
   { tag: 'foothill-circle', x: 1084, z: 86, layout: 'circle' }, // up on the east foothills
   { tag: 'pine-arch-west', x: -500, z: -520, layout: 'arch' },
   { tag: 'pine-arch-east', x: 360, z: -620, layout: 'arch' },
   { tag: 'horns-watch', x: -916, z: -1048, layout: 'watch' },
-  { tag: 'wellspring-columns', x: 1030, z: -1174, layout: 'columns' }, // above the gorge, by the pool
+  { tag: 'wellspring-columns', x: 1020, z: -1190, layout: 'columns' }, // above the gorge, by the pool
 ]
 
 export const CLEARINGS = [
