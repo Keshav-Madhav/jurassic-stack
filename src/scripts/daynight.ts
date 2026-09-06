@@ -108,6 +108,31 @@ function lerpGrade(a: Grade, b: Grade, t: number, out: Grade): Grade {
   return out
 }
 
+/**
+ * Cheaper PCF far from the camera. three r185's PCF takes 5 hardware-filtered
+ * taps for every pixel inside the shadow box; on a Retina screen the terrain
+ * alone was 11 ms of that (M26 GPU ablation: receiveShadow on 13.8 ms, off
+ * 2.3). Past 30 m the penumbra is under a pixel, so one tap is the same
+ * picture. Patched into the shared chunk once, before any material compiles.
+ */
+function patchShadowChunk(): void {
+  const key = 'shadowmap_pars_fragment'
+  const src = THREE.ShaderChunk[key]
+  if (!src || src.includes('vShadowDistCheap')) return
+  const from = `				shadow = (
+					texture( shadowMap, vec3( shadowCoord.xy + vogelDiskSample( 0, 5, phi ) * radius, shadowCoord.z ) ) +`
+  if (!src.includes(from)) return
+  const patched = src.replace(from, `				// vShadowDistCheap: one tap beyond 30 m from the camera (jurassic-stack)
+				if ( gl_FragCoord.w < 1.0 / 30.0 ) {
+					shadow = texture( shadowMap, vec3( shadowCoord.xy, shadowCoord.z ) );
+					return mix( 1.0, shadow, shadowIntensity );
+				}
+				shadow = (
+					texture( shadowMap, vec3( shadowCoord.xy + vogelDiskSample( 0, 5, phi ) * radius, shadowCoord.z ) ) +`)
+  ;(THREE.ShaderChunk as Record<string, string>)[key] = patched
+}
+patchShadowChunk()
+
 export class DayNight {
   /** 0 = midnight, 0.25 = sunrise, 0.5 = noon, 0.75 = sunset. */
   time = 0.34 // spawn in mid-morning

@@ -13,12 +13,13 @@ await page.waitForFunction('window.__g && window.__g.ready === true', null, { ti
 await page.waitForTimeout(10000)
 await page.evaluate(([x, z, yaw]) => { const g = window.__g; g.setTime(0.5); g.teleport(x, z); g.setCam(yaw, 0.05) }, spot)
 await page.waitForTimeout(4000)
+if (process.argv.includes('--retina')) await page.evaluate(() => window.__g.setPixelRatio(2))
 const res = await page.evaluate(async () => {
   const g = window.__g
   const gl = g.renderer.getContext()
   const ext = gl.getExtension('EXT_disjoint_timer_query_webgl2')
   if (!ext) return { error: 'no EXT_disjoint_timer_query_webgl2' }
-  const layers = ['(all)', 'terrain', 'scatter', 'grass', 'water', 'skyExtras', 'clouds', 'shadows', '(all)']
+  const layers = ['(all)', 'terrain', 'scatter', 'grass', 'water', 'skyExtras', 'dinoImpostors', '(all)']
   const timeLayer = async (name) => {
     const hidden = []
     if (name === 'clouds') { const sx = g.scene.getObjectByName('skyExtras'); sx.traverse((o) => { if (o.isInstancedMesh && o.visible) { o.visible = false; hidden.push(o) } }) }

@@ -331,16 +331,28 @@ export class WaterSystem {
             // goes clear (the bank shows through, no hard edge), gets a lighter
             // green-blue cast, and carries a breathing foam line where the
             // depth runs out — the same rule for the sea, the lakes, the ring
-            float depth = vWaterWorld.y - groundUnder(vWaterWorld.xz);
-            float shallow = 1.0 - smoothstep(0.0, 1.6, depth);
-            float clearT = 1.0 - smoothstep(-0.3, 0.9, depth);
-            // the lap: the foam line breathes in and out with a slow wave along the shore
-            float lap = 0.5 + 0.5 * sin(uTime * 1.1 + vnoise(vWaterWorld.xz * 0.05) * 6.283);
-            float edge = 0.12 + 0.3 * lap;
-            float foamLine = (1.0 - smoothstep(edge, edge + 0.45, depth)) * smoothstep(-0.5, -0.08, depth);
-            // broken up by drifting noise so it reads as froth, not a band
-            float n = vnoise(vWaterWorld.xz * 0.9 + vec2(uTime * 0.35, -uTime * 0.2)) * 0.6 + vnoise(vWaterWorld.xz * 3.1 - vec2(uTime * 0.5, uTime * 0.3)) * 0.4;
-            foamLine *= smoothstep(0.28, 0.72, n) * 0.9 + 0.1;
+            // the shore math costs a heightmap fetch and four noise lookups per
+            // pixel; past 220 m the foam is under a pixel and the shallow tint
+            // invisible, so the whole block is skipped (a full-screen sea at
+            // 2× pixel ratio was 10 ms of GPU — M26)
+            float shoreDist = length(vWaterWorld - cameraPosition);
+            float depth = 10.0, shallow = 0.0, clearT = 0.0, foamLine = 0.0;
+            if (shoreDist < 220.0) {
+              depth = vWaterWorld.y - groundUnder(vWaterWorld.xz);
+              shallow = 1.0 - smoothstep(0.0, 1.6, depth);
+              clearT = 1.0 - smoothstep(-0.3, 0.9, depth);
+              if (depth < 1.2) {
+                // the lap: the foam line breathes in and out with a slow wave along the shore
+                float lap = 0.5 + 0.5 * sin(uTime * 1.1 + vnoise(vWaterWorld.xz * 0.05) * 6.283);
+                float edge = 0.12 + 0.3 * lap;
+                foamLine = (1.0 - smoothstep(edge, edge + 0.45, depth)) * smoothstep(-0.5, -0.08, depth);
+                // broken up by drifting noise so it reads as froth, not a band
+                float n = vnoise(vWaterWorld.xz * 0.9 + vec2(uTime * 0.35, -uTime * 0.2)) * 0.6 + vnoise(vWaterWorld.xz * 3.1 - vec2(uTime * 0.5, uTime * 0.3)) * 0.4;
+                foamLine *= smoothstep(0.28, 0.72, n) * 0.9 + 0.1;
+              }
+              float fade = 1.0 - smoothstep(160.0, 220.0, shoreDist);
+              shallow *= fade; clearT *= fade; foamLine *= fade;
+            }
             outgoingLight = mix(outgoingLight, outgoingLight * vec3(0.9, 1.1, 1.05) + vec3(0.04, 0.08, 0.06), shallow * 0.6);
             outgoingLight = mix(outgoingLight, vec3(0.92, 0.96, 1.0), clamp(foamLine, 0.0, 1.0) * 0.8);
             diffuseColor.a *= 1.0 - clearT * 0.92;

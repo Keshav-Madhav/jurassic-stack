@@ -140,10 +140,12 @@ export class Terrain {
           `#include <common>
           uniform sampler2D uGrass; uniform sampler2D uDirt; uniform sampler2D uRock; uniform sampler2D uSand;
           varying vec4 vSplat; varying vec3 vWorldPos;
-          vec3 tiled(sampler2D t, vec2 uv) {
-            // two scales, hash-blended: breaks visible tiling at distance
-            vec3 a = texture2D(t, uv * 0.14).rgb;
+          vec3 tiled(sampler2D t, vec2 uv, float far) {
+            // two scales, hash-blended, breaks visible tiling — but the fine
+            // scale is under a pixel past ~60 m, so far pixels take one fetch
             vec3 b = texture2D(t, uv * 0.031).rgb;
+            if (far > 0.5) return b;
+            vec3 a = texture2D(t, uv * 0.14).rgb;
             return mix(a, b, 0.42);
           }`,
         )
@@ -154,7 +156,15 @@ export class Terrain {
             vec4 w = vSplat;
             float sum = max(w.r + w.g + w.b + w.a, 1e-4);
             w /= sum;
-            vec3 tex = tiled(uGrass, uv) * w.r + tiled(uDirt, uv) * w.g + tiled(uRock, uv) * w.b + tiled(uSand, uv) * w.a;
+            // the terrain was 14 ms of a Retina GPU frame (M26): 8 fetches a
+            // pixel. Skip channels with no weight (most pixels are 1–2 of the
+            // four) and drop to one scale past 60 m
+            float far = step(60.0, length(vWorldPos - cameraPosition));
+            vec3 tex = vec3(0.0);
+            if (w.r > 0.02) tex += tiled(uGrass, uv, far) * w.r;
+            if (w.g > 0.02) tex += tiled(uDirt, uv, far) * w.g;
+            if (w.b > 0.02) tex += tiled(uRock, uv, far) * w.b;
+            if (w.a > 0.02) tex += tiled(uSand, uv, far) * w.a;
             // snow: the palette goes near-white above the snowline; flatten the
             // (yellow sand) texture under it so it reads as snow, not beige
             float snowy = smoothstep(0.6, 0.78, dot(vec3(vColor), vec3(0.3333)));

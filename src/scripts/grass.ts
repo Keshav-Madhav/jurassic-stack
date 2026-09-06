@@ -32,8 +32,15 @@ export class GrassField {
     const card = buildGrassCard(7)
     const mesh = card.children[0] as THREE.Mesh
     this.geometry = mesh.geometry
-    this.material = mesh.material as THREE.Material
+    // LAMBERT, not Standard: the carpet is ~25K alpha-tested cards and the
+    // single biggest fill cost on a Retina screen (18 ms of a 46 ms GPU frame
+    // at 2× — M26). Diffuse-only shading is what grass looks like anyway.
+    const std = mesh.material as THREE.MeshStandardMaterial
+    this.material = new THREE.MeshLambertMaterial({ map: std.map, alphaTest: 0.5, side: THREE.DoubleSide })
+    this.farMaterial = new THREE.MeshLambertMaterial({ map: std.map, alphaTest: 0.5, side: THREE.DoubleSide })
   }
+  /** the outer rings: no shadow sampling (the shadow camera ends at 85 m anyway) */
+  private farMaterial: THREE.Material
 
   /** Call every frame with the viewer position: keeps the tiles around it built. */
   update(x: number, z: number): void {
@@ -97,6 +104,10 @@ export class GrassField {
       mesh.frustumCulled = true
       this.group.add(mesh)
     }
+    const ring = Math.max(Math.abs(kx - this.lastTx), Math.abs(kz - this.lastTz))
+    const far = ring >= 2
+    mesh.material = far ? this.farMaterial : this.material
+    mesh.receiveShadow = !far
     const count = Math.min(g.count, PER_TILE)
     ;(mesh.instanceMatrix.array as Float32Array).set(g.matrices.subarray(0, count * 16))
     if (!mesh.instanceColor) mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(PER_TILE * 3), 3)

@@ -154,10 +154,14 @@ export class SkyExtras {
     this.moon.lookAt(camPos)
     this.moon.scale.setScalar(dist * 0.012)
     this.moonMat.opacity = THREE.MathUtils.clamp((nightness - 0.15) * 1.6, 0, 1) * (moonDir.y > -0.05 ? 1 : 0)
+    // a transparent mesh at opacity 0 still fills every pixel it covers: the
+    // star dome is a full-screen sphere and drew all day (M26 GPU profile)
+    this.moon.visible = this.moonMat.opacity > 0.005
     this.dome.position.copy(camPos)
     this.dome.scale.setScalar(fogFar * 1.04)
     this.dome.rotation.y = this.t * 0.002 // the stars wheel, barely
     this.domeMat.opacity = THREE.MathUtils.clamp((nightness - 0.55) * 2.4, 0, 1) // stars once the sky has actually darkened
+    this.dome.visible = this.domeMat.opacity > 0.005
 
     // clouds: drift with the wind, wrap around the camera so the field is endless
     const wind = this.t * 6
@@ -169,15 +173,22 @@ export class SkyExtras {
       x = ((x % CLOUD_FIELD) + CLOUD_FIELD * 1.5) % CLOUD_FIELD - half
       z = ((z % CLOUD_FIELD) + CLOUD_FIELD * 1.5) % CLOUD_FIELD - half
       const wx = camPos.x + x, wz = camPos.z + z
+      // the flat card only earns its fill from the air (from below it is a
+      // faint blur over the heap): under the deck it collapses to nothing
+      const flatScale = camPos.y < CLOUD_ALT[0] - 120 ? 0.0001 : s.s
       this.dummy.position.set(wx, s.y, wz)
       this.dummy.rotation.set(0, s.rot, 0)
-      this.dummy.scale.set(s.s, 1, s.s * 0.7)
+      this.dummy.scale.set(flatScale, 1, flatScale * 0.7)
       this.dummy.updateMatrix()
       this.clouds.setMatrixAt(i, this.dummy.matrix)
-      // the upright: a billboard (yaw to the camera), its base on the flat card
+      // the upright: a billboard (yaw to the camera), its base on the flat card.
+      // Far ones (past 1300 m) are a few pixels and skipped — 70 half-screen
+      // translucent cards were 5 ms of a Retina GPU frame (M26)
+      const dist = Math.hypot(x, z)
+      const up = dist < 1300 ? s.s : 0.0001
       this.dummy.position.set(wx, s.y + s.s * 0.16, wz)
       this.dummy.rotation.set(0, Math.atan2(camPos.x - wx, camPos.z - wz), 0)
-      this.dummy.scale.set(s.s * 0.9, s.s * 0.42, 1)
+      this.dummy.scale.set(up * 0.9, up * 0.42, 1)
       this.dummy.updateMatrix()
       this.uprights.setMatrixAt(i, this.dummy.matrix)
     }
