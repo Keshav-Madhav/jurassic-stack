@@ -108,3 +108,24 @@ originals untouched in `_raw/nature/`, turntable-verified:
 
 Built trees (`src/scripts/trees.ts`, not assets): canopy ≈ 850 tris full / ≈ 250 far LOD;
 elder ≈ 1,500 / ≈ 450.
+
+
+## The kit — items and buildables (M23, 2026-09-06) · `public/models/kit/`
+
+Downloaded, not built (PLAN: CC0 packs first). Intake: `gltf-transform copy` (embeds Kenney's external
+`Textures/colormap.png`) → `meshopt --level medium`. Raw archives in `_raw/kenney/` (the two kit zips)
+and `_raw/polypizza/` (with `SOURCES.md`: poly.pizza ids, authors, licences). Contact sheets via
+`tools/contact-sheet.mjs`. The item icons are RENDERED from these models at load (`kit.ts`), so the
+icon is the thing.
+
+| Kit file | Source | Licence | Used as |
+|---|---|---|---|
+| kenney-campfire-pit / floor / fence-fortified / structure / structure-floor / structure-roof / fence / tool-axe / tree-log / resource-wood / resource-stone / resource-planks / workbench / chest / bedroll / tent | Kenney Survival Kit 2.0 (kenney.nl/assets/survival-kit) | CC0 | campfire · foundation + ceiling (floor planks) · wall (fortified fence) · wood (tree-log) · stone · saddle (bedroll, stand-in) · rest held for later buildables |
+| kenney-meat-raw / meat-cooked / meat-ribs / grapes | Kenney Food Kit (kenney.nl/assets/food-kit) | CC0 | raw meat · cooked meat · berries (grapes) |
+| pp-Spear, pp-Torch, pp-WoodenTorch, pp-AxeStone | Quaternius via poly.pizza (fH1zmvjPNx, Gq38E7hFZw, pNsfJzhXiD, XnqO64KhYx) | CC0 | spear · torch (wooden) · hatchet + flint (the head) |
+| pp-AnimalHide | Zsky via poly.pizza GaurgMNrWC | CC-BY 3.0 — credit Zsky | hide |
+| pp-Rope | J-Toastie via poly.pizza dkNzi6oDQj | CC-BY 3.0 — credit J-Toastie | fiber |
+| pp-CampfireRocks | reyshapes via poly.pizza 5sjLUck886 | CC0 | held |
+
+Kenney's colormap is saturated toy-orange; the kit tints Kenney materials to weathered timber at load
+(`kit.ts`), icons keep the true colours. Still wanted: a real saddle, a thatch roof piece, a door.

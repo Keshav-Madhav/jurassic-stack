@@ -8,11 +8,13 @@ import RAPIER from '@dimforge/rapier3d-compat'
 import { heightAt } from './heightmap'
 import type { Physics } from './physics'
 import type { ItemId } from './items'
+import type { Kit } from './kit'
+import { ITEM_MODEL } from './kit'
 
 export const CELL = 3
 const WALL_H = 3
 
-export type PieceKind = 'foundation' | 'wall' | 'ceiling' | 'campfire'
+export type PieceKind = 'foundation' | 'wall' | 'ceiling' | 'campfire' | 'torch'
 
 export interface Piece {
   kind: PieceKind
@@ -26,6 +28,38 @@ export interface Piece {
   baseY: number
 }
 
+function emberTexture(): THREE.CanvasTexture {
+  const S = 32
+  const c = document.createElement('canvas')
+  c.width = S; c.height = S
+  const g = c.getContext('2d')!
+  const grad = g.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2)
+  grad.addColorStop(0, 'rgba(255,255,255,1)')
+  grad.addColorStop(0.35, 'rgba(255,255,255,0.8)')
+  grad.addColorStop(1, 'rgba(255,255,255,0)')
+  g.fillStyle = grad
+  g.fillRect(0, 0, S, S)
+  return new THREE.CanvasTexture(c)
+}
+
+function flameTexture(): THREE.CanvasTexture {
+  const S = 64
+  const c = document.createElement('canvas')
+  c.width = S; c.height = S * 2
+  const g = c.getContext('2d')!
+  g.translate(S / 2, 0); g.scale(0.45, 1); g.translate(-S / 2, 0)
+  const grad = g.createRadialGradient(S / 2, S * 1.45, 2, S / 2, S * 1.1, S * 0.95)
+  grad.addColorStop(0, 'rgba(255,245,200,1)')
+  grad.addColorStop(0.25, 'rgba(255,170,60,0.95)')
+  grad.addColorStop(0.55, 'rgba(240,80,20,0.55)')
+  grad.addColorStop(1, 'rgba(120,20,0,0)')
+  g.fillStyle = grad
+  g.fillRect(-S, 0, S * 3, S * 2)
+  const t = new THREE.CanvasTexture(c)
+  t.colorSpace = THREE.SRGBColorSpace
+  return t
+}
+
 const GHOST_OK = new THREE.Color(0x4dc06a)
 const GHOST_BAD = new THREE.Color(0xd0483e)
 
@@ -36,17 +70,19 @@ export class Building {
   private ghost: THREE.Mesh
   private ghostMat: THREE.MeshStandardMaterial
   private colliders: RAPIER.Collider[] = []
-  private woodMat = new THREE.MeshStandardMaterial({ color: 0x8a6a45, roughness: 0.9 })
-  private fireMat = new THREE.MeshStandardMaterial({ color: 0x4a3b2c, roughness: 1 })
   /** Pre-allocated light pool: adding a light mid-game recompiles every
    *  shader in the scene (multi-second freeze). 8 dormant lights cover the
-   *  first 8 campfires; later fires burn lightless. */
+   *  first 8 fires (campfires and torches); later ones burn lightless. Every
+   *  point light costs every fragment (CLAUDE.md), so 8 is the budget. */
   private firePool: THREE.PointLight[] = []
-  private firesLit = 0
+  private fires: { light: THREE.PointLight | null; flame: THREE.Mesh; embers: THREE.Points; base: number; kind: PieceKind }[] = []
+  private flameMat = new THREE.MeshBasicMaterial({ map: flameTexture(), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false })
+  private emberMat = new THREE.PointsMaterial({ color: 0xffa040, size: 0.11, map: emberTexture(), alphaTest: 0.05, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })
+  private t = 0
 
-  constructor(private physics: Physics) {
+  constructor(private physics: Physics, private kit: Kit | null = null) {
     for (let i = 0; i < 8; i++) {
-      const l = new THREE.PointLight(0xff8a3c, 0, 18)
+      const l = new THREE.PointLight(0xffa25a, 0, 34, 1.6) // (18 m / decay 2 barely lit the ground round the fire — M23; less saturated: the timber went traffic-cone)
       this.firePool.push(l)
       this.group.add(l)
     }
@@ -67,12 +103,14 @@ export class Building {
     const gx = Math.round(aim.x / CELL)
     const gz = Math.round(aim.z / CELL)
 
-    if (kind === 'foundation' || kind === 'campfire') {
+    if (kind === 'foundation' || kind === 'campfire' || kind === 'torch') {
       const cx = gx * CELL
       const cz = gz * CELL
-      const ground = heightAt(cx, cz)
+      // a fire or torch on a foundation/ceiling sits on it, else on the ground
+      const under = this.pieceAt('ceiling', gx, gz, 0) ?? this.pieceAt('foundation', gx, gz, 0)
+      const ground = under ? under.baseY + (under.kind === 'foundation' ? 0.35 : 0.25) : heightAt(cx, cz)
       const p: Piece = { kind, gx, gz, level: 0, edge: 0, baseY: ground }
-      if (kind === 'campfire') {
+      if (kind === 'campfire' || kind === 'torch') {
         return { piece: p, valid: !this.keys.has(this.key(p)) }
       }
       // foundation: flat-enough ground, or edge-adjacent to an existing one
@@ -140,18 +178,14 @@ export class Building {
   commit(p: Piece): void {
     this.pieces.push(p)
     this.keys.add(this.key(p))
-    const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), p.kind === 'campfire' ? this.fireMat : this.woodMat)
-    this.applyTransform(mesh, p)
-    mesh.castShadow = true
-    mesh.receiveShadow = true
-    this.group.add(mesh)
-    if (p.kind === 'campfire' && this.firesLit < this.firePool.length) {
-      const flame = this.firePool[this.firesLit++]
-      flame.position.set(p.gx * CELL, p.baseY + 0.9, p.gz * CELL)
-      flame.intensity = 60
-    }
-    // static collider matching the mesh
     const { pos, size } = this.box(p)
+    const mesh = this.kit ? this.kitMesh(p, size) : new THREE.Mesh(new THREE.BoxGeometry(size.x, size.y, size.z), new THREE.MeshStandardMaterial({ color: 0x8a6a45 }))
+    mesh.position.set(pos.x, p.baseY, pos.z)
+    if (p.kind === 'wall') mesh.rotation.y = p.edge === 1 || p.edge === 3 ? Math.PI / 2 : 0
+    this.group.add(mesh)
+    if (p.kind === 'campfire' || p.kind === 'torch') this.lightFire(p)
+    // static collider matching the piece's box (torches don't block: a stake)
+    if (p.kind === 'torch') return
     this.colliders.push(
       this.physics.world.createCollider(
         RAPIER.ColliderDesc.cuboid(size.x / 2, size.y / 2, size.z / 2).setTranslation(pos.x, pos.y, pos.z),
@@ -165,6 +199,65 @@ export class Building {
     mesh.scale.copy(size)
   }
 
+  /** the kit model for a piece, sized to the piece's box */
+  private kitMesh(p: Piece, size: THREE.Vector3): THREE.Object3D {
+    const file = ITEM_MODEL[p.kind as ItemId]
+    switch (p.kind) {
+      case 'foundation': case 'ceiling': return this.kit!.instance(file, { width: CELL })
+      case 'wall': return this.kit!.instance(file, { height: WALL_H })
+      case 'campfire': return this.kit!.instance(file, { width: 1.3 })
+      case 'torch': return this.kit!.instance(file, { height: 1.6 })
+    }
+    void size
+    return this.kit!.instance(file, {})
+  }
+
+  /** a fire: flame cards, embers, and a pooled light while the pool lasts */
+  private lightFire(p: Piece): void {
+    const torch = p.kind === 'torch'
+    const x = p.gx * CELL, z = p.gz * CELL
+    const y = p.baseY + (torch ? 1.55 : 0.3)
+    const light = this.fires.filter((f) => f.light).length < this.firePool.length ? this.firePool[this.fires.filter((f) => f.light).length] : null
+    if (light) {
+      light.position.set(x, y + (torch ? 0.3 : 0.9), z)
+      light.intensity = torch ? 70 : 160
+      light.distance = torch ? 22 : 34
+    }
+    const flame = new THREE.Mesh(new THREE.PlaneGeometry(torch ? 0.5 : 1.6, torch ? 0.9 : 2.2), this.flameMat)
+    flame.position.set(x, y + (torch ? 0.4 : 1.0), z)
+    this.group.add(flame)
+    const n = torch ? 10 : 26
+    const pos = new Float32Array(n * 3)
+    for (let i = 0; i < n; i++) { pos[i * 3] = x + (Math.random() - 0.5) * 0.3; pos[i * 3 + 1] = y + Math.random() * 1.5; pos[i * 3 + 2] = z + (Math.random() - 0.5) * 0.3 }
+    const geo = new THREE.BufferGeometry()
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3))
+    const embers = new THREE.Points(geo, this.emberMat)
+    embers.frustumCulled = false
+    this.group.add(embers)
+    this.fires.push({ light, flame, embers, base: y, kind: p.kind })
+  }
+
+  /** flicker the fires; billboard the flames */
+  update(dt: number, cam: THREE.Vector3): void {
+    this.t += dt
+    for (let i = 0; i < this.fires.length; i++) {
+      const f = this.fires[i]
+      const flick = 0.82 + 0.18 * Math.sin(this.t * 13.1 + i * 2.3) * Math.sin(this.t * 7.7 + i)
+      if (f.light) f.light.intensity = (f.kind === 'torch' ? 70 : 160) * flick
+      f.flame.rotation.y = Math.atan2(cam.x - f.flame.position.x, cam.z - f.flame.position.z)
+      f.flame.scale.set(1 + 0.08 * Math.sin(this.t * 11 + i), 0.9 + 0.14 * flick, 1)
+      const arr = f.embers.geometry.getAttribute('position') as THREE.BufferAttribute
+      const a = arr.array as Float32Array
+      const top = f.base + (f.kind === 'torch' ? 1.2 : 2.2)
+      for (let k = 0; k < arr.count; k++) {
+        a[k * 3 + 1] += (0.6 + (k % 3) * 0.25) * dt
+        a[k * 3] += Math.sin(this.t * 2 + k) * 0.15 * dt
+        if (a[k * 3 + 1] > top) a[k * 3 + 1] = f.base
+      }
+      arr.needsUpdate = true
+    }
+  }
+
   private box(p: Piece): { pos: THREE.Vector3; size: THREE.Vector3 } {
     const cx = p.gx * CELL
     const cz = p.gz * CELL
@@ -175,6 +268,8 @@ export class Building {
         return { pos: new THREE.Vector3(cx, p.baseY + 0.1, cz), size: new THREE.Vector3(CELL, 0.25, CELL) }
       case 'campfire':
         return { pos: new THREE.Vector3(cx, p.baseY + 0.25, cz), size: new THREE.Vector3(1.1, 0.5, 1.1) }
+      case 'torch':
+        return { pos: new THREE.Vector3(cx, p.baseY + 0.8, cz), size: new THREE.Vector3(0.2, 1.6, 0.2) }
       case 'wall': {
         const off = CELL / 2
         const horiz = p.edge === 0 || p.edge === 2

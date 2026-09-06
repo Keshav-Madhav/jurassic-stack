@@ -63,14 +63,16 @@ const NIGHT: Grade = {
   // brighter than it was (user: "moonlight, brighter, slightly more
   // visibility"): a real moonlit night — blue key, lifted fill, readable fog
   // (a notch darker again — user screenshot 27: "a little darker, not too dark")
-  exposure: 0.66,
-  fog: new THREE.Color(0x1c2842),
-  fogNear: 120, fogFar: 1250,
-  hemiSky: new THREE.Color(0x3d5080),
-  hemiGround: new THREE.Color(0x181f15),
-  hemiIntensity: 0.85,
-  sun: new THREE.Color(0xb0c8ff), // the "sun" light doubles as moonlight
-  sunIntensity: 1.15,
+  // (darker again M23 — "night a little more darker" — so a campfire matters:
+  // the fill and the moon key both drop, the fog goes near-black blue)
+  exposure: 0.58,
+  fog: new THREE.Color(0x141e33),
+  fogNear: 110, fogFar: 1150,
+  hemiSky: new THREE.Color(0x33447a),
+  hemiGround: new THREE.Color(0x131a12),
+  hemiIntensity: 0.62,
+  sun: new THREE.Color(0xa8c0ff), // the "sun" light doubles as moonlight
+  sunIntensity: 0.95,
   rimIntensity: 0,
   turbidity: 4,
   rayleigh: 0.6,

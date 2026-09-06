@@ -3,7 +3,7 @@
 export type ItemId =
   | 'wood' | 'stone' | 'fiber' | 'flint' | 'berry' | 'rawmeat' | 'cookedmeat' | 'hide'
   | 'hatchet' | 'spear'
-  | 'campfire' | 'foundation' | 'wall' | 'ceiling'
+  | 'campfire' | 'torch' | 'foundation' | 'wall' | 'ceiling'
   | 'saddle'
 
 export interface ItemDef {
@@ -26,6 +26,7 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   hatchet: { id: 'hatchet', name: 'Hatchet', icon: '🪓' },
   spear: { id: 'spear', name: 'Spear', icon: '🔱' },
   campfire: { id: 'campfire', name: 'Campfire', icon: '🔥', placeable: true },
+  torch: { id: 'torch', name: 'Torch', icon: '🕯️', placeable: true },
   foundation: { id: 'foundation', name: 'Foundation', icon: '⬜', placeable: true },
   wall: { id: 'wall', name: 'Wall', icon: '🧱', placeable: true },
   ceiling: { id: 'ceiling', name: 'Ceiling', icon: '⬛', placeable: true },
@@ -42,6 +43,7 @@ export const RECIPES: Recipe[] = [
   { output: 'hatchet', count: 1, cost: { wood: 1, flint: 1, fiber: 4 } },
   { output: 'spear', count: 1, cost: { wood: 2, flint: 1, fiber: 6 } },
   { output: 'campfire', count: 1, cost: { wood: 6, stone: 4, fiber: 2 } },
+  { output: 'torch', count: 2, cost: { wood: 2, fiber: 3, hide: 1 } }, // a stake, a wrap, a bit of fat to burn
   { output: 'foundation', count: 1, cost: { wood: 8, fiber: 4 } },
   { output: 'wall', count: 1, cost: { wood: 5, fiber: 2 } },
   { output: 'ceiling', count: 1, cost: { wood: 6, fiber: 3 } },

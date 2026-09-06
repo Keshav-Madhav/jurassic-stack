@@ -81,10 +81,31 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #10150f; }
 #hud-hotbar .slot i { position: absolute; bottom: 1px; right: 4px; font-size: 10px; font-style: normal; }
 #hud-panel {
   position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
-  width: 420px; max-height: 70vh; overflow-y: auto;
-  background: rgba(12, 16, 12, 0.92); border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 12px; padding: 16px 18px; pointer-events: auto;
+  width: 520px; max-height: 76vh; overflow-y: auto;
+  background: rgba(14, 18, 14, 0.94); border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 12px; padding: 14px 18px 18px; pointer-events: auto; cursor: default;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.5);
 }
+#hud.panel-open { cursor: default; }
+#hud-panel .panel-head { display: flex; align-items: center; justify-content: space-between; }
+#hud-panel .close {
+  font: inherit; color: inherit; background: rgba(255, 255, 255, 0.08); border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px; width: 28px; height: 26px; cursor: pointer; opacity: 0.8;
+}
+#hud-panel .close:hover { opacity: 1; background: rgba(255, 255, 255, 0.16); }
+#hud-panel .res { display: inline-flex; align-items: center; gap: 6px; background: rgba(255, 255, 255, 0.05); border-radius: 8px; padding: 4px 8px 4px 4px; }
+#hud-panel .res i { opacity: 0.7; font-style: normal; }
+#hud-panel .recipe .name { font-size: 13px; }
+#hud-panel .recipe small { display: flex; gap: 8px; flex-wrap: wrap; }
+#hud-panel .recipe .cost { display: inline-flex; align-items: center; gap: 2px; }
+#hud-panel .recipe .cost.short { color: #e88; }
+#hud-panel .recipe { flex-direction: row; align-items: center; gap: 10px; }
+#hud-panel .recipe > span, #hud-panel .recipe > small { display: block; }
+#hud-panel .recipe .name { flex: 1; }
+.icon { width: 40px; height: 40px; image-rendering: auto; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.6)); }
+.icon.sm { width: 28px; height: 28px; }
+.icon.xs { width: 18px; height: 18px; vertical-align: middle; }
+#hud-hotbar .slot .icon { position: absolute; left: 3px; top: 3px; width: 40px; height: 40px; }
 #hud-panel h3 { margin: 8px 0 6px; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; opacity: 0.8; }
 #hud-panel .resources { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-bottom: 8px; }
 #hud-panel .res { font-size: 13.5px; }

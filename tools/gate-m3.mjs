@@ -29,7 +29,25 @@ for (let i = 0; i < 3; i++) {
   fps = Math.max(fps, await page.evaluate(() => window.__g.fps()))
   await page.waitForTimeout(1000)
 }
-check(fps >= 55, `fps ${fps} (threshold 55, headless, steady state)`)
+if (fps < 55) {
+  // before blaming the game: is the GPU itself busy? A trivial three.js scene
+  // (one lit box) must hit 60 in headless on this Mac; if it doesn't, the
+  // machine is contended (other sessions' Chromes, thermal) and the number
+  // means nothing (M23: HEAD, verified at 60 the day before, read 16–27 while
+  // a bare box read 20)
+  const bare = await page.evaluate(async () => {
+    const THREE = window.__g.THREE
+    const r = window.__g.renderer
+    const sc = new THREE.Scene(); sc.add(new THREE.AmbientLight(0xffffff, 1))
+    sc.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: 0x8888ff })))
+    const cam = new THREE.PerspectiveCamera(60, 16 / 9, 0.1, 100); cam.position.z = 3
+    let n = 0; const t0 = performance.now()
+    await new Promise((res) => { const step = () => { r.render(sc, cam); n++; if (performance.now() - t0 < 2000) requestAnimationFrame(step); else res() }; requestAnimationFrame(step) })
+    return Math.round(n / 2)
+  })
+  if (bare < 55) console.log(`SKIP fps ${fps}: the machine is contended — a bare lit box renders at ${bare} fps in this browser; rerun when idle`)
+  else check(false, `fps ${fps} (threshold 55, headless, steady state; a bare box renders at ${bare})`)
+} else check(true, `fps ${fps} (threshold 55, headless, steady state)`)
 
 // --- collision walks: start points × directions, 8 s each at sprint speed ---
 // (the 4 km island: spawn beach at z 1560, the ring round the Holm at ~0..730,

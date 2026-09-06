@@ -17,8 +17,11 @@ import { Building, type PieceKind } from './building'
 import { Ruins } from './ruins'
 import { Keystones } from './keystones'
 import { Beacon } from './beacon'
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import { WorldBorder } from './border'
 import { HitFx } from './hit-fx'
+import { Kit } from './kit'
 import { Survival, FOODS, type FoodId } from './survival'
 import { Inventory } from './inventory'
 import { ITEMS, type ItemId } from './items'
@@ -198,7 +201,11 @@ async function boot(): Promise<void> {
   scene.add(border.group)
   border.group.name = 'border'
 
-  const building = new Building(physics)
+  // the kit: downloaded item/buildable models + the icons rendered from them
+  const kit = new Kit()
+  await kit.load()
+  kit.captureIcons(renderer)
+  const building = new Building(physics, kit)
   scene.add(building.group)
   building.group.name = 'building'
   if (save) building.restore(save.pieces as ReturnType<Building['serialize']>)
@@ -240,6 +247,18 @@ async function boot(): Promise<void> {
 
   const hud = new Hud(document.getElementById('hud')!, inventory, (id) => {
     if (inventory.craftById(id)) hud.toast(`Crafted ${ITEMS[id].name}`)
+  }, kit.icons)
+  // the inventory releases the mouse (the panel has buttons); Tab or Esc or a
+  // click on the world closes it and re-locks the pointer (user: "inventory
+  // not closeable, mouse doesn't appear")
+  hud.onPanelToggle = (open) => {
+    if (open) document.exitPointerLock()
+    else renderer.domElement.requestPointerLock()
+  }
+  addEventListener('keydown', (e) => { if (e.code === 'Escape' && hud.panelOpen) hud.togglePanel() })
+  document.addEventListener('pointerlockchange', () => {
+    // Esc in pointer lock exits the lock: show the cursor, and close the panel if it was open
+    if (!document.pointerLockElement && hud.panelOpen) { /* keep it open — the user pressed Tab */ }
   })
   const vignette = document.createElement('div')
   vignette.id = 'hud-vignette'
@@ -469,8 +488,11 @@ async function boot(): Promise<void> {
       hud.toast(tamed ? `${ko.species.name} tamed!` : `Feeding… ${Math.min(100, Math.round(ko.tameProgress))}%`)
       return true
     }
+    // a tame in reach comes first (saddle / mount) — a campfire beside it
+    // would otherwise catch the E as "cook"
+    const tameFirst = nearestDino(INTERACT_RANGE, (d) => d.state === 'tamed')
     // cook: raw meat at a campfire
-    if (inventory.count('rawmeat') > 0 && building.nearFire(f0.x, f0.z)) {
+    if (!tameFirst && inventory.count('rawmeat') > 0 && building.nearFire(f0.x, f0.z)) {
       const n = Math.min(5, inventory.count('rawmeat'))
       inventory.remove('rawmeat', n)
       inventory.add('cookedmeat', n)
@@ -478,7 +500,7 @@ async function boot(): Promise<void> {
       return true
     }
     // drink: any water within reach of the feet
-    if (nearWaterFor(f0)) {
+    if (!tameFirst && nearWaterFor(f0)) {
       const got = survival.drink()
       hud.toast(got > 0.5 ? `Drank · water ${Math.round(survival.water)}` : 'Not thirsty')
       return true
@@ -541,6 +563,13 @@ async function boot(): Promise<void> {
   }
   let lastSpaceAt = 0
   addEventListener('keydown', (e) => {
+    if (e.code === 'Tab') {
+      e.preventDefault()
+      hud.togglePanel()
+      return
+    }
+    // the panel is open: no gameplay keys (Esc closes it, above)
+    if (hud.panelOpen) return
     if (e.code === 'KeyT') daynight.setTime(daynight.time + 1 / 24)
     if (e.code === 'KeyC') setCreative(!creative)
     if (e.code === 'KeyF' && !riding) {
@@ -576,10 +605,6 @@ async function boot(): Promise<void> {
       }
     }
     if (e.code === 'KeyE') interact()
-    if (e.code === 'Tab') {
-      e.preventDefault()
-      hud.togglePanel()
-    }
     if (/^Digit[1-9]$/.test(e.code)) hud.selectSlot(Number(e.code.slice(5)) - 1)
   })
   addEventListener('mousedown', (e) => {
@@ -657,6 +682,9 @@ async function boot(): Promise<void> {
     /** QA: fog distance multiplier (aerials use 6) */
     setFog: (scale: number) => { daynight.fogScale = scale },
     scene,
+    renderer,
+    THREE,
+    loaders: { GLTFLoader, MeshoptDecoder },
     /** QA: what's under a screen pixel (0..1 ndc coords) — object name/kind, material, distance */
     pick: (nx: number, ny: number) => {
       const rc = new THREE.Raycaster()
@@ -841,6 +869,11 @@ async function boot(): Promise<void> {
       hp: () => playerHp,
       riding: () => riding !== null,
       pieces: () => building.pieces.length,
+      /** QA: place a buildable at a world point (consumes the item) */
+      placeAt: (id: string, x: number, z: number) => { if (!ITEMS[id as ItemId]?.placeable) return false; const ok = building.place(id as PieceKind, new THREE.Vector3(x, heightAt(x, z), z)); if (ok) inventory.remove(id as ItemId, 1); return !!ok },
+      panelOpen: () => hud.panelOpen,
+      iconCount: () => kit.icons.size,
+      icon: (id: string) => kit.icons.get(id as ItemId) ?? null,
       dinoStates: () => dinos.map((d) => ({ state: d.state, torpor: d.torpor, saddled: d.saddled })),
       /** QA: the awake ecology — who is doing what to whom */
       ecology: () => awake.filter((d) => d.state !== 'idle' && d.state !== 'wander').map((d) => ({ sp: d.species.id, state: d.state, hp: Math.round(d.hp), x: Math.round(d.object.position.x), z: Math.round(d.object.position.z), foe: d.currentFoe ? d.currentFoe.species.id : d.state === 'aggro' || d.state === 'hunt' ? 'player' : null })),
@@ -1292,6 +1325,7 @@ async function boot(): Promise<void> {
       if (playerHp <= 0) hurtPlayer(1) // the respawn path
     }
     keystones.update(dt, feetPos().setY(feetPos().y + 1.3))
+    building.update(dt, cam.camera.position)
     if (gatekeeper && !alphaSlain && gatekeeper.state === 'dead') {
       alphaSlain = true
       hud.toast('The Gatekeeper falls. The causeway is yours.')

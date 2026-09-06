@@ -21,7 +21,10 @@ export class Hud {
   fps = 0
   panelOpen = false
 
-  constructor(private root: HTMLElement, private inv: Inventory, private onCraft: (id: ItemId) => void) {
+  /** main.ts: release/re-lock the pointer when the panel opens/closes */
+  onPanelToggle: ((open: boolean) => void) | null = null
+
+  constructor(private root: HTMLElement, private inv: Inventory, private onCraft: (id: ItemId) => void, private icons: Map<ItemId, string> = new Map()) {
     root.innerHTML = `
       <div id="hud-stats">
         <span id="hud-fps">-- fps</span>
@@ -148,7 +151,15 @@ export class Hud {
   togglePanel(): void {
     this.panelOpen = !this.panelOpen
     this.panelEl.hidden = !this.panelOpen
+    this.root.classList.toggle('panel-open', this.panelOpen)
     if (this.panelOpen) this.renderPanel()
+    this.onPanelToggle?.(this.panelOpen)
+  }
+
+  /** an item's icon markup: the rendered sprite when we have one, the emoji fallback otherwise */
+  icon(id: ItemId, cls = ''): string {
+    const src = this.icons.get(id)
+    return src ? `<img class="icon ${cls}" src="${src}" alt="${ITEMS[id].name}" draggable="false">` : `<b class="${cls}">${ITEMS[id].icon}</b>`
   }
 
   selectSlot(i: number): void {
@@ -161,8 +172,8 @@ export class Hud {
       .map((id, i) => {
         const item = id ? ITEMS[id] : null
         const count = id && (item?.placeable || id === 'berry' || id === 'rawmeat' || id === 'cookedmeat') ? this.inv.count(id) : ''
-        return `<div class="slot${i === this.inv.selected ? ' sel' : ''}">
-          <em>${i + 1}</em>${item ? `<b>${item.icon}</b><i>${count}</i>` : ''}
+        return `<div class="slot${i === this.inv.selected ? ' sel' : ''}" title="${item?.name ?? ''}">
+          <em>${i + 1}</em>${item && id ? `${this.icon(id)}<i>${count}</i>` : ''}
         </div>`
       })
       .join('')
@@ -171,20 +182,21 @@ export class Hud {
   private renderPanel(): void {
     const rows = (Object.keys(ITEMS) as ItemId[])
       .filter((id) => this.inv.count(id) > 0)
-      .map((id) => `<span class="res">${ITEMS[id].icon} ${ITEMS[id].name} × ${this.inv.count(id)}</span>`)
+      .map((id) => `<span class="res" title="${ITEMS[id].name}">${this.icon(id, 'sm')}<span>${ITEMS[id].name}</span><i>× ${this.inv.count(id)}</i></span>`)
       .join('')
     const recipes = RECIPES.map((r) => {
       const ok = this.inv.canCraft(r)
       const cost = Object.entries(r.cost)
-        .map(([id, n]) => `${ITEMS[id as ItemId].icon}${n}`)
-        .join(' ')
+        .map(([id, n]) => `<span class="cost ${this.inv.count(id as ItemId) >= (n ?? 0) ? '' : 'short'}" title="${ITEMS[id as ItemId].name}">${this.icon(id as ItemId, 'xs')}${n}</span>`)
+        .join('')
       return `<button class="recipe" data-id="${r.output}" ${ok ? '' : 'disabled'}>
-        ${ITEMS[r.output].icon} ${ITEMS[r.output].name}<small>${cost}</small></button>`
+        ${this.icon(r.output)}<span class="name">${ITEMS[r.output].name}${r.count > 1 ? ` ×${r.count}` : ''}</span><small>${cost}</small></button>`
     }).join('')
-    this.panelEl.innerHTML = `<h3>Inventory</h3><div class="resources">${rows || '<span class="res">empty-handed</span>'}</div>
+    this.panelEl.innerHTML = `<div class="panel-head"><h3>Inventory</h3><button class="close" title="close (Tab / Esc)">✕</button></div><div class="resources">${rows || '<span class="res"><span>empty-handed</span></span>'}</div>
       <h3>Craft</h3><div class="recipes">${recipes}</div>`
     this.panelEl.querySelectorAll<HTMLButtonElement>('.recipe').forEach((b) =>
       b.addEventListener('click', () => this.onCraft(b.dataset.id as ItemId)),
     )
+    this.panelEl.querySelector<HTMLButtonElement>('.close')!.addEventListener('click', () => this.togglePanel())
   }
 }
