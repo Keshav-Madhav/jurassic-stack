@@ -13,10 +13,16 @@ export class Inventory {
     return this.counts.get(id) ?? 0
   }
 
+  /** what the hotbar slots on pickup: tools, placeables, and food (so F has
+   *  something to eat and the count shows — the bars were empty with a full
+   *  pack, M22) */
+  private static slots(id: ItemId): boolean {
+    return !!ITEMS[id].placeable || id === 'hatchet' || id === 'spear' || id === 'berry' || id === 'rawmeat' || id === 'cookedmeat'
+  }
+
   add(id: ItemId, n = 1): void {
     this.counts.set(id, this.count(id) + n)
-    // tools/placeables auto-slot into the first free hotbar slot
-    if ((ITEMS[id].placeable || id === 'hatchet' || id === 'spear') && !this.hotbar.includes(id)) {
+    if (Inventory.slots(id) && !this.hotbar.includes(id)) {
       const free = this.hotbar.indexOf(null)
       if (free >= 0) this.hotbar[free] = id
     }
@@ -26,7 +32,7 @@ export class Inventory {
   remove(id: ItemId, n = 1): boolean {
     if (this.count(id) < n) return false
     this.counts.set(id, this.count(id) - n)
-    if (this.count(id) === 0 && ITEMS[id].placeable) {
+    if (this.count(id) === 0 && id !== 'hatchet' && id !== 'spear') {
       const slot = this.hotbar.indexOf(id)
       if (slot >= 0) this.hotbar[slot] = null
     }

@@ -364,6 +364,47 @@ export function buildDriedBush(seed: number): THREE.Group {
   return finish(parts, `DriedBush_${seed}`)
 }
 
+const MOSS = new THREE.Color(0x3f6a2a)
+/** A fallen log, unit height (place at 1.2–2.2 m ≈ 0.6–1.1 m thick, 4–8 m long):
+ *  a tapered trunk lying on its side, a stub of a branch or two, moss on top.
+ *  Replaces the MossRock GLB — a mushroom-and-planks slab that read as a
+ *  green table when instanced 6 m wide (M22 walk). */
+export function buildLog(seed: number): THREE.Group {
+  massDetail = 0
+  const rand = mulberry32(seed)
+  const parts: THREE.BufferGeometry[] = []
+  const len = 3.6 + rand() * 1.6 // in unit-height space: 1 m thick → 3.6–5.2 m long
+  const r = 0.5
+  const bark = _c.copy(BARK).lerp(BARK_LIT, rand() * 0.5)
+  // the trunk: along +x, resting on the ground (its lowest point at y=0)
+  const trunk = limb(new THREE.Vector3(-len / 2, r, 0), new THREE.Vector3(len / 2, r * 0.92, 0), r, r * 0.78, 9, rand)
+  paint(trunk, bark, 0.12, rand); parts.push(trunk)
+  // end caps (flat discs, lighter wood)
+  for (const [x, rr] of [[-len / 2, r], [len / 2, r * 0.78]] as const) {
+    const cap = new THREE.CircleGeometry(rr, 9).toNonIndexed()
+    cap.rotateY(x < 0 ? -Math.PI / 2 : Math.PI / 2)
+    cap.translate(x, r, 0)
+    paint(cap, new THREE.Color(0x8a6c48), 0.08, rand); parts.push(cap)
+  }
+  // a branch stub or two
+  const stubs = 1 + Math.floor(rand() * 2)
+  for (let i = 0; i < stubs; i++) {
+    const x = (rand() - 0.5) * len * 0.7
+    const ang = 0.4 + rand() * 1.4
+    const from = new THREE.Vector3(x, r + Math.sin(ang) * r * 0.8, Math.cos(ang) * r * 0.8)
+    const to = new THREE.Vector3(x + (rand() - 0.5) * 0.4, from.y + 0.45 + rand() * 0.4, from.z + Math.cos(ang) * 0.4)
+    const st = limb(from, to, r * 0.22, r * 0.1, 6, rand)
+    paint(st, bark, 0.1, rand); parts.push(st)
+  }
+  // moss along the top
+  for (let i = 0; i < 4; i++) {
+    const x = (rand() - 0.5) * len * 0.8
+    parts.push(leafMass(x, r * 1.85, (rand() - 0.5) * r * 0.5, 0.35 + rand() * 0.3, 0.09, 0.28 + rand() * 0.2, MOSS, rand))
+  }
+  massDetail = 1
+  return finish(parts, `Log_${seed}`)
+}
+
 const CACTUS = new THREE.Color(0x3f7a3a)
 /** A saguaro-type cactus, unit height (place at 2.5-5 m): a ribbed column and one or two arms. */
 export function buildCactus(seed: number): THREE.Group {
@@ -407,9 +448,11 @@ export function buildReeds(seed: number): THREE.Group {
 }
 
 // ---------- ground clutter + rock (mandate items 5 and 7) ----------
-const STONE = new THREE.Color(0x5e5b56)
-const STONE_LIT = new THREE.Color(0x8a867e)
-const STONE_WARM = new THREE.Color(0x6e6254)
+// (darkened M22: the outcrops and stone piles read as white chalk beside the
+// weathered GLB rocks — a lit face under the noon sun is where the light goes)
+const STONE = new THREE.Color(0x4f4b45)
+const STONE_LIT = new THREE.Color(0x6a655d)
+const STONE_WARM = new THREE.Color(0x5c5044)
 /** A lumpy stone, squashed; `r` in the unit prop's own scale. */
 function stone(cx: number, cy: number, cz: number, r: number, rand: () => number, detail = 0): THREE.BufferGeometry {
   const save = massDetail

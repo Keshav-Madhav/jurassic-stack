@@ -113,6 +113,28 @@ export async function loadHeightmap(base = ''): Promise<void> {
   VOLCANO.z = worldMeta.volcano.z
 }
 
+/** The heightmap as a GPU texture (R16F, 2048², linear-filtered), built once
+ *  — the water shader reads the ground under each fragment for shore fades
+ *  and foam. uv = ((x + HALF) / res + 0.5) / 2048. */
+let heightTex: THREE.DataTexture | null = null
+export function heightTexture(): THREE.DataTexture {
+  if (heightTex) return heightTex
+  if (!grid) throw new Error('heightTexture before loadHeightmap()')
+  const N = 2048
+  const data = new Uint16Array(N * N)
+  for (let z = 0; z < N; z++) {
+    const row = z * side
+    for (let x = 0; x < N; x++) data[z * N + x] = THREE.DataUtils.toHalfFloat(grid[row + x] * scale)
+  }
+  heightTex = new THREE.DataTexture(data, N, N, THREE.RedFormat, THREE.HalfFloatType)
+  heightTex.minFilter = THREE.LinearFilter
+  heightTex.magFilter = THREE.LinearFilter
+  heightTex.wrapS = heightTex.wrapT = THREE.ClampToEdgeWrapping
+  heightTex.generateMipmaps = false
+  heightTex.needsUpdate = true
+  return heightTex
+}
+
 export function heightAt(x: number, z: number): number {
   if (!grid) throw new Error('heightAt before loadHeightmap()')
   const fx = (x + HALF_SIZE) / res

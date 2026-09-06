@@ -657,6 +657,19 @@ async function boot(): Promise<void> {
     /** QA: fog distance multiplier (aerials use 6) */
     setFog: (scale: number) => { daynight.fogScale = scale },
     scene,
+    /** QA: what's under a screen pixel (0..1 ndc coords) — object name/kind, material, distance */
+    pick: (nx: number, ny: number) => {
+      const rc = new THREE.Raycaster()
+      rc.setFromCamera(new THREE.Vector2(nx * 2 - 1, -(ny * 2 - 1)), cam.camera)
+      const hits = rc.intersectObjects(scene.children, true).filter((h) => { let o: THREE.Object3D | null = h.object; while (o) { if (!o.visible) return false; o = o.parent } return (h.object as THREE.Mesh).isMesh })
+      return hits.slice(0, 3).map((h) => {
+        const o = h.object as THREE.Mesh
+        const m = (Array.isArray(o.material) ? o.material[0] : o.material) as THREE.MeshStandardMaterial
+        let fam: THREE.Object3D = o
+        while (fam.parent && fam.parent !== scene) fam = fam.parent
+        return { family: fam.name || fam.type, name: o.name, instanced: (o as THREE.InstancedMesh).isInstancedMesh ?? false, instanceId: h.instanceId, dist: +h.distance.toFixed(1), tris: (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3, mat: `${m.type} color=${m.color?.getHexString()} rough=${m.roughness} map=${!!m.map} vc=${!!m.vertexColors}` }
+      })
+    },
     setLod: (bands: { far?: number; mid?: number; cover?: number }) => { const r = setLodBands(bands); lastVisX = Infinity; return r },
     /** QA: what the camera is about to draw — visible, in-frustum meshes per scene group (≈ draw calls before multi-material splits) */
     drawAudit: () => {

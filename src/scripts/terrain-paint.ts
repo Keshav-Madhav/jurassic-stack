@@ -22,9 +22,11 @@ const C_GRASS_DRY = new THREE.Color(0x555a28) // olive dry patches
 const C_ROCK = new THREE.Color(0x6b6762) // weathered gray (lifted: the ranges read as coal heaps at noon — M18)
 const C_ROCK_STEEP = new THREE.Color(0x504c47)
 const C_ALPINE = new THREE.Color(0x6a6350) // high scree and thin turf between the rock and the snow
-const C_FLOOR = new THREE.Color(0x3a2e1f) // forest floor: dirt + leaf litter
-const C_FLOOR_LIT = new THREE.Color(0x51402a)
-const C_MUD = new THREE.Color(0x453827) // wet banks
+// (lifted M22: the forest floor and the banks read as coal-black in every
+// eye-level shot — a floor of litter is brown, and 2× brighter than this was)
+const C_FLOOR = new THREE.Color(0x4a3a26) // forest floor: dirt + leaf litter
+const C_FLOOR_LIT = new THREE.Color(0x66522f)
+const C_MUD = new THREE.Color(0x5a4a33) // wet banks
 const C_SHORE_SAND = new THREE.Color(0x8f7a52)
 const C_SWAMP = new THREE.Color(0x2e3320) // murky marsh ground
 const C_SWAMP_WET = new THREE.Color(0x252b1e)
@@ -183,7 +185,9 @@ function groundColorAt(x: number, z: number, h: number, ny: number, out: THREE.C
     // reference: forest floors are brown, greens live in the understory)
     const forest = forestMaskAt(x, z)
     if (forest > -0.35) {
-      const t = THREE.MathUtils.clamp((forest + 0.35) / 0.6, 0, 1) * 0.85
+      // (0.85 → 0.7: some green survives under the canopy — a wood is not a
+      // dirt lot, and the mid-band tree twins over black ground looked dead)
+      const t = THREE.MathUtils.clamp((forest + 0.35) / 0.6, 0, 1) * 0.7
       out.lerp(_c.copy(C_FLOOR).lerp(C_FLOOR_LIT, 0.5 + varT * 0.5), t)
     }
     // wet banks: mud then a sand lip against rivers and lakes (backlog #1)

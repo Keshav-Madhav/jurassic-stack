@@ -14,7 +14,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
 import { heightAt, lodFloorAt, normalAt, forestMaskAt, forestKindAt, biomeAt, shoreDist, BIOME, FOREST_KIND, SEA_LEVEL, HALF_SIZE, SPAWN, VOLCANO, worldMeta } from './heightmap'
-import { buildCanopyTree, buildElderTree, buildMushroom, buildRedwood, buildMangrove, buildDriedBush, buildCactus, buildReeds, buildPebbles, buildStones, buildSticks, buildOutcrop, buildGrassCard, buildFarPine } from './trees'
+import { buildCanopyTree, buildElderTree, buildMushroom, buildRedwood, buildMangrove, buildDriedBush, buildCactus, buildReeds, buildPebbles, buildStones, buildSticks, buildOutcrop, buildGrassCard, buildFarPine, buildLog } from './trees'
 import { captureImpostor } from './impostor'
 import { CHUNK_SIZE, CHUNKS_PER_SIDE } from './terrain'
 import { addObstacle } from './obstacles'
@@ -80,7 +80,7 @@ interface ModelRef {
   /** optional named sub-node to extract (variant packs) */
   node?: string
   /** … or a tree built in code (trees.ts), deterministic per seed */
-  gen?: 'canopy' | 'elder' | 'mushroom' | 'redwood' | 'mangrove' | 'driedbush' | 'cactus' | 'reeds' | 'pebbles' | 'stones' | 'sticks' | 'outcrop' | 'grasscard'
+  gen?: 'canopy' | 'elder' | 'mushroom' | 'redwood' | 'mangrove' | 'driedbush' | 'cactus' | 'reeds' | 'pebbles' | 'stones' | 'sticks' | 'outcrop' | 'grasscard' | 'log'
   seed?: number
 }
 
@@ -99,7 +99,7 @@ const KIND_MODELS: Record<NodeKind, ModelRef[]> = {
   palm: [{ file: 'Palm' }],
   willow: [{ file: 'Willow' }],
   rock: [{ file: 'Rock1' }, { file: 'Rock2' }],
-  log: [{ file: 'MossRock' }],
+  log: [{ gen: 'log', seed: 61 }, { gen: 'log', seed: 62 }],
   bush: [{ file: 'Bush1' }, { file: 'BerryBush', node: 'Bush' }],
   fern: [{ file: 'Fern' }],
   flower: [
@@ -175,7 +175,7 @@ const SPECS: Record<NodeKind, PlaceSpec> = {
   fern: { cell: 10, chance: 0.72, sMin: 0.8, sMax: 1.9, cap: 64000, seed: 505, habitat: (h, _ny, f) => f > -0.5 && h > 3 },
   flower: { cell: 18, chance: 0.5, sMin: 0.6, sMax: 1.2, cap: 10400, seed: 111, habitat: (h, _ny, f) => f < -0.6 && h > 2.4 },
   // (the visual carpet is grass.ts — these are the harvestable tufts)
-  grass: { cell: 9, chance: 0.6, sMin: 0.7, sMax: 1.2, cap: 80000, seed: 555, habitat: (h) => h > 1.6 },
+  grass: { cell: 9, chance: 0.6, sMin: 0.5, sMax: 0.8, cap: 80000, seed: 555, habitat: (h) => h > 1.6 }, // (0.7–1.2 read as a lime ball beside the 0.55–1.1 carpet — M22)
   mushroom: { cell: 26, chance: 0.45, sMin: 0.35, sMax: 0.8, cap: 3600, seed: 222, habitat: (h, _ny, f) => f > 0 && h > 3 },
   // THE SWAMP: mangroves on the wet ground, reeds at the water's edge, dried
   // bushes on the drier hummocks (biome gates below decide where these go)
@@ -315,6 +315,8 @@ class InstancedProp {
     group: THREE.Group,
     castShadow: boolean,
     private recolor?: (mat: THREE.MeshStandardMaterial) => void,
+    /** ground cover: sink into the ground over the last 60 m before its draw distance (no hard ring) */
+    private fadeAt = 0,
   ) {
     this.castShadowFlag = castShadow
     const box = new THREE.Box3().setFromObject(root)
@@ -391,6 +393,7 @@ class InstancedProp {
         mat.color.lerp(new THREE.Color(0x14300f), 0.55)
       }
       if (this.recolor) this.recolor(mat)
+      if (this.fadeAt > 0) InstancedProp.addDistanceFade(mat, this.fadeAt)
       parts.push({ geo, mat })
     })
     // UNTEXTURED submeshes fold into one vertex-coloured geometry: a prop's
@@ -430,6 +433,29 @@ class InstancedProp {
       this.meshes.push(im)
       group.add(im)
     }
+  }
+
+  /** The cover fade: a vertex shader patch that scales the instance down into
+   *  the ground over [fadeAt − 60, fadeAt] metres from the camera — ground
+   *  cover used to vanish at a hard 290 m ring you could watch sweep the
+   *  meadow as you walked (M22). Chained after any existing onBeforeCompile. */
+  static addDistanceFade(mat: THREE.MeshStandardMaterial, fadeAt: number): void {
+    const prev = mat.onBeforeCompile
+    mat.onBeforeCompile = (shader, renderer) => {
+      prev?.(shader, renderer)
+      shader.uniforms.uFadeAt = { value: fadeAt }
+      shader.vertexShader = shader.vertexShader
+        .replace('#include <common>', '#include <common>\nuniform float uFadeAt;')
+        .replace('#include <begin_vertex>', `#include <begin_vertex>
+          {
+            vec4 base = modelMatrix * instanceMatrix * vec4(0.0, 0.0, 0.0, 1.0);
+            float dCam = distance(base.xyz, cameraPosition);
+            float k = 1.0 - smoothstep(uFadeAt - 60.0, uFadeAt, dCam);
+            transformed.y *= k;
+          }`)
+    }
+    const prevKey = mat.customProgramCacheKey.bind(mat)
+    mat.customProgramCacheKey = () => prevKey() + '|fade' + fadeAt
   }
 
   /** During the fill everything is written, so whole-buffer uploads are
@@ -615,8 +641,8 @@ export class Scatter {
       if (!ref.gen) continue
       const key = `${ref.gen}:${ref.seed}`
       if (built.has(key)) continue
-      if (ref.gen === 'mushroom' || ref.gen === 'driedbush' || ref.gen === 'cactus' || ref.gen === 'reeds' || ref.gen === 'pebbles' || ref.gen === 'stones' || ref.gen === 'sticks' || ref.gen === 'grasscard') {
-        const small = { mushroom: buildMushroom, driedbush: buildDriedBush, cactus: buildCactus, reeds: buildReeds, pebbles: buildPebbles, stones: buildStones, sticks: buildSticks, grasscard: buildGrassCard }[ref.gen]
+      if (ref.gen === 'mushroom' || ref.gen === 'driedbush' || ref.gen === 'cactus' || ref.gen === 'reeds' || ref.gen === 'pebbles' || ref.gen === 'stones' || ref.gen === 'sticks' || ref.gen === 'grasscard' || ref.gen === 'log') {
+        const small = { mushroom: buildMushroom, driedbush: buildDriedBush, cactus: buildCactus, reeds: buildReeds, pebbles: buildPebbles, stones: buildStones, sticks: buildSticks, grasscard: buildGrassCard, log: buildLog }[ref.gen]
         built.set(key, small(ref.seed ?? 1))
         continue
       }
@@ -649,6 +675,12 @@ export class Scatter {
       this.place(kind, SPECS[kind], aspect.get(kind) ?? 0.5)
     }
 
+    // the terrain's rock albedo, re-tiled onto the props' own UVs (awaited:
+    // a material compiled with USE_MAP samples an unloaded texture as black)
+    const rockTex = await new THREE.TextureLoader().loadAsync('textures/rock.jpg')
+    rockTex.colorSpace = THREE.SRGBColorSpace
+    rockTex.wrapS = rockTex.wrapT = THREE.RepeatWrapping
+    rockTex.repeat.set(4, 4)
     for (const [key, ids] of this.order) {
       const { kind, variant } = parseGroupKey(key)
       const root = rootOf(KIND_MODELS[kind][variant])
@@ -656,22 +688,49 @@ export class Scatter {
       const recolor =
         kind === 'rock' || kind === 'boulder'
           ? (mat: THREE.MeshStandardMaterial) => {
-              // stone is gray: drop the clay-orange texture Rock2 ships with
-              // and cap the lightness (Rock1 read as white chalk in the sun)
-              if (mat.map) { mat.map = null; mat.color.setScalar(0.4); mat.needsUpdate = true }
-              const lum = mat.color.r * 0.3 + mat.color.g * 0.6 + mat.color.b * 0.1
-              mat.color.setRGB(1, 1.0, 1.02).multiplyScalar(THREE.MathUtils.clamp(lum * 0.6 + 0.08, 0.13, 0.27)) // weathered stone, not chalk
+              // stone is gray, with FORM: a flat-shaded face under a 2.9 sun is
+              // a flat mid-grey slab whatever its albedo (measured M22: 0.13
+              // linear still read sRGB 130). The Quaternius rocks are ATLAS-
+              // mapped — every vertex on one texel — so a map on their UVs is
+              // one colour. World-space triplanar rock texture instead.
+              mat.map = null
+              mat.color.setRGB(0.5, 0.485, 0.47)
+              mat.roughness = 0.95
+              mat.metalness = 0
+              mat.onBeforeCompile = (shader) => {
+                shader.uniforms.uRock = { value: rockTex }
+                shader.vertexShader = shader.vertexShader
+                  .replace('#include <common>', '#include <common>\nvarying vec3 vRockPos; varying vec3 vRockNor;')
+                  .replace('#include <worldpos_vertex>', '#include <worldpos_vertex>\nvRockPos = (modelMatrix * instanceMatrix * vec4(transformed, 1.0)).xyz; vRockNor = normalize(mat3(modelMatrix * instanceMatrix) * objectNormal);')
+                shader.fragmentShader = shader.fragmentShader
+                  .replace('#include <common>', '#include <common>\nuniform sampler2D uRock; varying vec3 vRockPos; varying vec3 vRockNor;')
+                  .replace('#include <map_fragment>', `{
+                    vec3 w = abs(vRockNor); w = w / (w.x + w.y + w.z + 1e-4);
+                    float s = 0.55; // metres per tile
+                    vec3 t = texture2D(uRock, vRockPos.yz * s).rgb * w.x + texture2D(uRock, vRockPos.xz * s).rgb * w.y + texture2D(uRock, vRockPos.xy * s).rgb * w.z;
+                    diffuseColor.rgb *= t * 2.1; // recentre the albedo around 1
+                  }`)
+              }
+              mat.customProgramCacheKey = () => 'rock-triplanar'
+              mat.needsUpdate = true
             }
           : kind === 'bush'
             ? (mat: THREE.MeshStandardMaterial) => {
-                // the textured berry bush ships lime-neon and dodged the
-                // green-darkening pass (its base colour is white): pull the
-                // texture toward shaded leaf green
-                if (mat.map) mat.color.setRGB(0.42, 0.55, 0.38)
+                // the textured berry bush ships a lime-neon atlas and dodged the
+                // green-darkening pass (its base colour is white). Tinting the
+                // texture never fixed it — lime × any tint is lime (it was the
+                // one bright ball in every meadow shot through M22). The map
+                // goes; the bush is a flat deep leaf green like the built props
+                if (mat.map) {
+                  mat.map = null
+                  mat.color.set(0x1e4a18)
+                  mat.needsUpdate = true
+                }
               }
             : undefined
       const cover = GROUND_COVER.has(kind)
-      const prop = new InstancedProp(root, Math.max(ids.length, 1), this.group, !cover, recolor)
+      const fadeAt = cover ? (COVER_DIST_OVERRIDE[kind] ?? COVER_DRAW_DIST) : 0
+      const prop = new InstancedProp(root, Math.max(ids.length, 1), this.group, !cover, recolor, fadeAt)
       this.props.set(key, prop)
       ids.forEach((nodeId, i) => {
         const n = this.nodes[nodeId]
@@ -790,7 +849,9 @@ export class Scatter {
         const scale = spec.sMin + rand() * (spec.sMax - spec.sMin)
         const rotY = rand() * Math.PI * 2
         // cover reads too bright (backlog #9) — darker, tighter tint band
-        const tint = GROUND_COVER.has(kind) ? 0.55 + rand() * 0.3 : 0.72 + rand() * 0.42
+        // the harvestable grass tufts match the carpet's colour range (they
+        // stood out as lime balls in the meadow at 0.55–0.85 over a white base)
+        const tint = kind === 'grass' ? 0.35 + rand() * 0.2 : GROUND_COVER.has(kind) ? 0.55 + rand() * 0.3 : kind === 'rock' || kind === 'boulder' ? 0.6 + rand() * 0.7 : 0.72 + rand() * 0.42
         if (roll > spec.chance) continue
         const x = gx + jx
         const z = gz + jz

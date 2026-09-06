@@ -6,7 +6,7 @@
 // perturbation injected into MeshStandardMaterial, plus small Gerstner-ish
 // vertex swell on the ocean.
 import * as THREE from 'three'
-import { heightAt, biomeAt, shoreDist, BIOME, SEA_LEVEL, HALF_SIZE, worldMeta } from './heightmap'
+import { heightAt, heightTexture, biomeAt, shoreDist, BIOME, SEA_LEVEL, HALF_SIZE, worldMeta } from './heightmap'
 import type { RiverPart } from './heightmap'
 
 const RIVER_HALF_WIDTH = 11
@@ -278,6 +278,8 @@ export class WaterSystem {
       shader.uniforms.uFlow = { value: flow }
       shader.uniforms.uSwell = { value: swell }
       shader.uniforms.uFoam = { value: foam ? 1 : 0 }
+      shader.uniforms.uHeight = { value: heightTexture() }
+      shader.uniforms.uHalf = { value: HALF_SIZE }
       ;(mat.userData as { shader?: typeof shader }).shader = shader
       shader.vertexShader = shader.vertexShader
         .replace('#include <common>', '#include <common>\nuniform float uTime;\nuniform float uSwell;\nvarying vec3 vWaterWorld;\nvarying vec2 vWaterUv;')
@@ -292,7 +294,22 @@ export class WaterSystem {
           vWaterUv = uv;`,
         )
       shader.fragmentShader = shader.fragmentShader
-        .replace('#include <common>', '#include <common>\nuniform float uTime;\nuniform vec2 uFlow;\nuniform float uFoam;\nvarying vec3 vWaterWorld;\nvarying vec2 vWaterUv;')
+        .replace('#include <common>', `#include <common>
+          uniform float uTime; uniform vec2 uFlow; uniform float uFoam;
+          uniform sampler2D uHeight; uniform float uHalf;
+          varying vec3 vWaterWorld; varying vec2 vWaterUv;
+          // the ground under this fragment (the baked heightmap, 2 m cells)
+          float groundUnder(vec2 xz) {
+            vec2 uv = ((xz + uHalf) * 0.5 + 0.5) / 2048.0;
+            return texture2D(uHeight, uv).r;
+          }
+          // value noise (a hash lattice, smooth-interpolated) for the foam's breakup
+          float hash21(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+          float vnoise(vec2 p) {
+            vec2 i = floor(p), f = fract(p);
+            vec2 u = f * f * (3.0 - 2.0 * f);
+            return mix(mix(hash21(i), hash21(i + vec2(1, 0)), u.x), mix(hash21(i + vec2(0, 1)), hash21(i + vec2(1, 1)), u.x), u.y);
+          }`)
         .replace(
           '#include <normal_fragment_begin>',
           `#include <normal_fragment_begin>
@@ -310,6 +327,24 @@ export class WaterSystem {
         .replace(
           '#include <opaque_fragment>',
           `{
+            // THE SHORE (M22): the sheet knows the ground under it. Shallow water
+            // goes clear (the bank shows through, no hard edge), gets a lighter
+            // green-blue cast, and carries a breathing foam line where the
+            // depth runs out — the same rule for the sea, the lakes, the ring
+            float depth = vWaterWorld.y - groundUnder(vWaterWorld.xz);
+            float shallow = 1.0 - smoothstep(0.0, 1.6, depth);
+            float clearT = 1.0 - smoothstep(-0.3, 0.9, depth);
+            // the lap: the foam line breathes in and out with a slow wave along the shore
+            float lap = 0.5 + 0.5 * sin(uTime * 1.1 + vnoise(vWaterWorld.xz * 0.05) * 6.283);
+            float edge = 0.12 + 0.3 * lap;
+            float foamLine = (1.0 - smoothstep(edge, edge + 0.45, depth)) * smoothstep(-0.5, -0.08, depth);
+            // broken up by drifting noise so it reads as froth, not a band
+            float n = vnoise(vWaterWorld.xz * 0.9 + vec2(uTime * 0.35, -uTime * 0.2)) * 0.6 + vnoise(vWaterWorld.xz * 3.1 - vec2(uTime * 0.5, uTime * 0.3)) * 0.4;
+            foamLine *= smoothstep(0.28, 0.72, n) * 0.9 + 0.1;
+            outgoingLight = mix(outgoingLight, outgoingLight * vec3(0.9, 1.1, 1.05) + vec3(0.04, 0.08, 0.06), shallow * 0.6);
+            outgoingLight = mix(outgoingLight, vec3(0.92, 0.96, 1.0), clamp(foamLine, 0.0, 1.0) * 0.8);
+            diffuseColor.a *= 1.0 - clearT * 0.92;
+            diffuseColor.a = max(diffuseColor.a, clamp(foamLine, 0.0, 1.0) * 0.85);
             if (uFoam > 0.5) {
               // churning foam bands along both banks
               float bank = 1.0 - smoothstep(0.02, 0.16, vWaterUv.x) * smoothstep(0.98, 0.84, vWaterUv.x);

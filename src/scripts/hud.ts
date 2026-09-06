@@ -160,7 +160,7 @@ export class Hud {
     this.hotbarEl.innerHTML = this.inv.hotbar
       .map((id, i) => {
         const item = id ? ITEMS[id] : null
-        const count = item?.placeable && id ? this.inv.count(id) : ''
+        const count = id && (item?.placeable || id === 'berry' || id === 'rawmeat' || id === 'cookedmeat') ? this.inv.count(id) : ''
         return `<div class="slot${i === this.inv.selected ? ' sel' : ''}">
           <em>${i + 1}</em>${item ? `<b>${item.icon}</b><i>${count}</i>` : ''}
         </div>`
