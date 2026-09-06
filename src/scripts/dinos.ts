@@ -61,6 +61,9 @@ const DORMANT_WAKE = 600
  *  600 m ring were 170 draw calls whichever way you faced (M18 draw audit) */
 const DRAW_DIST = 260 // (380 → 260 M24: a 3 m animal at 260 m is 8 px; each attached rig is ~45 bones walked every frame)
 const DRAW_HYST = 30
+/** inside RIG_DIST the skinned rig is drawn; between RIG_DIST and DRAW_DIST a cross-card impostor (M25) */
+const RIG_DIST = 120
+const RIG_HYST = 15
 
 export class Dino {
   /** interpolation factor between the last two physics steps (main loop sets it each frame) */
@@ -74,6 +77,12 @@ export class Dino {
    *  object is REMOVED from the scene (three walks every object in the graph
    *  every frame: 1500 empty groups were 5.5K objects and ~3 ms — M24) */
   static scene: THREE.Object3D | null = null
+  /** the cross-card sprites for the mid band (dino-impostors.ts); null = rigs only */
+  static impostors: import('./dino-impostors').DinoImpostors | null = null
+  private carded = false
+  private cardX = NaN
+  private cardZ = NaN
+  private cardHeading = NaN
   private static warmed = new Set<string>()
   private static cullSpheres = new Map<string, THREE.Sphere[]>()
   readonly object = new THREE.Group()
@@ -445,13 +454,30 @@ export class Dino {
       this.dormant = true
       if (this.model) this.object.remove(this.model)
       this.object.parent?.remove(this.object)
+      if (this.carded) { Dino.impostors?.clear(this.species.id, this.index); this.carded = false }
       return
     }
-    // draw distance: attach/detach the rig like dormancy does (hysteresis)
+    // draw bands: the rig inside RIG_DIST, a cross-card impostor to DRAW_DIST,
+    // nothing beyond (all with hysteresis). Ridden mounts are always the rig.
     if (this.model && !this.ridden) {
       const attached = !!this.model.parent
-      if (attached && this.distToPlayer > DRAW_DIST + DRAW_HYST) this.object.remove(this.model)
-      else if (!attached && this.distToPlayer < DRAW_DIST) this.object.add(this.model)
+      const imp = Dino.impostors
+      const canCard = imp !== null && imp.has(this.species.id) && this.state !== 'dead' && this.state !== 'ko'
+      const wantRig = canCard ? this.distToPlayer < RIG_DIST + (attached ? RIG_HYST : 0) : this.distToPlayer < DRAW_DIST + (attached ? DRAW_HYST : 0)
+      if (attached && !wantRig) this.object.remove(this.model)
+      else if (!attached && wantRig) this.object.add(this.model)
+      const wantCard = canCard && !wantRig && this.distToPlayer < DRAW_DIST + (this.carded ? DRAW_HYST : 0)
+      if (wantCard) {
+        // (re)place the card only when the animal has moved or turned
+        if (!this.carded || Math.abs(pos.x - this.cardX) > 0.25 || Math.abs(pos.z - this.cardZ) > 0.25 || Math.abs(this.heading - this.cardHeading) > 0.08) {
+          imp!.set(this.species.id, this.index, pos.x, pos.y, pos.z, this.heading + (this.species.facingOffset ?? 0))
+          this.cardX = pos.x; this.cardZ = pos.z; this.cardHeading = this.heading
+          this.carded = true
+        }
+      } else if (this.carded) {
+        imp?.clear(this.species.id, this.index)
+        this.carded = false
+      }
     }
     // skinned casters are expensive in the shadow pass — only nearby dinos cast
     const wantShadow = this.distToPlayer < 110

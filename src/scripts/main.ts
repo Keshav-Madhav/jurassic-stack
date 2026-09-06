@@ -22,6 +22,7 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import { WorldBorder } from './border'
 import { HitFx } from './hit-fx'
 import { Kit } from './kit'
+import { DinoImpostors } from './dino-impostors'
 import { Survival, FOODS, type FoodId } from './survival'
 import { Inventory } from './inventory'
 import { ITEMS, type ItemId } from './items'
@@ -190,6 +191,12 @@ async function boot(): Promise<void> {
   physics.world.createCollider(RAPIER.ColliderDesc.cylinder(3.5, 1.6).setTranslation(beaconSite.x, beacon.groundY + 2.7 + 3.5, beaconSite.z))
   let beaconLit = save?.beaconLit ?? false
   if (beaconLit) beacon.light(true)
+
+  // the mid-band dino sprites (captured per species as rigs arrive)
+  const dinoImpostors = new DinoImpostors()
+  scene.add(dinoImpostors.group)
+  dinoImpostors.group.name = 'dinoImpostors'
+  Dino.impostors = dinoImpostors
 
   // hit feedback: blood on every landed blow
   const hitFx = new HitFx()
@@ -1021,6 +1028,7 @@ async function boot(): Promise<void> {
       setSurvival: (s: { food?: number; water?: number; stamina?: number }) => { if (s.food !== undefined) survival.food = s.food; if (s.water !== undefined) survival.water = s.water; if (s.stamina !== undefined) survival.stamina = s.stamina },
       nearWater: () => nearWaterFor(feetPos()),
       alphaInfo: () => gatekeeper ? gatekeeper.drawInfo() : null,
+      dinoCards: () => dinoImpostors.debug(),
       ravinePath: () => worldMeta!.ravine.path,
       spawn: () => ({ x: SPAWN.x, z: SPAWN.z }),
       flying: () => player.flying,
@@ -1096,6 +1104,9 @@ async function boot(): Promise<void> {
       renderer.render(scene, cam.camera)
       daynight.focusShadow(saved.x, saved.z)
       uploadTextures(model)
+      // and the species' cross-card impostor for the mid band
+      const sp = SPECIES[id]
+      if (sp && !sp.alpha) dinoImpostors.capture(renderer, id, model, sp.height, sp.facingOffset ?? 0)
       if (import.meta.env.DEV) console.log(`warm ${id}: ${(performance.now() - t).toFixed(0)} ms`)
     }
     console.log(`shader warm-up: ${renderer.info.programs?.length ?? '?'} programs in ${(performance.now() - t0).toFixed(0)} ms`)
@@ -1109,6 +1120,8 @@ async function boot(): Promise<void> {
   let perfRender = 0
   let shadowEvery = 1
   const awake: Dino[] = []
+  const sepBuckets = new Map<number, Dino[]>()
+  let cardCamX = Infinity, cardCamZ = Infinity, cardCamYaw = 0
   const senses: Senses = { awake, onHit: (x, y, z, heavy) => hitFx.burst(x, y, z, heavy) }
   let lastVisX = Infinity
   let lastVisZ = Infinity
@@ -1236,11 +1249,24 @@ async function boot(): Promise<void> {
         }
       }
     }
-    // dino-dino separation + player-dino body push (soft, gameplay-level)
+    // dino-dino separation + player-dino body push (soft, gameplay-level).
+    // Pairs come from a 12 m bucket grid over the awake set: the plain n²
+    // loop was ~10K hypots a frame at the wood line (the `frame` self-time
+    // in the M25 profile); two animals more than 12 m apart never touch
+    sepBuckets.clear()
+    for (const d of awake) {
+      const k = ((Math.floor(d.object.position.x / 12) + 4096) << 13) | (Math.floor(d.object.position.z / 12) + 4096)
+      const list = sepBuckets.get(k)
+      if (list) list.push(d); else sepBuckets.set(k, [d])
+    }
     for (let i = 0; i < awake.length; i++) {
       const a = awake[i]
-      for (let j = i + 1; j < awake.length; j++) {
-        const b = awake[j]
+      const bx = Math.floor(a.object.position.x / 12) + 4096, bz = Math.floor(a.object.position.z / 12) + 4096
+      for (let oz = -1; oz <= 1; oz++) for (let ox = -1; ox <= 1; ox++) {
+        const list = sepBuckets.get(((bx + ox) << 13) | (bz + oz))
+        if (!list) continue
+        for (const b of list) {
+        if (b.index <= a.index) continue // each pair once
         const dx = b.object.position.x - a.object.position.x
         const dz = b.object.position.z - a.object.position.z
         const d2 = Math.hypot(dx, dz)
@@ -1260,6 +1286,7 @@ async function boot(): Promise<void> {
             b.object.position.x += dx * push * k
             b.object.position.z += dz * push * k
           }
+        }
         }
       }
       if (!riding && a.state !== 'ko') {
@@ -1333,6 +1360,11 @@ async function boot(): Promise<void> {
     keystones.update(dt, feetPos().setY(feetPos().y + 1.3))
     building.update(dt, cam.camera.position)
     ruins.update(cam.camera.position.x, cam.camera.position.z)
+    // the dino cards face the camera: re-yaw when it has moved 2 m or turned 3°
+    if (Math.hypot(cam.camera.position.x - cardCamX, cam.camera.position.z - cardCamZ) > 2 || Math.abs(cam.yaw - cardCamYaw) > 0.05) {
+      cardCamX = cam.camera.position.x; cardCamZ = cam.camera.position.z; cardCamYaw = cam.yaw
+      dinoImpostors.face(cardCamX, cardCamZ, (id) => dinos[id].facing + (dinos[id].species.facingOffset ?? 0))
+    }
     if (gatekeeper && !alphaSlain && gatekeeper.state === 'dead') {
       alphaSlain = true
       hud.toast('The Gatekeeper falls. The causeway is yours.')
