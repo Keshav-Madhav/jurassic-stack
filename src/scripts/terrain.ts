@@ -193,8 +193,7 @@ export class Terrain {
         mesh.frustumCulled = true
         mesh.receiveShadow = false // beyond the shadow camera anyway
         mesh.visible = false
-        this.supers.push({ sx, sz, mesh, geo: null, active: false })
-        this.group.add(mesh)
+        this.supers.push({ sx, sz, mesh, geo: null, active: false }) // added to the group when it activates
       }
     }
   }
@@ -267,10 +266,17 @@ export class Terrain {
           s.geo ??= buildChunkGeometry(-HALF_SIZE + s.sx * SUPER_SIZE, -HALF_SIZE + s.sz * SUPER_SIZE, LOD_QUADS[farLod] * SUPER, SUPER_SIZE)
           s.mesh.geometry = s.geo
         }
+        // ATTACH/DETACH, not `visible`: three walks every object in the graph
+        // each frame, and 843 hidden chunk meshes were part of a 13K-object
+        // walk that cost more than the draw calls (M24)
         s.mesh.visible = allFar
+        if (allFar) { if (!s.mesh.parent) this.group.add(s.mesh) } else s.mesh.parent?.remove(s.mesh)
         for (let dz = 0; dz < SUPER; dz++) {
           for (let dx = 0; dx < SUPER; dx++) {
-            this.chunks[(s.sz * SUPER + dz) * CHUNKS_PER_SIDE + s.sx * SUPER + dx].mesh.visible = !allFar
+            const m = this.chunks[(s.sz * SUPER + dz) * CHUNKS_PER_SIDE + s.sx * SUPER + dx].mesh
+            m.visible = !allFar
+            if (allFar) m.parent?.remove(m)
+            else if (!m.parent) this.group.add(m)
           }
         }
       }

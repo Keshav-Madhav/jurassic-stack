@@ -57,6 +57,12 @@ Vercel. **No React, no framework.**
   batch per 256 m cell. Anything new with a material or texture: it must exist in the scene (even
   hidden) before the load-time warm-up in `main.ts`, or hook `Dino.onFirstRig`-style — a first-sight
   compile is a 100–200 ms stall. Never calibrate or measure a rig that isn't attached to the scene.
+- **Object count is the frame budget** (M24): three.js walks every object in the scene graph every
+  frame — hidden or not — for `updateMatrixWorld` and `projectObject`; 18K objects cost 12 ms of CPU
+  before a single draw call. Anything with a "hidden" state (a far cell, a dormant dino, a chunk at
+  another LOD, a distant ruin) is DETACHED from the graph, never `visible = false`. The warm-up in
+  `main.ts` re-attaches everything once (`showAll()`), so a new detachable layer must join it.
+  `tools/qa-gpu.mjs` (GPU timer queries) tells GPU time from CPU time before anyone guesses.
 - **Point lights are a fill-rate budget** (M20): three.js evaluates every point light in every
   fragment of every lit material — no culling by distance. Going 5 → 12 keystone halos cost 30
   hitches a fly run. Share one light and move it (keystones), pool a handful (campfires), and never

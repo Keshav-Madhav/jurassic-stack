@@ -306,6 +306,11 @@ function toFloatGeometry(src: THREE.BufferGeometry): THREE.BufferGeometry {
 /** One prop rendered as N InstancedMeshes (one per submesh), sharing matrices. */
 class InstancedProp {
   meshes: THREE.InstancedMesh[] = []
+  /** the prop's meshes live in this holder; `show(false)` DETACHES it from the
+   *  scene instead of flipping `visible` — three.js walks every object in the
+   *  graph every frame, and 4.5K hidden cell meshes were ~3 ms of walking (M24) */
+  readonly holder = new THREE.Group()
+  private parentGroup: THREE.Group
   private dummy = new THREE.Object3D()
   private castShadowFlag = true
 
@@ -319,6 +324,9 @@ class InstancedProp {
     private fadeAt = 0,
   ) {
     this.castShadowFlag = castShadow
+    this.parentGroup = group
+    this.holder.matrixAutoUpdate = false
+    group.add(this.holder)
     const box = new THREE.Box3().setFromObject(root)
     const size = box.getSize(new THREE.Vector3())
     const s = 1 / (size.y || 1) // normalize to 1 m tall; instance scale = world height
@@ -431,7 +439,7 @@ class InstancedProp {
       im.castShadow = this.castShadowFlag
       im.receiveShadow = true
       this.meshes.push(im)
-      group.add(im)
+      this.holder.add(im)
     }
   }
 
@@ -457,6 +465,13 @@ class InstancedProp {
     const prevKey = mat.customProgramCacheKey.bind(mat)
     mat.customProgramCacheKey = () => prevKey() + '|fade' + fadeAt
   }
+
+  /** attach/detach the holder (see the field note) */
+  show(on: boolean): void {
+    if (on) { if (!this.holder.parent) this.parentGroup.add(this.holder) }
+    else if (this.holder.parent) this.parentGroup.remove(this.holder)
+  }
+  get shown(): boolean { return !!this.holder.parent }
 
   /** During the fill everything is written, so whole-buffer uploads are
    *  right; after `sealed` (computeBounds) every write is a partial upload
@@ -793,11 +808,19 @@ export class Scatter {
           index.set(nodeId, i)
         })
         twin.computeBounds()
-        for (const m of twin.meshes) m.visible = false
+        twin.show(false)
         this.mids.set(`${kind}#${cell}`, twin)
         this.midIndex.set(`${kind}#${cell}`, index)
       }
     }
+  }
+
+  /** warm-up: attach every cell (and the mid twins) so one compile pass sees every material */
+  showAll(): () => void {
+    const was: InstancedProp[] = []
+    for (const p of this.props.values()) if (!p.shown) { p.show(true); was.push(p) }
+    for (const m of this.mids.values()) if (!m.shown) { m.show(true); was.push(m) }
+    return () => { for (const p of was) p.show(false) }
   }
 
   /** Hide ground-cover cells far from the viewer (big fill/vertex win) and
@@ -809,13 +832,11 @@ export class Scatter {
       const ddz = Math.max(meta.minZ - z, 0, z - meta.maxZ)
       const d = Math.hypot(ddx, ddz)
       if (meta.cover) {
-        const visible = d < (COVER_DIST_OVERRIDE[parseGroupKey(key).kind] ?? COVER_DRAW_DIST)
-        for (const m of this.props.get(key)!.meshes) m.visible = visible
+        this.props.get(key)!.show(d < (COVER_DIST_OVERRIDE[parseGroupKey(key).kind] ?? COVER_DRAW_DIST))
         continue
       }
       if (meta.small) {
-        const visible = d < (SMALL_SOLID_DIST[parseGroupKey(key).kind] ?? SMALL_SOLID_DRAW_DIST)
-        for (const m of this.props.get(key)!.meshes) m.visible = visible
+        this.props.get(key)!.show(d < (SMALL_SOLID_DIST[parseGroupKey(key).kind] ?? SMALL_SOLID_DRAW_DIST))
         continue
       }
       const { kind, variant } = parseGroupKey(key)
@@ -823,14 +844,14 @@ export class Scatter {
       if (!set) {
         // no cards for this kind (cacti, dead trees, palms, willows, mangroves):
         // it simply ends at the mid band — it drew island-wide before
-        for (const m of this.props.get(key)!.meshes) m.visible = d < TREE_LOD_MID
+        this.props.get(key)!.show(d < TREE_LOD_MID)
         continue
       }
       const cell = key.slice(key.lastIndexOf('#') + 1)
       const mid = this.mids.get(`${kind}#${cell}`)
       const band = d < TREE_LOD_FAR ? 0 : mid && d < TREE_LOD_MID ? 1 : 2
-      for (const m of this.props.get(key)!.meshes) m.visible = band === 0
-      if (mid) for (const m of mid.meshes) m.visible = band === 1
+      this.props.get(key)!.show(band === 0)
+      if (mid) mid.show(band === 1)
       set.setCell(cell, band === 2)
     }
   }
@@ -1178,7 +1199,7 @@ export class Scatter {
     const trisOf = (p: InstancedProp): number => {
       let t = 0
       for (const m of p.meshes) {
-        if (!m.visible) continue
+        if (!p.shown) continue
         const g = m.geometry
         t += ((g.index ? g.index.count : g.getAttribute('position').count) / 3) * m.count
       }
@@ -1193,14 +1214,14 @@ export class Scatter {
         // triangles this group submits (visible LOD only; frustum culling
         // then drops whole supercells)
         tris: trisOf(prop),
-        visible: prop.meshes.some((m) => m.visible),
+        visible: prop.shown,
       })
     }
     for (const [kv, set] of this.impostors) {
       out.push({ key: `${kv.split('#')[0]}#impostor`, nodes: set.total, submeshes: 1, drawn: set.shown, tris: set.shown * 6, visible: set.shown > 0 })
     }
     for (const [k, mid] of this.mids) {
-      if (!mid.meshes.some((m) => m.visible)) continue
+      if (!mid.shown) continue
       out.push({ key: `${k.split('#')[0]}#mid`, nodes: mid.meshes[0]?.count ?? 0, submeshes: mid.meshes.length, drawn: mid.meshes[0]?.count ?? 0, tris: trisOf(mid), visible: true })
     }
     return out

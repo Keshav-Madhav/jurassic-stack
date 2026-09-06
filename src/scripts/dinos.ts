@@ -59,7 +59,7 @@ const DORMANT_WAKE = 600
 /** an awake dino's rig is only attached (drawn, matrices walked) inside this;
  *  a 3 m animal at 400 m is a few pixels, and the 40-odd awake rigs in the
  *  600 m ring were 170 draw calls whichever way you faced (M18 draw audit) */
-const DRAW_DIST = 380
+const DRAW_DIST = 260 // (380 → 260 M24: a 3 m animal at 260 m is 8 px; each attached rig is ~45 bones walked every frame)
 const DRAW_HYST = 30
 
 export class Dino {
@@ -70,6 +70,10 @@ export class Dino {
    *  ever drawn (the 1500 rigs load over ~6 s after the scene's warm-up;
    *  a species' first appearance was a 150 ms compile stall — M18) */
   static onFirstRig: ((speciesId: string, model: THREE.Object3D) => void) | null = null
+  /** the scene the dino's object lives in while awake — a dormant dino's
+   *  object is REMOVED from the scene (three walks every object in the graph
+   *  every frame: 1500 empty groups were 5.5K objects and ~3 ms — M24) */
+  static scene: THREE.Object3D | null = null
   private static warmed = new Set<string>()
   private static cullSpheres = new Map<string, THREE.Sphere[]>()
   readonly object = new THREE.Group()
@@ -433,12 +437,14 @@ export class Dino {
       if (this.distToPlayer < DORMANT_WAKE || !wildIdle) {
         this.dormant = false
         if (this.model && !this.model.parent) this.object.add(this.model)
+        if (Dino.scene && !this.object.parent) Dino.scene.add(this.object)
       } else {
         return
       }
     } else if (wildIdle && this.distToPlayer > DORMANT_SLEEP) {
       this.dormant = true
       if (this.model) this.object.remove(this.model)
+      this.object.parent?.remove(this.object)
       return
     }
     // draw distance: attach/detach the rig like dormancy does (hysteresis)

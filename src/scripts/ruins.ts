@@ -120,6 +120,12 @@ const LAYOUTS_BY_KIND: Record<string, PiecePlan[]> = {
 
 export class Ruins {
   readonly group = new THREE.Group()
+  /** one holder per site: attached to the group only while the site is within
+   *  RUIN_DRAW of the viewer (three walks every object in the graph every
+   *  frame; the 23 sites' 367 nodes were all in it at all times — M24) */
+  private sites: { x: number; z: number; holder: THREE.Group }[] = []
+  private lastX = Infinity
+  private lastZ = Infinity
 
   async build(physics: Physics): Promise<void> {
     const meta = worldMeta!
@@ -135,6 +141,9 @@ export class Ruins {
     for (const site of meta.ruinSites) {
       const layout = LAYOUTS[site.tag] ?? (site.layout ? LAYOUTS_BY_KIND[site.layout] : undefined)
       if (!layout) continue
+      const holder = new THREE.Group()
+      holder.matrixAutoUpdate = false
+      this.sites.push({ x: site.x, z: site.z, holder })
       for (const plan of layout) {
         const src = models.get(plan.model)!
         const piece = src.clone(true)
@@ -174,7 +183,7 @@ export class Ruins {
             }
           }
         })
-        this.group.add(piece)
+        holder.add(piece)
 
         // physics: standing columns/statues get cylinders; arch spans and
         // toppled pieces stay walkable
@@ -185,5 +194,28 @@ export class Ruins {
         }
       }
     }
+    this.update(0, 0, true)
+  }
+
+  /** attach the sites within reach of the viewer, detach the rest (on a 40 m move) */
+  update(x: number, z: number, force = false): void {
+    if (!force && Math.hypot(x - this.lastX, z - this.lastZ) < 40) return
+    this.lastX = x
+    this.lastZ = z
+    for (const s of this.sites) {
+      const near = Math.hypot(s.x - x, s.z - z) < RUIN_DRAW
+      if (near) { if (!s.holder.parent) this.group.add(s.holder) }
+      else if (s.holder.parent) this.group.remove(s.holder)
+    }
+  }
+
+  /** warm-up: attach everything once */
+  showAll(): () => void {
+    const was = this.sites.filter((s) => !s.holder.parent)
+    for (const s of was) this.group.add(s.holder)
+    return () => { for (const s of was) this.group.remove(s.holder) }
   }
 }
+
+/** ruins draw within this of the viewer (the fog ends at 1500; a 15 m arch at 900 m is a pixel) */
+const RUIN_DRAW = 900

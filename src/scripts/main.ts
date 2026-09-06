@@ -219,6 +219,7 @@ async function boot(): Promise<void> {
     const d = new Dino(SPECIES[speciesId] ?? SPECIES.raptor, x, z, dinos.length)
     dinos.push(d)
     scene.add(d.object)
+    Dino.scene = scene
     void d.load()
     return d
   }
@@ -683,6 +684,7 @@ async function boot(): Promise<void> {
     setFog: (scale: number) => { daynight.fogScale = scale },
     scene,
     renderer,
+    get cam() { return cam.camera },
     THREE,
     loaders: { GLTFLoader, MeshoptDecoder },
     /** QA: what's under a screen pixel (0..1 ndc coords) — object name/kind, material, distance */
@@ -1048,6 +1050,8 @@ async function boot(): Promise<void> {
   {
     const t0 = performance.now()
     const toggled: THREE.Object3D[] = []
+    const reattach = scatter.showAll()
+    const reattachRuins = ruins.showAll()
     scene.traverse((o) => { if (!o.visible) { o.visible = true; toggled.push(o) } })
     const detach: (() => void)[] = []
     const seen = new Set<string>()
@@ -1075,6 +1079,8 @@ async function boot(): Promise<void> {
     uploadTextures(scene)
     for (const undo of detach) undo()
     for (const o of toggled) o.visible = false
+    reattach()
+    reattachRuins()
     // species that finish loading later: compile + upload as each arrives (the
     // rig is attached to its dino at this point; a shadow-mapped frame with
     // the light's box moved onto it compiles the skinned depth variant too)
@@ -1326,6 +1332,7 @@ async function boot(): Promise<void> {
     }
     keystones.update(dt, feetPos().setY(feetPos().y + 1.3))
     building.update(dt, cam.camera.position)
+    ruins.update(cam.camera.position.x, cam.camera.position.z)
     if (gatekeeper && !alphaSlain && gatekeeper.state === 'dead') {
       alphaSlain = true
       hud.toast('The Gatekeeper falls. The causeway is yours.')
