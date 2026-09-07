@@ -10,6 +10,7 @@ import RAPIER from '@dimforge/rapier3d-compat'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import { heightAt, VOLCANO, worldMeta } from './heightmap'
+import { makeStone } from './stone-material'
 import type { Physics } from './physics'
 
 type RuinModel = 'Column' | 'Arch' | 'Statue'
@@ -178,8 +179,14 @@ export class Ruins {
             const mat = o.material as THREE.MeshStandardMaterial
             if (mat) {
               o.material = mat.clone()
-              ;(o.material as THREE.MeshStandardMaterial).roughness = 1
-              ;(o.material as THREE.MeshStandardMaterial).metalness = 0
+              const m = o.material as THREE.MeshStandardMaterial
+              m.roughness = 1
+              m.metalness = 0
+              // the Quaternius ruin pieces ship near-white and flat: under the
+              // island's sun any flat grey goes to plaster. World-space stone
+              // texture (stone-material.ts), tinted warm limestone (M27)
+              m.color.setRGB(0.55, 0.52, 0.46)
+              makeStone(m, { metresPerTile: 1.6 })
             }
           }
         })

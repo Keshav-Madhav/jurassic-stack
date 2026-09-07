@@ -22,6 +22,7 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import { WorldBorder } from './border'
 import { HitFx } from './hit-fx'
 import { Kit } from './kit'
+import { loadStoneTexture } from './stone-material'
 import { DinoImpostors } from './dino-impostors'
 import { Survival, FOODS, type FoodId } from './survival'
 import { Inventory } from './inventory'
@@ -118,6 +119,9 @@ async function boot(): Promise<void> {
   scatter.group.name = 'scatter'
   if (save) scatter.restore(save.deadNodes as { id: number; respawnAt: number }[])
 
+  // the stone texture first: every stone material (ruins, the beacon, the
+  // door) samples it, and a sampler bound null at first compile stays black
+  await loadStoneTexture()
   const ruins = new Ruins()
   await ruins.build(physics)
   scene.add(ruins.group)
@@ -148,21 +152,32 @@ async function boot(): Promise<void> {
   // arch face) in a dark bronze-wood — the 18 m grey block that stuck out past
   // the arch read as a wall bolted onto the mountain (user screenshot 25); the
   // rock itself now meets the arch's piers (the Ravine's 6.5 m throat)
-  const doorMesh = new THREE.Mesh(
-    new THREE.BoxGeometry(11, 13.5, 1.4),
-    new THREE.MeshStandardMaterial({ color: 0x3a2a1c, roughness: 0.82, metalness: 0.18 }),
-  )
+  // the slab: vertical timbers (a lighter, grained wood — the flat dark slab
+  // read as a black hole inside the arch from the apron, M27) with bronze
+  // studs and a centre seam on the SOUTH face, the one the player approaches
+  const doorWood = new THREE.MeshStandardMaterial({ color: 0x7a5a3a, roughness: 0.85, metalness: 0.05 })
+  const doorMesh = new THREE.Mesh(new THREE.BoxGeometry(11, 13.5, 1.4), doorWood)
   doorMesh.position.set(gateSite.x, doorGroundY + 6.4, doorZ - 1.0)
-  // bronze studs and a centre seam so it reads as a door, not a plank
   {
-    const stud = new THREE.MeshStandardMaterial({ color: 0x8a6a34, roughness: 0.45, metalness: 0.7 })
-    for (const [sx, sy] of [[-3.6, 3.6], [3.6, 3.6], [-3.6, -3.4], [3.6, -3.4], [-3.6, 0.1], [3.6, 0.1]]) {
+    const plank = new THREE.MeshStandardMaterial({ color: 0x8c6a45, roughness: 0.9 })
+    for (let i = 0; i < 7; i++) {
+      const p = new THREE.Mesh(new THREE.BoxGeometry(1.35, 13.2, 0.18), i % 2 ? plank : doorWood)
+      p.position.set(-4.5 + i * 1.5, 0, 0.75)
+      doorMesh.add(p)
+    }
+    const stud = new THREE.MeshStandardMaterial({ color: 0xa8843c, roughness: 0.4, metalness: 0.7 })
+    for (const [sx, sy] of [[-3.6, 4.2], [3.6, 4.2], [-3.6, -4.0], [3.6, -4.0], [-3.6, 0.1], [3.6, 0.1]]) {
       const b = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.7, 0.3), stud)
-      b.position.set(sx, sy, -0.8)
+      b.position.set(sx, sy, 0.9)
       doorMesh.add(b)
     }
-    const seam = new THREE.Mesh(new THREE.BoxGeometry(0.25, 12.8, 0.2), stud)
-    seam.position.set(0, -0.2, -0.78)
+    for (const sy of [4.2, -4.0]) {
+      const band = new THREE.Mesh(new THREE.BoxGeometry(10.6, 0.5, 0.22), stud)
+      band.position.set(0, sy, 0.9)
+      doorMesh.add(band)
+    }
+    const seam = new THREE.Mesh(new THREE.BoxGeometry(0.22, 12.8, 0.2), stud)
+    seam.position.set(0, -0.2, 0.92)
     doorMesh.add(seam)
   }
   doorMesh.castShadow = true

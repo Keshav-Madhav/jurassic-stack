@@ -73,8 +73,11 @@ export function buildGrassTile(tx: number, tz: number, spacing: number): { matri
       const h = heightAt(x, z)
       // the beach is sand: no grass under 2.5 m, dune tufts up to 3 (the spawn meadow sits at 3.0)
       if (h < 2.5 || h > 190) continue
-      // the volcano's cone, the Ravine and the crater bench are bare ash and rock
-      if (Math.hypot(x - VOLCANO.x, z - VOLCANO.z) < 340) continue
+      // the volcano's cone, the Ravine, the crater bench and the gate's apron
+      // are bare ash and rock: nothing grows inside 340 m of the vent, nor on
+      // the cone's skirt above 60 m out to 700 m (the apron at 72 m was a lawn — M27)
+      const dv = Math.hypot(x - VOLCANO.x, z - VOLCANO.z)
+      if (dv < 340 || (dv < 700 && h > 60)) continue
       if (h < 3.0 && r3 > 0.4) continue
       const biome = biomeAt(x, z)
       if (biome === BIOME.DESERT && r2 > 0.12) continue // a few dry tufts in the dunes

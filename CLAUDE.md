@@ -57,6 +57,10 @@ Vercel. **No React, no framework.**
   batch per 256 m cell. Anything new with a material or texture: it must exist in the scene (even
   hidden) before the load-time warm-up in `main.ts`, or hook `Dino.onFirstRig`-style — a first-sight
   compile is a 100–200 ms stall. Never calibrate or measure a rig that isn't attached to the scene.
+- **Flat grey is plaster; hex is dark** (M22/M27): under this sun + ACES any untextured mid-grey renders
+  white — give stone `makeStone()` (stone-material.ts, world-space triplanar) rather than a darker
+  colour. And `new Color(0x4a4440)` is sRGB → 0.068 linear; when a value is meant in linear terms use
+  `setRGB()`. A probe printing `material.color.toArray()` settles it in one line.
 - **Object count is the frame budget** (M24): three.js walks every object in the scene graph every
   frame — hidden or not — for `updateMatrixWorld` and `projectObject`; 18K objects cost 12 ms of CPU
   before a single draw call. Anything with a "hidden" state (a far cell, a dormant dino, a chunk at

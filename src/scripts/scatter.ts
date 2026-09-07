@@ -729,6 +729,13 @@ export class Scatter {
               mat.customProgramCacheKey = () => 'rock-triplanar'
               mat.needsUpdate = true
             }
+          : kind === 'palm'
+            ? (mat: THREE.MeshStandardMaterial) => {
+                // one atlas for trunk and fronds, shipped lime: darken it whole
+                // (a green tint would green the trunk) — the palms at spawn
+                // were the brightest thing in the frame (M27)
+                if (mat.map) mat.color.setRGB(0.5, 0.56, 0.44)
+              }
           : kind === 'bush'
             ? (mat: THREE.MeshStandardMaterial) => {
                 // the textured berry bush ships a lime-neon atlas and dodged the
@@ -890,7 +897,7 @@ export class Scatter {
         const ny = normalAt(x, z, this.tmpN).y
         if (ny < (kind === 'rock' || kind === 'boulder' || kind === 'outcrop' ? 0.5 : 0.72)) continue
         const dv = Math.hypot(x - VOLCANO.x, z - VOLCANO.z)
-        if (kind !== 'rock' && kind !== 'boulder' && kind !== 'outcrop' && kind !== 'deadtree' && dv < 300) continue
+        if (kind !== 'rock' && kind !== 'boulder' && kind !== 'outcrop' && kind !== 'deadtree' && (dv < 300 || (dv < 700 && h > 60))) continue // (the cone's skirt too: bare rock, M27)
         // the Ravine's floor and the gate's mouth stay clear of everything solid
         // (a boulder sat across the door — M19); ruin courts keep their footprint
         if (worldMeta?.ravine && distToPathXZ(x, z, worldMeta.ravine.path) < worldMeta.ravine.halfWidth + 10) continue

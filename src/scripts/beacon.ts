@@ -5,6 +5,7 @@
 // the keystones: the fire is three billboarded flame cards + a point light,
 // the embers a Points cloud that rises and wraps.
 import * as THREE from 'three'
+import { makeStone } from './stone-material'
 
 const EMBERS = 160
 
@@ -46,7 +47,9 @@ export class Beacon {
   private t = 0
 
   constructor(readonly x: number, readonly groundY: number, readonly z: number) {
-    const basalt = new THREE.MeshStandardMaterial({ color: 0x2c2826, roughness: 0.96 })
+    // (linear colour: a hex 0x4a4440 is 0.068 linear — near black under the texture, M27)
+    const basalt = new THREE.MeshStandardMaterial({ color: new THREE.Color().setRGB(0.3, 0.27, 0.25), roughness: 0.96 })
+    makeStone(basalt, { metresPerTile: 2.2, gain: 2.0 })
     // a stepped plinth, three tiers
     let y = groundY
     for (const [r, h] of [[7.2, 1.0], [5.4, 0.9], [3.8, 0.8]] as const) {
@@ -63,7 +66,8 @@ export class Beacon {
     stem.castShadow = true
     this.group.add(stem)
     y += 5.2
-    this.bowlMat = new THREE.MeshStandardMaterial({ color: 0x3a322c, roughness: 0.85, emissive: 0xff6a20, emissiveIntensity: 0 })
+    this.bowlMat = new THREE.MeshStandardMaterial({ color: new THREE.Color().setRGB(0.32, 0.27, 0.23), roughness: 0.85, emissive: 0xff6a20, emissiveIntensity: 0 })
+    makeStone(this.bowlMat, { metresPerTile: 1.4, gain: 2.0 })
     const bowl = new THREE.Mesh(new THREE.CylinderGeometry(2.6, 1.5, 1.5, 20, 1, true), this.bowlMat)
     bowl.position.set(x, y + 0.75, z)
     bowl.castShadow = true

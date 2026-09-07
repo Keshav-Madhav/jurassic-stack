@@ -49,7 +49,7 @@ export class Player {
   /** what the last fixed step did (survival reads these) */
   sprinting = false
   moving = false
-  private facing = 0
+  private facing = Math.PI // north, away from the spawn camera (0 = +z faced the camera: every fresh-spawn shot had him staring at you)
   private mixer: THREE.AnimationMixer | null = null
   private actions = new Map<ClipSlot, THREE.AnimationAction>()
   private moveWeight = 0
@@ -235,6 +235,9 @@ export class Player {
     const len = Math.hypot(fwd, strafe)
     this.moving = len > 0
     this.sprinting = len > 0 && wantSprint && !this.swimming
+    // idle: the character comes round to face where the camera looks (third-
+    // person convention; he used to stand with his back to your view direction)
+    if (len === 0 && !this.swimming) this.facing = cameraYaw + Math.PI
     if (len > 0) {
       const sin = Math.sin(cameraYaw)
       const cos = Math.cos(cameraYaw)
