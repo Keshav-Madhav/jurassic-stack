@@ -1365,6 +1365,10 @@ async function boot(): Promise<void> {
         const u = d.attachForWarmup()
         if (u) undo.push(u)
       }
+      // and every prop and ruin, not just the rigs: two depth programs were
+      // still compiling at the wood line, and the load warm-up's own pass runs
+      // before the terrain has streamed a single cell in (M36)
+      undo.push(scatter.showAll(), ruins.showAll())
       daynight.setShadowExtent(2100)
       renderer.shadowMap.needsUpdate = true
       renderer.render(scene, cam.camera)

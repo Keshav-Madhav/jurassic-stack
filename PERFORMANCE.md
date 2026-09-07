@@ -112,7 +112,7 @@ against measurement and should each be A/B'd before any of them is built.
 | **H5** | **The scatter visibility pass**: re-parsed group keys into strings and did three Map lookups per cell, over thousands of cells, every 3 m walked. Flattened to resolved references and plain numbers | 12–58 ms → **5–13 ms** | done M33 |
 | **H6** | **A teleport rebuilds terrain synchronously (~770 ms)** — QA-only today, but the same code path runs at load | once per teleport | OPEN |
 | **H7** | **~30-50 textures still upload on first sight of the plain** — reachable from neither the scene nor the registered roots, and no longer costing a visible hitch (the warden drains them) | ~16 ms | OPEN |
-| **H8** | **One depth-variant compile at the wood line**, owner unidentified — the only region on the lap that still hitches (144 ms, once, ever) | 144 ms once | OPEN |
+| **H8** | **Two depth-variant compiles at the wood line, one at the plain** — owner still unidentified. Warming every species' rig at boot (M36) took it from 144 ms to ~30 ms; attaching every prop and ruin for the boot shadow frame changed nothing, so it is not a scatter/ruins visibility problem. Candidates left: a material/geometry combination (vertexColors, instancing) that only exists in those cells | ~30 ms once per region | OPEN |
 | **H9** | **Colliders a few a frame** — crossing a chunk boundary built the whole 3×3 neighbourhood's trunks and rock hulls in one frame | 11–24 ms → gone | done M34 |
 | **H10** | **The boot card**: `ready` means warm. Every species' shaders, textures, impostor card and shadow-depth variant are paid behind a title card instead of in the player's first minute | 40–150 ms × 11 → load | done M34 |
 
