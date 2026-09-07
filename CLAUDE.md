@@ -85,6 +85,14 @@ Vercel. **No React, no framework.**
   `--disable-gpu-vsync --disable-frame-rate-limit` or every frame reads 16.7 ms. And nothing is warm
   for 30 seconds: spawn reads 11 ms until then and 6.5 ms after. `tools/qa-gpu.mjs`,
   `tools/gate-perf.mjs` and `tools/qa-hitch.mjs` all do this; see PERFORMANCE.md.
+- **Sound: `sfx.ts` for events, `ambience.ts` for the bed** (M35). One AudioContext, opened by
+  ambience on the first gesture; sfx hangs its own bus off it. Events call `sfx.play(id, { at })`
+  with a WORLD POSITION and let the mixer do distance and pan — never gate on distance at the call
+  site. Animals do not name samples: they call `this.say('roar' | 'call' | 'hurt' | 'die' | 'eat')`
+  and `Dino.onVoice` in main.ts picks the sample and the pitch from the species. New samples go in
+  `BANK` (they are all preloaded — a sample that has not decoded does not play) and in ASSETS.md
+  with their CC0 provenance. `tools/gate-sound.mjs` proves a sound actually reached the speakers,
+  which is the only way to test a mix you cannot hear.
 - **`ready` means WARM** (M34): the boot card (index.html `#boot`) stays up until every species has
   compiled its shaders, uploaded its skin, captured its impostor card and been drawn into the shadow
   map once. Anything new that a player meets later — a species, a buildable, a biome's props — must

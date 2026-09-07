@@ -14,6 +14,16 @@ export class Ambience {
   private t = 0
   private started = false
 
+  /** the shared AudioContext and mix bus — sfx.ts hangs its one-shots here so
+   *  the whole game has one context and one place to set the level */
+  get context(): AudioContext | null {
+    return this.ctx
+  }
+
+  get bus(): GainNode | null {
+    return this.master
+  }
+
   /** call from a user gesture (pointer lock, click) */
   start(): void {
     if (this.started) return

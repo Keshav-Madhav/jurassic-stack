@@ -337,3 +337,17 @@ export function buildChunkArrays(originX: number, originZ: number, quads: number
   }
   return { pos, nor, col, spl, indices }
 }
+
+/** What you are standing on, for the footstep sampler (sfx.ts). Reads the same
+ *  splat rules the ground is painted with, so the sound always matches the
+ *  picture — walk from the meadow into the wood and the step goes soft. */
+export type GroundKind = 'grass' | 'dirt' | 'sand' | 'rock' | 'snow'
+const groundScratch = new THREE.Vector4()
+export function groundKindAt(x: number, z: number): GroundKind {
+  const h = heightAt(x, z)
+  const ny = normalAt(x, z).y
+  if (h > 195 && ny > 0.55) return 'snow'
+  const s = splatAt(x, z, h, ny, groundScratch)
+  const m = Math.max(s.x, s.y, s.z, s.w)
+  return m === s.x ? 'grass' : m === s.y ? 'dirt' : m === s.z ? 'rock' : 'sand'
+}

@@ -311,6 +311,11 @@ export class Building {
     return this.pieces.length
   }
 
+  /** every lit fire's position, for the crackle (sfx.ts) */
+  firePositions(): { x: number; y: number; z: number }[] {
+    return this.fires.map((f) => ({ x: f.flame.position.x, y: f.base, z: f.flame.position.z }))
+  }
+
   /** Is there a campfire within `r` of (x, z)? (cooking.)
    *  5 m, not 3.5: a fire snaps to the 3 m build grid, so the one you just
    *  placed can sit 2.1 m from where you aimed, and you aim a few metres ahead

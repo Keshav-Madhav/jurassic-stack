@@ -105,6 +105,9 @@ export class Dino {
    *  ever drawn (the 1500 rigs load over ~6 s after the scene's warm-up;
    *  a species' first appearance was a 150 ms compile stall — M18) */
   static onFirstRig: ((speciesId: string, model: THREE.Object3D) => void) | null = null
+  /** main.ts hangs the sound bank here: `voice` is what the animal did, not
+   *  which file to play — the mapping to samples lives with the mixer (sfx.ts) */
+  static onVoice: ((voice: 'call' | 'roar' | 'hurt' | 'die' | 'eat', d: Dino) => void) | null = null
   /** the scene the dino's object lives in while awake — a dormant dino's
    *  object is REMOVED from the scene (three walks every object in the graph
    *  every frame: 1500 empty groups were 5.5K objects and ~3 ms — M24) */
@@ -336,14 +339,24 @@ export class Dino {
    *  detached object compiled nothing, and the species' materials compiled
    *  later, in whatever frame you first met one: a 40-100 ms freeze (M33). */
   attachForWarmup(): (() => void) | null {
-    if (!this.model || this.model.parent) return null
+    if (!this.model || !Dino.scene) return null
+    // IS THE RIG ACTUALLY IN THE SCENE? Having a parent proves nothing: a
+    // dormant dino keeps its model on its object and DETACHES THE OBJECT
+    // (M24), so `model.parent` is set while nothing is drawn. The old check
+    // bailed on exactly those animals — which is every animal at load — and
+    // their skinned depth programs were left to compile in play (M34).
+    let root: THREE.Object3D = this.model
+    while (root.parent) root = root.parent
+    if (root === Dino.scene) return null // already live
     const model = this.model
-    this.object.add(model)
-    const wasDetached = !this.object.parent && Dino.scene !== null
-    if (wasDetached) Dino.scene!.add(this.object)
+    const addedModel = model.parent === null
+    if (addedModel) this.object.add(model)
+    const parkedObject = this.object.parent === null
+    if (parkedObject) Dino.scene.add(this.object)
+    if (!addedModel && !parkedObject) return null
     return () => {
-      this.object.remove(model)
-      if (wasDetached) this.object.parent?.remove(this.object)
+      if (addedModel) this.object.remove(model)
+      if (parkedObject) this.object.parent?.remove(this.object)
     }
   }
 
@@ -498,6 +511,7 @@ export class Dino {
       this.playKo()
       return
     }
+    this.say('hurt')
     // provoked: aggressive AND defensive species turn on the attacker, skittish bolt
     if (this.species.temperament !== 'skittish') {
       this.state = 'aggro'
@@ -767,6 +781,7 @@ export class Dino {
     this.foe = null
     this.stateT = 12
     this.flavorActions[1]?.reset().play() // call_alert if loaded
+    this.say('roar')
     return true
   }
 
@@ -780,6 +795,9 @@ export class Dino {
    * Only idle/wandering animals think; fights and flights run their course.
    */
   private think(senses: Senses, playerPos: THREE.Vector3): void {
+    // an animal at rest says something now and then — about once a minute each,
+    // and the mixer's own distance cull keeps the far herd silent
+    if (Math.random() < 0.008) this.say('call')
     if (this.state !== 'idle' && this.state !== 'wander') return
     if (this.ridden || this.species.alpha) return // the Gatekeeper guards; it hunts nothing
     const pos = this.object.position
@@ -800,6 +818,7 @@ export class Dino {
         this.state = 'hunt'
         this.foe = best
         this.stateT = 30
+        this.say('roar')
         this.flavorActions[1]?.reset().play()
       }
       return
@@ -842,6 +861,7 @@ export class Dino {
 
   /** Struck by another dino: herbivores flee or (defensive) fight back; carnivores fight back. */
   takeHitFrom(attacker: Dino, damage: number): void {
+    this.say('hurt')
     if (this.state === 'dead' || this.state === 'ko' || this.state === 'tamed') {
       if (this.state === 'tamed') this.hp -= damage // a tame can be hurt; it fights back below
       else return
@@ -862,7 +882,13 @@ export class Dino {
   }
 
   /** Killed: a carcass for a while, then gone. */
+  /** speak, if anything is listening */
+  private say(voice: 'call' | 'roar' | 'hurt' | 'die' | 'eat'): void {
+    Dino.onVoice?.(voice, this)
+  }
+
   private die(): void {
+    this.say('die')
     this.state = 'dead'
     this.deadT = 75
     this.speed = 0

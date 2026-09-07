@@ -129,3 +129,27 @@ icon is the thing.
 
 Kenney's colormap is saturated toy-orange; the kit tints Kenney materials to weathered timber at load
 (`kit.ts`), icons keep the true colours. Still wanted: a real saddle, a thatch roof piece, a door.
+
+
+## The sound (M35, 2026-09-08) · `public/audio/`
+
+Downloaded, not synthesised (PLAN: CC0 packs first — and a synthesised roar sounds like a
+synthesiser). 74 files, 1.1 MB total, all CC0, no attribution required (given anyway). Raw archives
+in `_raw/kenney-audio/` and `_raw/oga-creatures/`. `src/scripts/sfx.ts` maps game events to these
+ids; `tools/gate-sound.mjs` proves each one actually reaches the speakers.
+
+| In the game | File(s) | Source | Licence |
+|---|---|---|---|
+| footsteps: grass · dirt · sand · rock · snow · wood | `step-<ground>-0..3.ogg` | Kenney **Impact Sounds** (`footstep_grass` / `carpet` / `snow` / `concrete` / `wood`) | CC0 |
+| fists, flesh, wood, stone | `hit-punch-*`, `hit-flesh-*` (impactSoft), `hit-wood-*`, `hit-stone-*` (impactMining) | Kenney **Impact Sounds** | CC0 |
+| a blade swung, gathering, a plank placed | `blade-*` (knifeSlice), `pick-*` (cloth/leather), `chop.ogg`, `place.ogg` (impactPlank), `craft.ogg` (metalClick) | Kenney **RPG Audio** + Impact Sounds | CC0 |
+| the caldera door | `door-open.ogg`, `creak.ogg` | Kenney **RPG Audio** | CC0 |
+| the pack, the keystones | `ui-open/close/click/error/confirm.ogg` | Kenney **Interface Sounds** | CC0 |
+| eating, drinking, the player hurt | `eat-0..2.ogg`, `drink-0..1.ogg` (burble), `player-hurt-0..1.ogg` | **80 CC0 creature SFX** (opengameart.org/content/80-cc0-creature-sfx) | CC0 |
+| the animals: idle calls, grunts, roars, pain, death | `dino-call-0..3` (monster), `dino-grunt-0..2`, `dino-roar-0..2`, `dino-hurt-0..2`, `dino-die-0..1` | **80 CC0 creature SFX** | CC0 |
+| the Gatekeeper | `alpha-roar.ogg` (transcoded to mono 22 kHz Vorbis with ffmpeg) | **CC0 deep monster roar** (opengameart.org/content/cc0-deep-monster-roar) | CC0 |
+
+Pitch is a function of the animal: a rex speaks a fifth below a raptor (`rate = 1.55 - height×0.16`)
+and carries twice as far. There is no CC0 fire loop in these packs and a short loop tiles audibly,
+so the campfire crackle is built from pitched-up wood ticks at random intervals — a crackle IS a
+sparse train of little impacts (`Sfx.crackle`).

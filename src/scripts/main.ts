@@ -38,6 +38,8 @@ import { GrassField } from './grass'
 import { SkyExtras } from './sky-extras'
 import { Ambience } from './ambience'
 import { GpuTimer } from './gpu-timer'
+import { Sfx } from './sfx'
+import { groundKindAt } from './terrain-paint'
 import { warmRoots } from './uploads'
 import { LightRig } from './lights'
 
@@ -144,7 +146,36 @@ async function boot(): Promise<void> {
   skyExtras.group.name = 'skyExtras'
   const ambience = new Ambience()
   // audio needs a gesture: the first click / key starts the soundscape
-  const startAudio = () => { ambience.start(); window.removeEventListener('pointerdown', startAudio); window.removeEventListener('keydown', startAudio) }
+  const sfx = new Sfx()
+  // WHAT THE ANIMALS SOUND LIKE. dinos.ts says what happened ('call', 'roar',
+  // 'hurt', 'die', 'eat'); the sample and the pitch are chosen here, from the
+  // species — a rex speaks a fifth below a raptor, and carries twice as far.
+  Dino.onVoice = (voice, d) => {
+    const p = d.object.position
+    const big = d.species.height
+    const rate = THREE.MathUtils.clamp(1.55 - big * 0.16, 0.55, 1.45)
+    const range = 60 + big * 22
+    const carnivore = d.species.diet === 'carnivore'
+    const at = { x: p.x, y: p.y + big * 0.6, z: p.z }
+    switch (voice) {
+      case 'call':
+        sfx.play(carnivore ? 'dino-call' : 'dino-grunt', { at, range: range * 0.8, rate, volume: 0.5, cooldown: 1.2 })
+        break
+      case 'roar':
+        sfx.play(d.species.alpha ? 'alpha-roar' : carnivore ? 'dino-roar' : 'dino-call', { at, range, rate, volume: 0.85, cooldown: 0.8 })
+        break
+      case 'hurt':
+        sfx.play('dino-hurt', { at, range: range * 0.7, rate, volume: 0.7, cooldown: 0.25 })
+        break
+      case 'die':
+        sfx.play('dino-die', { at, range, rate: rate * 0.9, volume: 0.9 })
+        break
+      case 'eat':
+        sfx.play('eat', { at, range: 30, rate, volume: 0.4, cooldown: 1 })
+        break
+    }
+  }
+  const startAudio = () => { ambience.start(); if (ambience.context && ambience.bus) sfx.start(ambience.context, ambience.bus); window.removeEventListener('pointerdown', startAudio); window.removeEventListener('keydown', startAudio) }
   window.addEventListener('pointerdown', startAudio)
   window.addEventListener('keydown', startAudio)
   scene.add(scatter.group)
@@ -167,6 +198,7 @@ async function boot(): Promise<void> {
   if (save?.keystones) keystones.restore(save.keystones as string[])
   keystones.onCollect = () => {
     ambience.chime(keystones.collectedCount, keystones.needed)
+    sfx.play('ui-confirm', { volume: 0.5 })
     hud.glow()
   }
 
@@ -310,6 +342,7 @@ async function boot(): Promise<void> {
   // not closeable, mouse doesn't appear")
   onboarding.show = (text) => hud.hint(text)
   onboarding.hint('wake')
+  hud.onUi = (what) => sfx.play(what === 'open' ? 'ui-open' : what === 'close' ? 'ui-close' : 'ui-click', { volume: what === 'click' ? 0.3 : 0.45 })
   hud.onPanelToggle = (open) => {
     if (open) document.exitPointerLock()
     else renderer.domElement.requestPointerLock()
@@ -395,6 +428,7 @@ async function boot(): Promise<void> {
   let god = false // QA: the taming gate punches a raptor that punches back
   const hurtPlayer = (damage: number): void => {
     if (creative || god) return
+    if (damage > 0) sfx.play('player-hurt', { volume: 0.7, cooldown: 0.5 })
     playerHp -= damage
     vignette.classList.add('hurt')
     setTimeout(() => vignette.classList.remove('hurt'), 220)
@@ -418,12 +452,15 @@ async function boot(): Promise<void> {
       const placed = building.place(held as PieceKind, updateAim())
       if (placed && inventory.remove(placed, 1)) {
         hud.toast(`Placed ${ITEMS[placed].name}`)
+        sfx.play('place', { volume: 0.7 })
         return true
       }
+      sfx.play('ui-error', { volume: 0.35 })
       return false
     }
 
     player.playSwing(held)
+    sfx.play(held === 'spear' || held === 'hatchet' ? 'blade' : 'hit-punch', { volume: held ? 0.5 : 0.35, rate: held ? 1 : 1.25 })
     if (!held) onboarding.hint('punch')
     // a carcass in reach: a blade harvests it (meat, hide)
     if (held === 'hatchet' || held === 'spear') {
@@ -435,6 +472,7 @@ async function boot(): Promise<void> {
           if (got.hide) inventory.add('hide', got.hide)
           const cp = carcass.object.position
           hitFx.burst(cp.x, cp.y + carcass.species.height * 0.3, cp.z, false)
+          sfx.play('hit-flesh', { volume: 0.55, at: { x: cp.x, y: cp.y, z: cp.z } })
           hud.toast(`${ITEMS.rawmeat.icon} +${got.rawmeat} raw meat${got.hide ? ` · ${ITEMS.hide.icon} +1 hide` : ''}${carcass.harvestLeft ? '' : ' — the carcass is spent'}`)
           return true
         }
@@ -450,6 +488,7 @@ async function boot(): Promise<void> {
       else target.takeHit(2, 8, from.x, from.z) // fists: ~20 punches to KO
       const tp = target.object.position
       hitFx.burst(tp.x, tp.y + target.species.height * 0.5, tp.z, held === 'spear')
+      sfx.play('hit-flesh', { volume: 0.8, at: { x: tp.x, y: tp.y + 1, z: tp.z } })
       hud.toast(target.state === 'ko' ? `${target.species.name} knocked out!` : target.state === 'dead' ? `${target.species.name} killed` : `Hit ${target.species.name} (torpor ${Math.round(target.torpor)}/${target.species.torporMax})`)
       return true
     }
@@ -459,6 +498,10 @@ async function boot(): Promise<void> {
     const node = scatter.raycast(raycaster, feetPos(), REACH + 1.2)
     if (node) {
       const isWood = node.kind === 'tree' || node.kind === 'pine'
+      const stone = node.kind === 'rock' || node.kind === 'boulder' || node.kind === 'outcrop'
+      sfx.play(isWood ? (held === 'hatchet' ? 'chop' : 'hit-wood') : stone ? 'hit-stone' : 'pick', {
+        volume: 0.7, at: { x: node.x, y: node.y + 1, z: node.z },
+      })
       const hits = creative ? 99 : held === 'hatchet' && isWood ? 2 : 1
       let yielded: Partial<Record<ItemId, number>> | null = null
       for (let i = 0; i < hits && node.alive; i++) yielded = scatter.hit(node) ?? yielded
@@ -501,6 +544,8 @@ async function boot(): Promise<void> {
       if (keystones.enough) {
         doorOpen = true
         doorAnim = 4
+        sfx.play('door-open', { volume: 0.9 })
+        sfx.play('creak', { volume: 0.8, rate: 0.6 })
         physics.world.removeCollider(doorCollider, false)
         hud.toast('The keystones flare — the caldera gate grinds open.')
         return true
@@ -561,6 +606,7 @@ async function boot(): Promise<void> {
     }
     // drink: any water within reach of the feet
     if (!tameFirst && nearWaterFor(f0)) {
+      sfx.play('drink', { volume: 0.7 })
       const got = survival.drink()
       hud.toast(got > 0.5 ? `Drank · water ${Math.round(survival.water)}` : 'Not thirsty')
       return true
@@ -644,6 +690,7 @@ async function boot(): Promise<void> {
       const heldFood = inventory.held && inventory.held in FOODS ? (inventory.held as FoodId) : null
       const pick = heldFood ?? (['cookedmeat', 'berry', 'rawmeat'] as FoodId[]).find((f) => inventory.count(f) > 0) ?? null
       if (pick && inventory.remove(pick, 1)) {
+        sfx.play('eat', { volume: 0.65 })
         const f = survival.eat(pick)
         playerHp = Math.max(1, Math.min(100, playerHp + f.hp))
         hud.toast(`Ate ${ITEMS[pick].name.toLowerCase()} ${ITEMS[pick].icon} · food ${Math.round(survival.food)} · ♥ ${Math.ceil(playerHp)}${pick === 'rawmeat' ? ' (raw — cook it at a fire)' : ''}`)
@@ -1113,6 +1160,9 @@ async function boot(): Promise<void> {
       nearWater: () => nearWaterFor(feetPos()),
       nearFire: () => { const f = feetPos(); return building.nearFire(f.x, f.z) },
       hintsSeen: () => onboarding.serialize(),
+      /** QA: what the mixer has actually played, and anything that failed to load */
+      sfx: () => ({ ready: sfx.ready, plays: { ...sfx.plays }, missing: [...sfx.missing] }),
+      ground: () => { const f = feetPos(); return groundKindAt(f.x, f.z) },
       /** the three point-light slots, who holds them, and the scene's REAL light count (lever A) */
       lights: () => {
         let n = 0
@@ -1678,6 +1728,22 @@ async function boot(): Promise<void> {
       }
     }
 
+    // --- sound ---
+    sfx.listener(cam.camera)
+    footsteps(dt)
+    {
+      // the nearest fire crackles; the beacon roars when it is lit
+      const fires = building.firePositions()
+      if (fires.length) {
+        let best = fires[0]
+        let bd = Infinity
+        for (const f of fires) {
+          const d = (f.x - focus.x) ** 2 + (f.z - focus.z) ** 2
+          if (d < bd) { bd = d; best = f }
+        }
+        if (bd < 22 * 22) sfx.crackle(best, dt)
+      }
+    }
     hud.tick(dt, focus.x, focus.y, focus.z, daynight.time, playerHp, (-cam.yaw * 180) / Math.PI, survival)
     if (perfHud) perfTick(dt)
     frameCount++
@@ -1708,6 +1774,36 @@ async function boot(): Promise<void> {
     dbg.ready = bootDone
   }
   requestAnimationFrame(frame)
+
+  // FOOTSTEPS. A step every stride's worth of ground covered — not on a timer,
+  // so they stay in step whatever the speed — and the sample is chosen by what
+  // the terrain is actually painted with underfoot (`groundKindAt`), so walking
+  // from the meadow into the wood goes soft and the beach crunches.
+  let strideLeft = 0
+  let lastFootX = 0
+  let lastFootZ = 0
+  function footsteps(dt: number): void {
+    void dt
+    const body = riding?.mover ?? player.mover
+    const p = body.position
+    const moved = Math.hypot(p.x - lastFootX, p.z - lastFootZ)
+    lastFootX = p.x
+    lastFootZ = p.z
+    if (moved > 8) return // a teleport, not a walk
+    const airborne = player.flying || player.swimming || (!riding && !player.mover.grounded)
+    if (airborne || moved < 0.0005) { return }
+    strideLeft -= moved
+    if (strideLeft > 0) return
+    if (riding) {
+      // a mount is heavier and slower-footed than a person
+      strideLeft = 3.2
+      sfx.play('step-dirt', { volume: 0.5, rate: 0.62 })
+      return
+    }
+    strideLeft = player.sprinting ? 2.05 : 1.55
+    const kind = groundKindAt(p.x, p.z)
+    sfx.play(`step-${kind}` as const, { volume: player.sprinting ? 0.42 : 0.3, rate: player.sprinting ? 1.08 : 1 })
+  }
 
   // THE F3 READOUT (PERFORMANCE.md's instrument). Refreshed twice a second.
   // GPU ms is the number that matters: everything else in this panel explains

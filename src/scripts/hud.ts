@@ -23,6 +23,8 @@ export class Hud {
 
   /** main.ts: release/re-lock the pointer when the panel opens/closes */
   onPanelToggle: ((open: boolean) => void) | null = null
+  /** main.ts hangs the interface sounds here */
+  onUi: ((what: 'open' | 'close' | 'click') => void) | null = null
 
   constructor(private root: HTMLElement, private inv: Inventory, private onCraft: (id: ItemId) => void, private icons: Map<ItemId, string> = new Map()) {
     root.innerHTML = `
@@ -177,6 +179,7 @@ export class Hud {
 
   togglePanel(): void {
     this.panelOpen = !this.panelOpen
+    this.onUi?.(this.panelOpen ? 'open' : 'close')
     this.panelEl.hidden = !this.panelOpen
     this.root.classList.toggle('panel-open', this.panelOpen)
     if (this.panelOpen) this.renderPanel()
@@ -190,6 +193,7 @@ export class Hud {
   }
 
   selectSlot(i: number): void {
+    if (this.inv.selected !== i) this.onUi?.('click')
     this.inv.selected = i
     this.renderHotbar()
   }
@@ -222,7 +226,7 @@ export class Hud {
     this.panelEl.innerHTML = `<div class="panel-head"><h3>Inventory</h3><button class="close" title="close (Tab / Esc)">✕</button></div><div class="resources">${rows || '<span class="res"><span>empty-handed</span></span>'}</div>
       <h3>Craft</h3><div class="recipes">${recipes}</div>`
     this.panelEl.querySelectorAll<HTMLButtonElement>('.recipe').forEach((b) =>
-      b.addEventListener('click', () => this.onCraft(b.dataset.id as ItemId)),
+      b.addEventListener('click', () => { this.onUi?.('click'); this.onCraft(b.dataset.id as ItemId) }),
     )
     this.panelEl.querySelector<HTMLButtonElement>('.close')!.addEventListener('click', () => this.togglePanel())
   }
