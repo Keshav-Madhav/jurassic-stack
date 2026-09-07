@@ -524,3 +524,9 @@ Findings and fixes, each measured with the new jitter meter (`__g.frameStats()`,
 - [x] Palette lifted toward real albedo (grass lush 0x2f5a22 / light 0x4c7a2c / dry 0x767a38, plains 0x6a8a36, floor 0x6a5438 / 0x8a7048, mud 0x76624a, swamp 0x46502e / 0x3a4530); the shader's ×2.2 texture recentre unchanged. The foothill now reads as earth, the meadow as a meadow, the wood floor as litter — and the rocks and ruins sit in it instead of glowing
 - [x] **The sea past the canvas**: the translucent ocean sheet showed the sky through where the terrain ends at 4 km — a lighter rectangle round the island from the air. An opaque dark sea floor 24 m under the whole sheet
 - [x] Gates 7 files 131/131, jitter 0 hitches
+
+### M29 — THE DINO SKINS (an albedo audit: `__g.game.rigAlbedos()` — colour, texture average, roughness, metalness per material per species)
+- [x] **The Quaternius rigs ship metalness 0.4–0.5** (untextured flat colours at 6–12% albedo — metal kills diffuse, so the apato rendered near-black) and the **pachy roughness 0** (a mirror). No dinosaur is metal: metalness 0, roughness ≥ 0.55 on every rig; flat-coloured rigs lifted to a 14% hide albedo
+- [x] **Dark textured skins**: carno / allo / mammoth average sRGB 75 / 63 / 52 — silhouettes in daylight. Lifted 1.55–1.7× on the map tint
+- [x] **The shared-material trap**: `SkeletonUtils.clone` keeps materials shared across every clone of a rig, so a multiplicative tweak in `load()` ran once per clone — 40 carnos × 1.6 = pure white (caught in the portrait sheet). Anything multiplicative now runs ONCE on the source in `loadModel()`, guarded by a per-URL set. Rule below
+- [x] Survival gate: a cook-step debug line (prints prompt/toast/nearFire on failure) after a one-off flake; 3/3 clean. Gates 7 files 131/131, jitter 0 hitches

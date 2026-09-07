@@ -57,6 +57,10 @@ Vercel. **No React, no framework.**
   batch per 256 m cell. Anything new with a material or texture: it must exist in the scene (even
   hidden) before the load-time warm-up in `main.ts`, or hook `Dino.onFirstRig`-style — a first-sight
   compile is a 100–200 ms stall. Never calibrate or measure a rig that isn't attached to the scene.
+- **Rig materials are shared across clones** (M29): `SkeletonUtils.clone` keeps the GLB's materials, so
+  any tweak in a per-dino `load()` runs once PER CLONE — a ×1.6 tint became ×1.6⁴⁰. Multiplicative or
+  one-time material edits go in `loadModel()` (once per URL, guarded); per-instance looks (the alpha)
+  clone the material first. `__g.game.rigAlbedos()` prints colour × texture average per species.
 - **Flat grey is plaster; hex is dark** (M22/M27): under this sun + ACES any untextured mid-grey renders
   white — give stone `makeStone()` (stone-material.ts, world-space triplanar) rather than a darker
   colour. And `new Color(0x4a4440)` is sRGB → 0.068 linear; when a value is meant in linear terms use

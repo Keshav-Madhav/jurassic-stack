@@ -924,6 +924,7 @@ async function boot(): Promise<void> {
       /** QA: nearest dino of a species → its position and heading (for a side-on walking portrait) */
       dinoPose: (id: string) => { const d = nearestDino(Infinity, (x) => x.species.id === id); return d ? { x: d.object.position.x, y: d.object.position.y, z: d.object.position.z, heading: d.facing, state: d.state, speed: d.speedNow } : null },
       /** QA: material flags of one loaded rig per species */
+      rigAlbedos: () => { const out: Record<string, string[]> = {}; for (const d of dinos) { if (out[d.species.id]) continue; const r = d.albedoReport(); if (r.length) out[d.species.id] = r } return out },
       rigMaterials: () => { const out: Record<string, string[]> = {}; for (const d of dinos) { if (out[d.species.id]) continue; const r = d.materialReport(); if (r.length) out[d.species.id] = r } return out },
       /** QA: draw state of the nearest dino of a species */
       dinoInfo: (id: string) => { const d = nearestDino(Infinity, (x) => x.species.id === id); return d ? d.drawInfo() : null },
@@ -1042,6 +1043,7 @@ async function boot(): Promise<void> {
       survival: () => ({ ...survival.serialize(), winded: survival.winded }),
       setSurvival: (s: { food?: number; water?: number; stamina?: number }) => { if (s.food !== undefined) survival.food = s.food; if (s.water !== undefined) survival.water = s.water; if (s.stamina !== undefined) survival.stamina = s.stamina },
       nearWater: () => nearWaterFor(feetPos()),
+      nearFire: () => { const f = feetPos(); return building.nearFire(f.x, f.z) },
       alphaInfo: () => gatekeeper ? gatekeeper.drawInfo() : null,
       dinoCards: () => dinoImpostors.debug(),
       ravinePath: () => worldMeta!.ravine.path,

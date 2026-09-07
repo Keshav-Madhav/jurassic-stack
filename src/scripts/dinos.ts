@@ -45,10 +45,33 @@ function whenMyTurn(): Promise<void> {
 }
 /** every clip name per model URL — the animation audit reads this */
 export const clipNamesByModel = new Map<string, string[]>()
+/** species whose albedo textures average under sRGB 80 (M29 audit: carno 75, allo 63, mammoth 52) — lifted ONCE on the source */
+const DARK_SKIN_LIFT: Record<string, number> = { 'models/dinos/Carnotaurus.glb': 1.55, 'models/dinos/Allosaurus.glb': 1.7, 'models/dinos/Mammoth.glb': 1.6 }
+const lifted = new Set<string>()
 async function loadModel(url: string) {
   if (!modelCache.has(url)) modelCache.set(url, loader.loadAsync(url))
   const gltf = await modelCache.get(url)!
   if (!clipNamesByModel.has(url)) clipNamesByModel.set(url, gltf.animations.map((a) => a.name))
+  // MATERIALS ARE SHARED across every clone of a rig (SkeletonUtils.clone
+  // keeps them): a multiplicative tweak in load() ran once per clone — 40
+  // carnos × 1.6 went pure white (M29). Anything multiplicative happens here,
+  // on the source, once.
+  if (!lifted.has(url)) {
+    lifted.add(url)
+    const k = DARK_SKIN_LIFT[url]
+    gltf.scene.traverse((o) => {
+      if (!(o instanceof THREE.Mesh)) return
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        const mm = m as THREE.MeshStandardMaterial
+        if (k) mm.color.multiplyScalar(k)
+        // flat-coloured rigs (the Quaternius apato/parasaur): lift toward a real hide albedo (12–25%)
+        if (!mm.map) {
+          const lum = mm.color.r * 0.2126 + mm.color.g * 0.7152 + mm.color.b * 0.0722
+          if (lum < 0.12) mm.color.multiplyScalar(0.14 / Math.max(lum, 0.01))
+        }
+      }
+    })
+  }
   await whenMyTurn()
   return { scene: (await import('three/addons/utils/SkeletonUtils.js')).clone(gltf.scene) as THREE.Group, animations: gltf.animations }
 }
@@ -168,6 +191,17 @@ export class Dino {
             if (mm.map) mm.alphaTest = Math.max(mm.alphaTest, 0.4)
             mm.needsUpdate = true
           }
+        }
+        // MATERIAL SANITY (M29 albedo audit): the Quaternius rigs ship
+        // metalness 0.4–0.5 (untextured: metal kills diffuse, so a 0.12-linear
+        // apato rendered near-black), the pachy roughness 0 (a mirror), and
+        // several flat colours at 6–12% albedo. No dinosaur is metal.
+        for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+          const mm = m as THREE.MeshStandardMaterial
+          mm.metalness = 0
+          mm.roughness = Math.max(mm.roughness, 0.55)
+
+          mm.needsUpdate = true
         }
         // the alpha wears its own skin: darker, ember-lit — its materials are
         // CLONED (the GLB's are shared by every rig of the species)
@@ -333,6 +367,26 @@ export class Dino {
       }
     })
     return [...out]
+  }
+
+  /** QA: colour + texture-average per material (how dark does this species ship?) */
+  albedoReport(): string[] {
+    const out: string[] = []
+    this.model?.traverse((o) => {
+      if (!(o instanceof THREE.Mesh)) return
+      for (const m of Array.isArray(o.material) ? o.material : [o.material]) {
+        const mm = m as THREE.MeshStandardMaterial
+        let avg: string = 'none'
+        const img = mm.map?.image as HTMLImageElement | ImageBitmap | undefined
+        if (img && (img as HTMLImageElement).width) {
+          const cv = document.createElement('canvas'); cv.width = 32; cv.height = 32
+          const ctx = cv.getContext('2d')!
+          try { ctx.drawImage(img as CanvasImageSource, 0, 0, 32, 32); const d = ctx.getImageData(0, 0, 32, 32).data; const s = [0, 0, 0]; for (let i = 0; i < d.length; i += 4) { s[0] += d[i]; s[1] += d[i + 1]; s[2] += d[i + 2] }; avg = s.map((v) => Math.round(v / 1024)).join(',') } catch { avg = 'x' }
+        }
+        out.push(`${mm.type.replace('Mesh', '')} col=${mm.color.toArray().map((v) => v.toFixed(2)).join(',')} mapAvg=${avg} rough=${mm.roughness.toFixed(2)} metal=${mm.metalness.toFixed(2)} emis=${mm.emissive.toArray().map((v) => v.toFixed(2)).join(',')}`)
+      }
+    })
+    return out
   }
 
   /** QA: how this dino is being drawn right now */
