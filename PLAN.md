@@ -380,7 +380,9 @@ on the HUD that points, stowed in a chest to go sandbox. The M30 hints cover the
 
 **Remaining order (2026-09-07), by rounds that mix one pick from each of feel / performance /
 polish / content:**
-1. **Animals alive** (feel) · **light culling + sky cubemap** (perf, PERFORMANCE A+D) · **sound**
+1. **Animals alive** (feel) · ~~light culling + sky cubemap~~ **DONE M31 — and the round found the
+   real enemy: hitches, not fill** (the steady frame is 5–7 ms GPU at 2560×1440; first sight of a
+   region was costing 100–500 ms. See PERFORMANCE.md H1–H6; H4–H6 are the next perf pick) · **sound**
    (polish: footsteps by ground, dino calls by species/state, bites, water, fire — Kenney/freesound
    CC0) · **the build tier from ruins** (content: recipe tablets in the 23 ruins unlock chest, bedroll
    respawn, workbench, tent, fence, door, thatch roof — the Kenney kit already holds most of these).

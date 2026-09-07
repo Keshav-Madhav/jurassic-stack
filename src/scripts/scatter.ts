@@ -20,6 +20,7 @@ import { CHUNK_SIZE, CHUNKS_PER_SIDE } from './terrain'
 import { addObstacle } from './obstacles'
 import type { Physics } from './physics'
 import type { ItemId } from './items'
+import { registerWarmRoot } from './uploads'
 
 export type NodeKind =
   | 'tree' | 'elder' | 'redwood' | 'pine' | 'deadtree' | 'palm' | 'willow' | 'mangrove'
@@ -647,7 +648,9 @@ export class Scatter {
     const loaded = new Map<string, THREE.Group>()
     await Promise.all(
       files.map(async (f) => {
-        loaded.set(f, (await loader.loadAsync(`models/props/${f}.glb`)).scene)
+        const root = (await loader.loadAsync(`models/props/${f}.glb`)).scene
+        registerWarmRoot(root)
+        loaded.set(f, root)
       }),
     )
     // built trees (trees.ts) sit beside the loaded GLBs, keyed by gen+seed

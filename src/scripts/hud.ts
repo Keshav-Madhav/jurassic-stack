@@ -46,6 +46,7 @@ export class Hud {
       </div>
       <div id="hud-hotbar"></div>
       <div id="hud-panel" hidden></div>
+      <div id="hud-perf" hidden></div>
       <div id="hud-credits" hidden></div>
       <div id="hud-help">WASD · SHIFT sprint · LMB use · E interact/drink/cook · F eat · N wayfinder · TAB inventory · C creative</div>
     `
@@ -128,6 +129,18 @@ export class Hud {
     el.textContent = msg
     el.classList.add('show')
     this.hintTimer = 5.5
+  }
+
+  /** The F3 panel: GPU/CPU ms and what the frame is made of. `null` hides it.
+   *  This is the instrument a player on another machine screenshots for us
+   *  (PERFORMANCE.md) — so it names the GPU and the pixel count too. */
+  setPerf(rows: [string, string][] | null): void {
+    const el = this.root.querySelector('#hud-perf') as HTMLElement
+    if (!rows) { el.hidden = true; return }
+    el.hidden = false
+    el.innerHTML = rows
+      .map(([k, v]) => (k === '' ? `<hr>` : `<span><b>${k}</b><i>${v}</i></span>`))
+      .join('')
   }
 
   prompt(text: string | null): void {

@@ -6,6 +6,7 @@
 // the embers a Points cloud that rises and wraps.
 import * as THREE from 'three'
 import { makeStone } from './stone-material'
+import type { Emitter, LightRig } from './lights'
 
 const EMBERS = 160
 
@@ -42,11 +43,11 @@ export class Beacon {
   private flameMat: THREE.MeshBasicMaterial
   private embers: THREE.Points
   private emberVel: Float32Array
-  private glow: THREE.PointLight
+  private glow: Emitter | null
   private bowlMat: THREE.MeshStandardMaterial
   private t = 0
 
-  constructor(readonly x: number, readonly groundY: number, readonly z: number) {
+  constructor(readonly x: number, readonly groundY: number, readonly z: number, lights: LightRig | null = null) {
     // (linear colour: a hex 0x4a4440 is 0.068 linear — near black under the texture, M27)
     const basalt = new THREE.MeshStandardMaterial({ color: new THREE.Color().setRGB(0.3, 0.27, 0.25), roughness: 0.96 })
     makeStone(basalt, { metresPerTile: 2.2, gain: 2.0 })
@@ -98,10 +99,10 @@ export class Beacon {
     this.embers.visible = false
     this.embers.frustumCulled = false
     this.group.add(this.embers)
-    // the light: candela-scale (the renderer is physically-correct), 90 m reach
-    this.glow = new THREE.PointLight(0xff8a3c, 0, 110, 2)
-    this.glow.position.set(x, groundY + this.bowlY + 3, z)
-    this.group.add(this.glow)
+    // the light: candela-scale (the renderer is physically-correct), 110 m
+    // reach — an emitter, so the unlit brazier costs nothing and the lit one
+    // takes a LightRig slot whenever you are the nearest thing to it (M31)
+    this.glow = lights?.add({ x, y: groundY + this.bowlY + 3, z, intensity: 0, distance: 110, decay: 2, color: 0xff8a3c }) ?? null
   }
 
   private resetEmber(pos: Float32Array, i: number, scatter: boolean): void {
@@ -135,7 +136,7 @@ export class Beacon {
       f.position.y = this.groundY + this.bowlY + 5.4 * s
     })
     this.flameMat.opacity = this.heat * (0.8 + 0.2 * flick)
-    this.glow.intensity = 260 * this.heat * flick
+    if (this.glow) this.glow.intensity = 260 * this.heat * flick
     this.bowlMat.emissiveIntensity = 1.6 * this.heat * flick
     // embers rise, drift, and wrap back into the bowl
     const pos = this.embers.geometry.getAttribute('position') as THREE.BufferAttribute

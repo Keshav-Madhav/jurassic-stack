@@ -71,10 +71,26 @@ Vercel. **No React, no framework.**
   another LOD, a distant ruin) is DETACHED from the graph, never `visible = false`. The warm-up in
   `main.ts` re-attaches everything once (`showAll()`), so a new detachable layer must join it.
   `tools/qa-gpu.mjs` (GPU timer queries) tells GPU time from CPU time before anyone guesses.
-- **Point lights are a fill-rate budget** (M20): three.js evaluates every point light in every
-  fragment of every lit material — no culling by distance. Going 5 → 12 keystone halos cost 30
-  hitches a fly run. Share one light and move it (keystones), pool a handful (campfires), and never
-  hide a light with `visible = false` (the light count changes → every shader recompiles).
+- **Point lights go through the LightRig** (M20/M31): the island has THREE point lights, and
+  `lights.ts` walks them to the three nearest emitters five times a second. Anything that glows
+  registers an emitter (`lights.add({x, y, z, intensity, distance, color})`) and mutates its
+  intensity to flicker; nothing creates a `PointLight`. Never hide a light with `visible = false` —
+  the scene's light count is a shader define, and changing it recompiles every material (a
+  multi-second freeze). Measured cost of a light on this GPU: ~0 ms (3 vs 10 is the same frame,
+  `gate-perf --lights=7`) — the rig is for the recompile hazard and for uncapping the fires, not fps.
+- **Measure at 2560×1440, warm, frozen, vsync off, p10** (M31): four earlier profiles were wrong in
+  four different ways. Attribution must be ADDITIVE (hide everything, reveal one layer at a time) —
+  hiding one layer of an overdrawn scene just moves its pixels to the layer behind. The world must be
+  frozen (`__g.setFrozen(true)`) or a passing herd moves the number 3 ms. Chrome needs
+  `--disable-gpu-vsync --disable-frame-rate-limit` or every frame reads 16.7 ms. And nothing is warm
+  for 30 seconds: spawn reads 11 ms until then and 6.5 ms after. `tools/qa-gpu.mjs`,
+  `tools/gate-perf.mjs` and `tools/qa-hitch.mjs` all do this; see PERFORMANCE.md.
+- **A hitch is a first sight** (M31): the steady frame is fine (5–7 ms GPU at 2560×1440). What the
+  player feels is the frame that uploads 54 textures or compiles 21 shaders because they walked
+  somewhere new. Anything that loads a model registers it with `registerWarmRoot()` (uploads.ts) so
+  the upload warden pushes its textures to the GPU before anything draws them; anything that compiles
+  at runtime uses `renderer.compileAsync`. `tools/qa-hitch.mjs` walks a lap and prints the worst
+  frame per region with its section breakdown, plus programs and textures created.
 - **Hand shelves and cuts are re-laid after erosion.** Anything the player must walk (the Ravine
   floor, the crater bench, the gate apron) is asserted again in the `reassert` pass — droplets and
   talus turn a designed ramp into steps the navmesh won't climb.

@@ -13,6 +13,7 @@ import { findPath, type PathPoint } from './navmesh'
 import { Mover, type MoverConfig } from './mover'
 import type { Physics } from './physics'
 import type { SpeciesDef } from './species'
+import { registerWarmRoot } from './uploads'
 
 export type DinoState = 'idle' | 'wander' | 'aggro' | 'hunt' | 'feed' | 'flee' | 'ko' | 'dead' | 'tamed'
 
@@ -52,6 +53,7 @@ async function loadModel(url: string) {
   if (!modelCache.has(url)) modelCache.set(url, loader.loadAsync(url))
   const gltf = await modelCache.get(url)!
   if (!clipNamesByModel.has(url)) clipNamesByModel.set(url, gltf.animations.map((a) => a.name))
+  registerWarmRoot(gltf.scene) // its textures upload before any clone is drawn (M31)
   // MATERIALS ARE SHARED across every clone of a rig (SkeletonUtils.clone
   // keeps them): a multiplicative tweak in load() ran once per clone — 40
   // carnos × 1.6 went pure white (M29). Anything multiplicative happens here,

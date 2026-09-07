@@ -12,6 +12,7 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import { heightAt, VOLCANO, worldMeta } from './heightmap'
 import { makeStone } from './stone-material'
 import type { Physics } from './physics'
+import { registerWarmRoot } from './uploads'
 
 type RuinModel = 'Column' | 'Arch' | 'Statue'
 
@@ -135,7 +136,9 @@ export class Ruins {
     const models = new Map<RuinModel, THREE.Group>()
     await Promise.all(
       (['Column', 'Arch', 'Statue'] as RuinModel[]).map(async (m) => {
-        models.set(m, (await loader.loadAsync(`models/props/${m}.glb`)).scene)
+        const root = (await loader.loadAsync(`models/props/${m}.glb`)).scene
+        registerWarmRoot(root)
+        models.set(m, root)
       }),
     )
 

@@ -10,6 +10,7 @@ import type { Physics } from './physics'
 import type { ItemId } from './items'
 import type { Kit } from './kit'
 import { ITEM_MODEL } from './kit'
+import type { Emitter, LightRig } from './lights'
 
 export const CELL = 3
 const WALL_H = 3
@@ -70,22 +71,16 @@ export class Building {
   private ghost: THREE.Mesh
   private ghostMat: THREE.MeshStandardMaterial
   private colliders: RAPIER.Collider[] = []
-  /** Pre-allocated light pool: adding a light mid-game recompiles every
-   *  shader in the scene (multi-second freeze). 8 dormant lights cover the
-   *  first 8 fires (campfires and torches); later ones burn lightless. Every
-   *  point light costs every fragment (CLAUDE.md), so 8 is the budget. */
-  private firePool: THREE.PointLight[] = []
-  private fires: { light: THREE.PointLight | null; flame: THREE.Mesh; embers: THREE.Points; base: number; kind: PieceKind }[] = []
+  /** Every fire is an emitter; the LightRig gives the three nearest an actual
+   *  point light (M31 / PERFORMANCE.md lever A). Before that this class owned
+   *  a pool of 8 real lights and the 9th fire burned dark — now the count is
+   *  unlimited and the per-pixel cost is fixed. */
+  private fires: { emitter: Emitter | null; flame: THREE.Mesh; embers: THREE.Points; base: number; kind: PieceKind }[] = []
   private flameMat = new THREE.MeshBasicMaterial({ map: flameTexture(), transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false })
   private emberMat = new THREE.PointsMaterial({ color: 0xffa040, size: 0.11, map: emberTexture(), alphaTest: 0.05, transparent: true, opacity: 0.9, blending: THREE.AdditiveBlending, depthWrite: false, fog: false })
   private t = 0
 
-  constructor(private physics: Physics, private kit: Kit | null = null) {
-    for (let i = 0; i < 8; i++) {
-      const l = new THREE.PointLight(0xffa25a, 0, 34, 1.6) // (18 m / decay 2 barely lit the ground round the fire — M23; less saturated: the timber went traffic-cone)
-      this.firePool.push(l)
-      this.group.add(l)
-    }
+  constructor(private physics: Physics, private kit: Kit | null = null, private lights: LightRig | null = null) {
     this.ghostMat = new THREE.MeshStandardMaterial({
       color: GHOST_OK, transparent: true, opacity: 0.45, depthWrite: false,
     })
@@ -217,12 +212,15 @@ export class Building {
     const torch = p.kind === 'torch'
     const x = p.gx * CELL, z = p.gz * CELL
     const y = p.baseY + (torch ? 1.55 : 0.3)
-    const light = this.fires.filter((f) => f.light).length < this.firePool.length ? this.firePool[this.fires.filter((f) => f.light).length] : null
-    if (light) {
-      light.position.set(x, y + (torch ? 0.3 : 0.9), z)
-      light.intensity = torch ? 70 : 160
-      light.distance = torch ? 22 : 34
-    }
+    // (18 m / decay 2 barely lit the ground round the fire — M23; the colour is
+    // less saturated than fire really is: at 0xff8a3c the timber went traffic-cone)
+    const emitter = this.lights?.add({
+      x, y: y + (torch ? 0.3 : 0.9), z,
+      intensity: torch ? 70 : 160,
+      distance: torch ? 22 : 34,
+      decay: 1.6,
+      color: 0xffa25a,
+    }) ?? null
     const flame = new THREE.Mesh(new THREE.PlaneGeometry(torch ? 0.5 : 1.6, torch ? 0.9 : 2.2), this.flameMat)
     flame.position.set(x, y + (torch ? 0.4 : 1.0), z)
     this.group.add(flame)
@@ -234,7 +232,7 @@ export class Building {
     const embers = new THREE.Points(geo, this.emberMat)
     embers.frustumCulled = false
     this.group.add(embers)
-    this.fires.push({ light, flame, embers, base: y, kind: p.kind })
+    this.fires.push({ emitter, flame, embers, base: y, kind: p.kind })
   }
 
   /** flicker the fires; billboard the flames */
@@ -243,7 +241,7 @@ export class Building {
     for (let i = 0; i < this.fires.length; i++) {
       const f = this.fires[i]
       const flick = 0.82 + 0.18 * Math.sin(this.t * 13.1 + i * 2.3) * Math.sin(this.t * 7.7 + i)
-      if (f.light) f.light.intensity = (f.kind === 'torch' ? 70 : 160) * flick
+      if (f.emitter) f.emitter.intensity = (f.kind === 'torch' ? 70 : 160) * flick
       f.flame.rotation.y = Math.atan2(cam.x - f.flame.position.x, cam.z - f.flame.position.z)
       f.flame.scale.set(1 + 0.08 * Math.sin(this.t * 11 + i), 0.9 + 0.14 * flick, 1)
       const arr = f.embers.geometry.getAttribute('position') as THREE.BufferAttribute

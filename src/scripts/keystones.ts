@@ -8,6 +8,7 @@
 // leaves it, sparks rise, and it flies to your chest as a chime climbs.
 import * as THREE from 'three'
 import { heightAt, worldMeta } from './heightmap'
+import type { Emitter, LightRig } from './lights'
 
 export interface KeystoneSite {
   tag: string
@@ -51,16 +52,26 @@ export class Keystones {
   readonly sites: KeystoneSite[] = []
   private t = 0
   private pickups: Pickup[] = []
-  /** ONE halo light for all the stones, parked at the nearest uncollected one:
-   *  three.js evaluates every point light in every fragment (no light culling),
-   *  and twelve halos across the island cost every pixel on screen — the fly
-   *  run dropped to 33 hitches when the count went 5 → 12 (M20) */
-  private halo = new THREE.PointLight(0x54c8f0, 40, 14)
+  /** ONE halo emitter for all the stones, parked at the nearest uncollected
+   *  one. Twelve halos across the island cost every pixel on screen — the fly
+   *  run dropped to 33 hitches when the count went 5 → 12 (M20). Since M31 it
+   *  is an emitter competing for one of the LightRig's three slots, so a stone
+   *  across the island costs nothing at all. */
+  private halo: Emitter | null = null
   private ringGeo = new THREE.RingGeometry(0.9, 1.0, 48) // thin: the band scales with the ring
   private ringMat = new THREE.MeshBasicMaterial({ color: 0x9df0ff, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending, fog: false })
   private sparkMat = new THREE.PointsMaterial({ color: 0xbff4ff, size: 0.14, map: softDot(), alphaTest: 0.05, transparent: true, opacity: 1, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true, fog: false })
   /** main.ts hooks the chime here */
   onCollect: ((site: KeystoneSite) => void) | null = null
+
+  constructor(private lights: LightRig | null = null) {}
+
+  /** park the halo on a stone (or douse it at intensity 0) */
+  private haloAt(p: THREE.Vector3, intensity: number): void {
+    if (!this.halo) return
+    this.halo.x = p.x; this.halo.y = p.y; this.halo.z = p.z
+    this.halo.intensity = intensity
+  }
 
   build(): void {
     const meta = worldMeta!
@@ -80,7 +91,7 @@ export class Keystones {
       this.group.add(mesh)
       this.sites.push({ tag: site.tag, x: site.x, y, z: site.z, collected: false, mesh })
     }
-    this.group.add(this.halo)
+    this.halo = this.lights?.add({ x: 0, y: -500, z: 0, intensity: 0, distance: 14, decay: 1.6, color: 0x54c8f0 }) ?? null
   }
 
   get collectedCount(): number {
@@ -131,11 +142,10 @@ export class Keystones {
 
   private startPickup(s: KeystoneSite, chest: THREE.Vector3): void {
     // the stone stays visible for the flight; the halo flares then dies.
-    // NEVER halo.visible = false: removing a light from the render list
-    // changes the scene light count and forces EVERY material to recompile —
-    // a 5-10 s freeze on pickup (user-hit). Intensity carries the whole effect.
-    this.halo.position.copy(s.mesh.position)
-    this.halo.intensity = 220
+    // NEVER take the light out of the scene: changing the scene's light count
+    // forces EVERY material to recompile — a 5-10 s freeze on pickup
+    // (user-hit, M20). Intensity carries the whole effect.
+    this.haloAt(s.mesh.position, 220)
     const ring = new THREE.Mesh(this.ringGeo, this.ringMat.clone())
     ring.position.copy(s.mesh.position)
     ring.rotation.x = -Math.PI / 2
@@ -168,10 +178,8 @@ export class Keystones {
     // the halo sits on the nearest uncollected stone (when no pickup is playing)
     if (!this.pickups.length && chest) {
       const near = this.nearestMissing(chest.x, chest.z)
-      if (near) {
-        this.halo.position.copy(near.mesh.position)
-        this.halo.intensity = 40
-      } else this.halo.intensity = 0
+      if (near) this.haloAt(near.mesh.position, 40)
+      else if (this.halo) this.halo.intensity = 0
     }
     for (let i = this.pickups.length - 1; i >= 0; i--) {
       const p = this.pickups[i]
@@ -201,12 +209,11 @@ export class Keystones {
       pos.needsUpdate = true
       ;(p.sparks.material as THREE.PointsMaterial).opacity = 1 - k * k
       // the halo: a flare, then gone
-      this.halo.position.copy(m.position)
-      this.halo.intensity = 220 * (1 - k)
+      this.haloAt(m.position, 220 * (1 - k))
       if (k >= 1) {
         m.visible = false
         m.scale.setScalar(1)
-        this.halo.intensity = 0
+        if (this.halo) this.halo.intensity = 0
         this.group.remove(p.ring, p.sparks)
         ;(p.ring.material as THREE.Material).dispose()
         ;(p.sparks.material as THREE.Material).dispose()

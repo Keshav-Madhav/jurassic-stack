@@ -6,6 +6,7 @@ import * as THREE from 'three'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import type { ItemId } from './items'
+import { registerWarmRoot } from './uploads'
 
 /** item → kit model (public/models/kit/<file>.glb) */
 export const ITEM_MODEL: Record<ItemId, string> = {
@@ -70,6 +71,7 @@ export class Kit {
           }
         }
       })
+      registerWarmRoot(gltf.scene)
       this.models.set(f, gltf.scene)
     }))
   }

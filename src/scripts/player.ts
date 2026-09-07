@@ -10,6 +10,7 @@ import { Input } from './input'
 import { Mover, PLAYER_MOVER } from './mover'
 import type { Physics } from './physics'
 import type { ItemId } from './items'
+import { registerWarmRoot } from './uploads'
 
 const WALK_SPEED = 4.4
 const SPRINT_SPEED = 8.0
@@ -71,6 +72,7 @@ export class Player {
     const loader = new GLTFLoader()
     loader.setMeshoptDecoder(MeshoptDecoder)
     const gltf = await loader.loadAsync('models/player/Castaway.glb')
+    registerWarmRoot(gltf.scene)
     const model = gltf.scene
 
     const box = new THREE.Box3().setFromObject(model)

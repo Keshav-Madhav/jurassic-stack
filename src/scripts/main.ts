@@ -37,6 +37,9 @@ import { wildPopulation } from './population'
 import { GrassField } from './grass'
 import { SkyExtras } from './sky-extras'
 import { Ambience } from './ambience'
+import { GpuTimer } from './gpu-timer'
+import { warmRoots } from './uploads'
+import { LightRig } from './lights'
 
 const SWING_COOLDOWN = 0.45
 const REACH = 3.2
@@ -55,8 +58,20 @@ async function boot(): Promise<void> {
   // ~17K tree casters into the 2048 map every frame was the top GPU cost
   renderer.shadowMap.autoUpdate = false
   app.appendChild(renderer.domElement)
+  // F3: real GPU milliseconds (the JS render timer measures submit, not draw)
+  const gpuTimer = new GpuTimer(renderer.getContext() as WebGL2RenderingContext)
+  let perfHud = false
+  let gpuProbe = false
+  let paused = false
+  let frozen = false
+  const extraLights: THREE.PointLight[] = []
 
   const scene = new THREE.Scene()
+  // THE FILL BUDGET: three point lights for the whole island, following the
+  // three nearest fires/halo/beacon. Added before anything else compiles —
+  // the shader light count must be settled before the warm-up (M31).
+  const lights = new LightRig()
+  scene.add(lights.group)
   const daynight = new DayNight(renderer, scene)
   const terrain = new Terrain()
   scene.add(terrain.group)
@@ -130,7 +145,7 @@ async function boot(): Promise<void> {
   scene.add(ruins.group)
   ruins.group.name = 'ruins'
 
-  const keystones = new Keystones()
+  const keystones = new Keystones(lights)
   keystones.build()
   scene.add(keystones.group)
   keystones.group.name = 'keystones'
@@ -202,7 +217,7 @@ async function boot(): Promise<void> {
 
   // THE BEACON — the arc's end, on the crater bench at the top of the Ravine
   const beaconSite = worldMeta!.ruinSites.find((r) => r.tag === 'crater-beacon')!
-  const beacon = new Beacon(beaconSite.x, heightAt(beaconSite.x, beaconSite.z), beaconSite.z)
+  const beacon = new Beacon(beaconSite.x, heightAt(beaconSite.x, beaconSite.z), beaconSite.z, lights)
   scene.add(beacon.group)
   beacon.group.name = 'beacon'
   physics.world.createCollider(RAPIER.ColliderDesc.cylinder(1.4, 7.4).setTranslation(beaconSite.x, beacon.groundY + 1.4, beaconSite.z))
@@ -230,7 +245,7 @@ async function boot(): Promise<void> {
   const kit = new Kit()
   await kit.load()
   kit.captureIcons(renderer)
-  const building = new Building(physics, kit)
+  const building = new Building(physics, kit, lights)
   scene.add(building.group)
   building.group.name = 'building'
   if (save) building.restore(save.pieces as ReturnType<Building['serialize']>)
@@ -592,6 +607,12 @@ async function boot(): Promise<void> {
   }
   let lastSpaceAt = 0
   addEventListener('keydown', (e) => {
+    if (e.code === 'F3') {
+      e.preventDefault()
+      perfHud = !perfHud
+      if (!perfHud) hud.setPerf(null)
+      return
+    }
     if (e.code === 'Tab') {
       e.preventDefault()
       hud.togglePanel()
@@ -763,6 +784,29 @@ async function boot(): Promise<void> {
     setPixelRatio: (r: number) => { adaptive = false; pixelRatio = r; renderer.setPixelRatio(r); renderer.setSize(innerWidth, innerHeight) },
     pixelRatio: () => pixelRatio,
     setAdaptive: (on: boolean) => { adaptive = on },
+    /** QA: stop the game loop so the GPU profiler owns the device */
+    setPaused: (on: boolean) => { paused = on },
+    /** QA: the upload warden's books — queued, uploaded, roots watched */
+    uploads: () => ({ queued: uploadQueue.length, done: uploadsDone, roots: warmRoots.length }),
+    /** QA: keep drawing, stop the world (dt = 0) — repeatable GPU profiles */
+    setFrozen: (on: boolean) => { frozen = on },
+    /** QA: time the GPU inside the real game loop (what the player actually
+     *  pays — a paused profiler measures a machine with nothing else on it) */
+    setGpuProbe: (on: boolean) => { gpuProbe = on },
+    gpuMs: () => ({ supported: gpuTimer.supported, p10: +gpuTimer.pct(0.1).toFixed(2), median: +gpuTimer.median().toFixed(2), p95: +gpuTimer.pct(0.95).toFixed(2), max: +gpuTimer.max().toFixed(2) }),
+    /** QA: park N extra point lights in the scene (intensity 0, out at sea).
+     *  A point light costs every fragment whether it is lit or not, so this is
+     *  the honest A/B for lever A: the same binary at 3 lights and at 10. */
+    setExtraLights: (n: number) => {
+      while (extraLights.length > n) { const l = extraLights.pop()!; scene.remove(l) }
+      while (extraLights.length < n) {
+        const l = new THREE.PointLight(0xffa25a, 0, 34, 1.6)
+        l.position.set(2400, 40, 2400)
+        scene.add(l)
+        extraLights.push(l)
+      }
+      return extraLights.length
+    },
     /** QA: shadow cadence + map size */
     setShadow: (every: number, size?: number) => {
       shadowEvery = Math.max(1, every)
@@ -1053,6 +1097,12 @@ async function boot(): Promise<void> {
       nearWater: () => nearWaterFor(feetPos()),
       nearFire: () => { const f = feetPos(); return building.nearFire(f.x, f.z) },
       hintsSeen: () => onboarding.serialize(),
+      /** the three point-light slots, who holds them, and the scene's REAL light count (lever A) */
+      lights: () => {
+        let n = 0
+        scene.traverse((o) => { if ((o as THREE.PointLight).isPointLight) n++ })
+        return { slots: lights.debug(), emitters: lights.emitterCount, scenePointLights: n }
+      },
       alphaInfo: () => gatekeeper ? gatekeeper.drawInfo() : null,
       dinoCards: () => dinoImpostors.debug(),
       ravinePath: () => worldMeta!.ravine.path,
@@ -1095,6 +1145,14 @@ async function boot(): Promise<void> {
       if (undo) { seen.add(d.species.id); detach.push(undo) }
     }
     renderer.compile(scene, cam.camera)
+    // ONE ISLAND-WIDE SHADOW FRAME: the depth variant of a material compiles
+    // when the material first enters the shadow box, and the box is 85 m — so
+    // every region used to cost its own depth compiles as you walked into it
+    // (M31). Widen the box to the whole island for this one frame.
+    daynight.setShadowExtent(2100)
+    renderer.shadowMap.needsUpdate = true
+    renderer.render(scene, cam.camera)
+    daynight.setShadowExtent(85)
     renderer.shadowMap.needsUpdate = true
     renderer.render(scene, cam.camera)
     // textures upload on first DRAW, not compile — anything frustum-culled in
@@ -1118,28 +1176,81 @@ async function boot(): Promise<void> {
     // species that finish loading later: compile + upload as each arrives (the
     // rig is attached to its dino at this point; a shadow-mapped frame with
     // the light's box moved onto it compiles the skinned depth variant too)
+    // Each species arrives on its own (the clone pump feeds four rigs a
+    // frame), and warming one used to cost a 200-900 ms freeze: two
+    // renderer.compile() calls plus two full renders, all synchronous, in
+    // whatever frame the GLB happened to finish in (M31 hitch hunt).
+    // compileAsync() hands the work to the driver's parallel-compile
+    // extension and returns a promise, so the shaders build while the game
+    // keeps running; only the shadow frame and the impostor capture — one
+    // render each — still land on the main thread.
     Dino.onFirstRig = (id, model) => {
       const t = performance.now()
-      const saved = daynight.shadowFocus()
       model.updateMatrixWorld(true)
-      const p = new THREE.Vector3()
-      model.getWorldPosition(p)
-      daynight.focusShadow(p.x, p.z)
-      renderer.compile(scene, cam.camera)
-      renderer.shadowMap.needsUpdate = true
-      renderer.render(scene, cam.camera)
-      daynight.focusShadow(saved.x, saved.z)
-      uploadTextures(model)
-      // and the species' cross-card impostor for the mid band — then compile it
-      // too, or its first appearance is a new program mid-frame (M30 spin test)
-      const sp = SPECIES[id]
-      if (sp && !sp.alpha) {
-        dinoImpostors.capture(renderer, id, model, sp.height, sp.facingOffset ?? 0)
-        renderer.compile(scene, cam.camera)
-      }
-      if (import.meta.env.DEV) console.log(`warm ${id}: ${(performance.now() - t).toFixed(0)} ms`)
+      void renderer.compileAsync(scene, cam.camera).then(() => {
+        const saved = daynight.shadowFocus()
+        const p = new THREE.Vector3()
+        model.getWorldPosition(p)
+        daynight.focusShadow(p.x, p.z)
+        renderer.shadowMap.needsUpdate = true
+        renderer.render(scene, cam.camera)
+        daynight.focusShadow(saved.x, saved.z)
+        uploadTextures(model)
+        // and the species' cross-card impostor for the mid band — then compile
+        // it too, or its first appearance is a new program mid-frame (M30 spin)
+        const sp = SPECIES[id]
+        if (sp && !sp.alpha) {
+          dinoImpostors.capture(renderer, id, model, sp.height, sp.facingOffset ?? 0)
+          void renderer.compileAsync(scene, cam.camera)
+        }
+        if (import.meta.env.DEV) console.log(`warm ${id}: ${(performance.now() - t).toFixed(0)} ms`)
+      })
     }
     console.log(`shader warm-up: ${renderer.info.programs?.length ?? '?'} programs in ${(performance.now() - t0).toFixed(0)} ms`)
+  }
+
+  // --- THE UPLOAD WARDEN ---
+  // A texture reaches the GPU the first time it is DRAWN, and that upload is
+  // synchronous inside renderer.render(). Walking into a new region drew up to
+  // 54 first-sight textures in a single frame — a 475 ms freeze, and the
+  // sharpest of the "sharp frame drops" the user reported (M31 hitch hunt).
+  // The load-time sweep above can only reach what has finished loading by
+  // then; the ruins, the player rig and every species arrive after it.
+  // So: sweep the scene every two seconds for textures the GPU has not seen,
+  // and push at most two per frame — spread out, and long before anything
+  // draws them. initTexture() on an already-resident texture is free.
+  const uploadSeen = new WeakSet<THREE.Texture>()
+  const uploadQueue: THREE.Texture[] = []
+  let sweepAtFrame = 0
+  let uploadsDone = 0
+  function uploadWarden(frameNo: number): void {
+    if (frameNo >= sweepAtFrame) {
+      sweepAtFrame = frameNo + 45
+      const sweep = (o: THREE.Object3D) => {
+        const m = (o as THREE.Mesh).material
+        if (!m) return
+        for (const mat of Array.isArray(m) ? m : [m]) {
+          for (const v of Object.values(mat as unknown as Record<string, unknown>)) {
+            const t = v as THREE.Texture | null
+            if (t && t.isTexture && !uploadSeen.has(t)) {
+              uploadSeen.add(t)
+              uploadQueue.push(t)
+            }
+          }
+        }
+      }
+      scene.traverse(sweep)
+      // and the off-scene roots: source GLBs, dormant rigs, distant ruins —
+      // detached on purpose (M24), and exactly what lands on you later
+      for (const root of warmRoots) root.traverse(sweep)
+    }
+    // the first sweep runs inside the load, where a stall costs nothing: drain
+    // it whole. After that, two a frame (six if a batch has piled up).
+    const budget = uploadsDone === 0 ? uploadQueue.length : uploadQueue.length > 12 ? 6 : 2
+    for (let i = 0; i < budget && uploadQueue.length; i++) {
+      renderer.initTexture(uploadQueue.shift()!)
+      uploadsDone++
+    }
   }
 
   // --- main loop ---
@@ -1157,14 +1268,16 @@ async function boot(): Promise<void> {
   let lastVisZ = Infinity
   const perfSec = { dinos: 0, scatter: 0, grass: 0, terrain: 0, physics: 0 }
   /** this frame's raw section times + the worst frame since the last read (the hitch hunt) */
-  const frameSec = { dinos: 0, scatter: 0, grass: 0, terrain: 0, physics: 0, update: 0, render: 0, newProgs: 0, newTex: 0 }
+  const frameSec = { dinos: 0, scatter: 0, grass: 0, terrain: 0, physics: 0, uploads: 0, update: 0, render: 0, newProgs: 0, newTex: 0 }
   let worstFrame: { ms: number; sec: typeof frameSec; z: number } | null = null
   // frame-time histogram for the jitter hunt: max / p95 since the last read
   const frameTimes: number[] = []
 
   function frame(now: number): void {
     requestAnimationFrame(frame)
-    if (document.hidden) {
+    // paused: the GPU profiler drives its own renders and the game loop
+    // competing for the same GPU made every measurement drift (M31)
+    if (document.hidden || paused) {
       last = now
       return
     }
@@ -1174,6 +1287,11 @@ async function boot(): Promise<void> {
     let dt = (now - last) / 1000
     last = now
     dt = Math.min(dt, 0.1)
+    // FROZEN (QA): keep rendering, stop the world. A herd walking through the
+    // frame moved the GPU median by several milliseconds between reads and made
+    // every profile unrepeatable (M31). dt = 0 freezes physics, AI, animation,
+    // the sun and the water without touching what is drawn.
+    if (frozen) dt = 0
     swingT -= dt
     camKick = Math.max(0, camKick - dt * 0.3)
     if (playerHp < 100 && survival.food > 20 && survival.water > 20) playerHp = Math.min(100, playerHp + dt * 1.5)
@@ -1401,6 +1519,8 @@ async function boot(): Promise<void> {
       ambience.swell()
     }
     beacon.update(dt, cam.camera.position)
+    // the three point lights follow the three nearest emitters (lever A)
+    lights.update(dt, cam.camera)
     {
       const fb = feetPos()
       border.update(dt, fb)
@@ -1455,7 +1575,11 @@ async function boot(): Promise<void> {
     }
 
     hud.tick(dt, focus.x, focus.y, focus.z, daynight.time, playerHp, (-cam.yaw * 180) / Math.PI, survival)
+    if (perfHud) perfTick(dt)
     frameCount++
+    const tW = performance.now()
+    uploadWarden(frameCount)
+    frameSec.uploads = performance.now() - tW
     // shadows EVERY frame: the every-third-frame update was the jitter — a
     // frame with the shadow pass was ~5 ms heavier than its neighbours, so at
     // the vsync edge every third frame missed and motion strobed 16/16/33.
@@ -1464,7 +1588,9 @@ async function boot(): Promise<void> {
     const t1 = performance.now()
     const progsBefore = renderer.info.programs?.length ?? 0
     const texBefore = renderer.info.memory.textures
+    if (perfHud || gpuProbe) { gpuTimer.poll(); gpuTimer.begin() }
     renderer.render(scene, cam.camera)
+    if (perfHud || gpuProbe) gpuTimer.end()
     const t2 = performance.now()
     frameSec.newProgs = (renderer.info.programs?.length ?? 0) - progsBefore
     frameSec.newTex = renderer.info.memory.textures - texBefore
@@ -1477,6 +1603,33 @@ async function boot(): Promise<void> {
     dbg.ready = true
   }
   requestAnimationFrame(frame)
+
+  // THE F3 READOUT (PERFORMANCE.md's instrument). Refreshed twice a second.
+  // GPU ms is the number that matters: everything else in this panel explains
+  // it. A player on another machine screenshots this and we learn what their
+  // hardware actually does — which is why the GPU's name is on it.
+  let perfAccum = 0
+  function perfTick(dt: number): void {
+    perfAccum += dt
+    if (perfAccum < 0.5) return
+    perfAccum = 0
+    const gpu = gpuTimer.median()
+    const px = renderer.getDrawingBufferSize(new THREE.Vector2())
+    const cards = Object.values(dinoImpostors.debug()).reduce((a, b) => a + b, 0)
+    hud.setPerf([
+      ['fps', String(hud.fps)],
+      ['GPU', gpuTimer.supported ? `${gpu.toFixed(1)} ms  (max ${gpuTimer.max().toFixed(0)})` : 'no timer ext'],
+      ['CPU update / draw', `${perfUpdate.toFixed(1)} / ${perfRender.toFixed(1)} ms`],
+      ['', ''],
+      ['draw calls', String(renderer.info.render.calls)],
+      ['triangles', `${(renderer.info.render.triangles / 1e6).toFixed(2)} M`],
+      ['pixels', `${px.x}×${px.y} @${pixelRatio.toFixed(2)} (${(px.x * px.y / 1e6).toFixed(1)} Mpx)`],
+      ['point lights', `${lights.slots} of ${lights.emitterCount} fires`],
+      ['dinos awake / cards', `${awake.length} / ${cards}`],
+      ['', ''],
+      ['gpu', GpuTimer.rendererName(renderer.getContext() as WebGL2RenderingContext)],
+    ])
+  }
 
   // ADAPTIVE RESOLUTION: the render is fill-bound on a Retina display (the
   // user's 2000×1500 CSS-px window at 1.3× is 5M pixels of cutout foliage,

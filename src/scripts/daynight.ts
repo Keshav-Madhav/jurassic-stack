@@ -145,6 +145,19 @@ export class DayNight {
   private sunDir = new THREE.Vector3()
   private pmrem: THREE.PMREMGenerator
   private envTarget: THREE.WebGLRenderTarget | null = null
+  /** THE SKY IS BAKED, NOT SHADED (PERFORMANCE.md lever D). The Sky addon is
+   *  per-pixel Rayleigh/Mie scattering — ~1.1 ms of a 6.5 ms frame at
+   *  2560×1440 (the M31 profile) for a sun that moves a quarter of a degree a
+   *  second. So it lives in a scene of its own, is rendered into a 512² cube
+   *  whenever its sun has moved half a degree, and the world reads that cube
+   *  as its background: one texture fetch per pixel instead of a scattering
+   *  integral. A re-bake is six 512² faces, ~0.4 ms, about once every two
+   *  seconds of the ten-minute day. */
+  private skyScene = new THREE.Scene()
+  private skyTarget: THREE.WebGLCubeRenderTarget
+  private skyCam: THREE.CubeCamera
+  private bakedSun = new THREE.Vector3(99, 99, 99)
+  private bakedTurbidity = -1
 
   /** Shadow follow-focus (the player/mount), set per frame from the game loop. */
   private focus = new THREE.Vector3()
@@ -159,7 +172,15 @@ export class DayNight {
     private scene: THREE.Scene,
   ) {
     this.sky.scale.setScalar(45000)
-    scene.add(this.sky, this.sunLight, this.sunLight.target, this.rimLight, this.hemi)
+    this.sky.name = 'sky'
+    this.skyScene.add(this.sky)
+    // half-float: the Sky shader's output is HDR and the ACES curve is applied
+    // when the background is drawn, exactly as it was for the mesh
+    this.skyTarget = new THREE.WebGLCubeRenderTarget(512, { type: THREE.HalfFloatType })
+    this.skyCam = new THREE.CubeCamera(1, 100000, this.skyTarget)
+    this.skyScene.add(this.skyCam)
+    scene.background = this.skyTarget.texture
+    scene.add(this.sunLight, this.sunLight.target, this.rimLight, this.hemi)
     this.rimLight.position.set(-300, 140, -260)
 
     // one directional shadow map following the player (CSM comes at M6 proper)
@@ -198,6 +219,22 @@ export class DayNight {
   fogScale = 1
   /** the main camera, so its far plane can follow the fog */
   camera: THREE.PerspectiveCamera | null = null
+
+  /** Widen the shadow box (metres each way) for one frame. The warm-up's
+   *  shadow render only compiles the DEPTH variant of materials inside the
+   *  box — 85 m around spawn — so every material first entering the box
+   *  later compiled its depth program mid-frame, which is why a new region
+   *  cost 3-5 program compiles and a 60-100 ms hitch (M31 hitch hunt). One
+   *  island-wide shadow frame at load compiles them all. */
+  setShadowExtent(metres: number): void {
+    const c = this.sunLight.shadow.camera
+    c.left = -metres
+    c.right = metres
+    c.top = metres
+    c.bottom = -metres
+    c.far = Math.max(800, metres * 4)
+    c.updateProjectionMatrix()
+  }
 
   /** QA: resize the shadow map at runtime */
   setShadowSize(size: number): void {
@@ -306,6 +343,16 @@ export class DayNight {
       Math.sin(realE),
       Math.cos(realE) * Math.cos(azimuth),
     )
+
+    // re-bake the sky cube when its sun has moved half a degree (or the
+    // turbidity/rayleigh curve has stepped enough to see)
+    if (this.bakedSun.angleTo(u.sunPosition.value) > 0.0087 || this.bakedTurbidity !== grade.turbidity) {
+      this.bakedSun.copy(u.sunPosition.value)
+      this.bakedTurbidity = grade.turbidity
+      const prevTarget = this.renderer.getRenderTarget()
+      this.skyCam.update(this.renderer, this.skyScene)
+      this.renderer.setRenderTarget(prevTarget)
+    }
 
     // the environment map is baked ONCE, from a mid-morning sky, and only its
     // intensity follows the day. It used to re-bake every 3° of sun — every
