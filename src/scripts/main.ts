@@ -25,6 +25,7 @@ import { Kit } from './kit'
 import { loadStoneTexture } from './stone-material'
 import { DinoImpostors } from './dino-impostors'
 import { Survival, FOODS, type FoodId } from './survival'
+import { Onboarding } from './onboarding'
 import { Inventory } from './inventory'
 import { ITEMS, type ItemId } from './items'
 import { Hud } from './hud'
@@ -101,6 +102,8 @@ async function boot(): Promise<void> {
   if (save) inventory.restore(save.inventory as ReturnType<Inventory['serialize']>)
   const survival = new Survival()
   survival.restore(save?.survival)
+  const onboarding = new Onboarding()
+  onboarding.restore(save?.hints)
 
   const scatter = new Scatter()
   await scatter.load(renderer)
@@ -274,6 +277,8 @@ async function boot(): Promise<void> {
   // the inventory releases the mouse (the panel has buttons); Tab or Esc or a
   // click on the world closes it and re-locks the pointer (user: "inventory
   // not closeable, mouse doesn't appear")
+  onboarding.show = (text) => hud.hint(text)
+  onboarding.hint('wake')
   hud.onPanelToggle = (open) => {
     if (open) document.exitPointerLock()
     else renderer.domElement.requestPointerLock()
@@ -388,6 +393,7 @@ async function boot(): Promise<void> {
     }
 
     player.playSwing(held)
+    if (!held) onboarding.hint('punch')
     // a carcass in reach: a blade harvests it (meat, hide)
     if (held === 'hatchet' || held === 'spear') {
       const carcass = nearestDino(REACH + 1.5, (d) => d.state === 'dead' && d.harvestLeft > 0)
@@ -589,6 +595,7 @@ async function boot(): Promise<void> {
     if (e.code === 'Tab') {
       e.preventDefault()
       hud.togglePanel()
+      if (hud.panelOpen) onboarding.hint('craft')
       return
     }
     // the panel is open: no gameplay keys (Esc closes it, above)
@@ -656,6 +663,7 @@ async function boot(): Promise<void> {
     beaconLit,
     alphaSlain,
     survival: survival.serialize(),
+    hints: onboarding.serialize(),
     }
   }
   setInterval(() => void saveGame(collectSave()), 30_000)
@@ -1044,6 +1052,7 @@ async function boot(): Promise<void> {
       setSurvival: (s: { food?: number; water?: number; stamina?: number }) => { if (s.food !== undefined) survival.food = s.food; if (s.water !== undefined) survival.water = s.water; if (s.stamina !== undefined) survival.stamina = s.stamina },
       nearWater: () => nearWaterFor(feetPos()),
       nearFire: () => { const f = feetPos(); return building.nearFire(f.x, f.z) },
+      hintsSeen: () => onboarding.serialize(),
       alphaInfo: () => gatekeeper ? gatekeeper.drawInfo() : null,
       dinoCards: () => dinoImpostors.debug(),
       ravinePath: () => worldMeta!.ravine.path,
@@ -1121,9 +1130,13 @@ async function boot(): Promise<void> {
       renderer.render(scene, cam.camera)
       daynight.focusShadow(saved.x, saved.z)
       uploadTextures(model)
-      // and the species' cross-card impostor for the mid band
+      // and the species' cross-card impostor for the mid band — then compile it
+      // too, or its first appearance is a new program mid-frame (M30 spin test)
       const sp = SPECIES[id]
-      if (sp && !sp.alpha) dinoImpostors.capture(renderer, id, model, sp.height, sp.facingOffset ?? 0)
+      if (sp && !sp.alpha) {
+        dinoImpostors.capture(renderer, id, model, sp.height, sp.facingOffset ?? 0)
+        renderer.compile(scene, cam.camera)
+      }
       if (import.meta.env.DEV) console.log(`warm ${id}: ${(performance.now() - t).toFixed(0)} ms`)
     }
     console.log(`shader warm-up: ${renderer.info.programs?.length ?? '?'} programs in ${(performance.now() - t0).toFixed(0)} ms`)
@@ -1403,6 +1416,23 @@ async function boot(): Promise<void> {
     const nearKey = keystones.sites.find((k) => !k.collected && Math.hypot(k.x - fk.x, k.z - fk.z) < 5)
     const nearGate = !doorOpen && Math.hypot(fk.x - gateSite.x, fk.z - doorZ) < 11
     const nearBeacon = !beaconLit && Math.hypot(fk.x - beaconSite.x, fk.z - beaconSite.z) < 11
+    // onboarding: hints fire once, when the thing they explain first appears
+    // (the checks run once a second, and only for hints not yet seen)
+    onboarding.update(dt)
+    if (!creative && frameCount % 60 === 0) {
+      const seen = onboarding.hasSeen
+      if (!seen('hungry') && survival.food < 40) onboarding.hint('hungry')
+      if (!seen('thirsty') && survival.water < 40) onboarding.hint('thirsty')
+      if (!seen('stamina') && survival.winded) onboarding.hint('stamina')
+      if (!seen('night') && daynight.nightness > 0.7) onboarding.hint('night')
+      if (!seen('raptor') && nearestDino(30, (d) => d.species.id === 'raptor' && d.state !== 'tamed' && d.state !== 'dead')) onboarding.hint('raptor')
+      if (!seen('carcass') && nearestDino(INTERACT_RANGE + 2, (d) => d.state === 'dead')) onboarding.hint('carcass')
+      if (!seen('ko') && nearestDino(INTERACT_RANGE + 2, (d) => d.state === 'ko')) onboarding.hint('ko')
+      if (!seen('saddle') && nearestDino(INTERACT_RANGE + 2, (d) => d.state === 'tamed' && !d.saddled)) onboarding.hint('saddle')
+      if (!seen('keystone-near') && keystones.sites.some((k) => !k.collected && Math.hypot(k.x - fk.x, k.z - fk.z) < 14)) onboarding.hint('keystone-near')
+      if (!seen('gate-sight') && Math.hypot(fk.x - gateSite.x, fk.z - gateSite.z) < 90) onboarding.hint('gate-sight')
+      if (!seen('bush') && scatter.nodesNear(fk.x, fk.z, 5).bush) onboarding.hint('bush')
+    }
     const canCook = inventory.count('rawmeat') > 0 && building.nearFire(fk.x, fk.z)
     const canDrink = !riding && nearWaterFor(fk) && survival.water < 99
     if (riding) hud.prompt('E — dismount')

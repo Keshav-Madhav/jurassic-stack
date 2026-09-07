@@ -37,6 +37,7 @@ export class Hud {
       <div id="hud-crosshair">·</div>
       <div id="hud-prompt"></div>
       <div id="hud-toast"></div>
+      <div id="hud-hint"></div>
       <div id="hud-vitals">
         <div class="bar hp"><i></i><b>♥</b></div>
         <div class="bar food"><i></i><b>🍖</b></div>
@@ -108,12 +109,25 @@ export class Hud {
       this.toastTimer -= dt
       if (this.toastTimer <= 0) this.toastEl.classList.remove('show')
     }
+    if (this.hintTimer > 0) {
+      this.hintTimer -= dt
+      if (this.hintTimer <= 0) (this.root.querySelector('#hud-hint') as HTMLElement).classList.remove('show')
+    }
   }
 
   toast(msg: string): void {
     this.toastEl.textContent = msg
     this.toastEl.classList.add('show')
     this.toastTimer = 2.4
+  }
+
+  private hintTimer = 0
+  /** the onboarding line: lower, wider, warm — holds 5.5 s */
+  hint(msg: string): void {
+    const el = this.root.querySelector('#hud-hint') as HTMLElement
+    el.textContent = msg
+    el.classList.add('show')
+    this.hintTimer = 5.5
   }
 
   prompt(text: string | null): void {

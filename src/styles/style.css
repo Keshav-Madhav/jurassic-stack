@@ -45,6 +45,13 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #10150f; }
   border-radius: 8px; opacity: 0; transition: opacity 0.25s; white-space: nowrap;
 }
 #hud-toast.show { opacity: 1; }
+#hud-hint {
+  position: fixed; top: 108px; left: 50%; transform: translateX(-50%);
+  max-width: 560px; text-align: center; font-size: 14.5px; line-height: 1.35;
+  color: #ffe9c4; background: rgba(28, 20, 10, 0.72); border: 1px solid rgba(255, 220, 160, 0.25);
+  padding: 8px 16px; border-radius: 10px; opacity: 0; transition: opacity 0.4s;
+}
+#hud-hint.show { opacity: 1; }
 #hud-vitals {
   position: fixed; bottom: 96px; left: 50%; transform: translateX(-50%);
   display: flex; gap: 10px;

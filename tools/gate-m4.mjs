@@ -46,6 +46,9 @@ const fiber = await g('window.__g.game.count("fiber")')
 check(wood >= 2, `gathered wood (${wood})`)
 check(stone >= 2, `gathered stone (${stone})`)
 check(berry >= 2, `gathered berries (${berry})`)
+// onboarding: the wake hint showed, and hints are remembered
+const hints = await g('window.__g.game.hintsSeen()')
+check(hints.includes('wake'), `onboarding: the wake hint fired (${hints.join(',')})`)
 check(fiber >= 2, `gathered fiber (${fiber})`)
 
 // ---------- craft (top up mats so the whole chain is testable in one run) ----------
