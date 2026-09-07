@@ -57,41 +57,41 @@ Notable bugs caught by the screenshot loop: spawn beach below sea level; PMREM e
 Bugs the gate caught: reach measured from camera (all swings whiffed); camera-drift aim landing walls in the wrong cell; ceiling/campfire building-key collision (both hashed to 'c'); meshopt quantization corrupting prop geometry when baking transforms (fix: raw props + float-promotion guard in the instancer).
 
 ## M5 — Real island, bake v1
-- [ ] Composition file format + island v1 (spawn coast, volcano sightline, danger gradient, ruin/keystone sites)
-- [ ] Erosion bake script (droplet + thermal) → committed heightmap/splatmaps
-- [ ] Rivers (spline meshes + Water2 flow maps + current volumes), lakes, ocean (Water + Gerstner)
-- [ ] Navmesh baked in Node (recast-navigation-js), loaded at runtime; DetourCrowd for chase/follow
-- [ ] Placement validators (floating props, underwater trees, slope-invalid ruins, uphill rivers) run in the bake
-- [ ] Swap graybox → island v1
+- [x] Composition file format + island v1 (spawn coast, volcano sightline, danger gradient, ruin/keystone sites) — `tools/hand-geometry.mjs` + `bake-island.mjs` (M9–M10, v2 island)
+- [x] Erosion bake script (droplet + thermal) → committed heightmap/splatmaps (M5/M10)
+- [x] Rivers, lakes, ocean — hand-traced Lasso, ribbon meshes, currents, shore shader (M10–M22); Gerstner swell still simple
+- [x] Navmesh baked in Node (recast), loaded at runtime; A* path-following for chase/follow (M12/M17) — no DetourCrowd (not needed yet)
+- [x] Placement validators run in the bake (rivers downhill, ring level, banks hold, ruins flat/dry/open/reachable, crater sunk)
+- [x] Swap graybox → island v1 → v2 (the Lasso)
 
 **Gate:** validators pass; screenshot batch approved; swim + current forces work.
 
 ## M6 — Foliage & optimization
-- [ ] InstancedMesh2 per archetype: BVH culling, LOD, shadow LOD; billboard-cross far LOD
-- [ ] Grass: per-chunk instanced + wind vertex shader
-- [ ] Splat terrain shader (height-blend, slope triplanar, texture bombing)
-- [ ] CSM shadows; postprocessing + N8AO; height-fog patch
-- [ ] gltf-transform pipeline in build; chunked GLB streaming by distance
-- [ ] Graphics settings menu (render distance, foliage density, shadows, post toggles) + stats-gl overlay
+- [x] Instanced props per kind+cell with three LOD bands (full / coarse twin / cross-card impostor), detach-not-hide culling (M11–M25); dino impostor cards (M25)
+- [~] Grass: streamed per-tile instanced carpet with ring density (M13/M16); wind + OPAQUE blades pending (PERFORMANCE.md B)
+- [x] Splat terrain shader (4-way, two-scale, zero-weight skip, far single fetch) (M5–M26); far Lambert material pending (PERFORMANCE.md E)
+- [ ] CSM shadows (one following box today, one-tap PCF beyond 30 m); post/N8AO deliberately not until the perf budget holds; fog is distance fog (height fog open)
+- [~] gltf-transform intake pipeline (metalrough → resize → webp → meshopt) is manual per asset; KTX2 pending (PERFORMANCE.md H)
+- [ ] Graphics settings menu + F3 GPU-ms readout (PERFORMANCE.md I + instruments)
 
 **Gate:** 60 fps at default settings on the dense island; settings measurably change frame time.
 
 ## M7 — Species & depth
-- [ ] Roster to 15+ through the species table (intake-gated models only)
-- [ ] Combat: hitboxes, damage, dino aggro/pack behavior
+- [~] Roster: 11 species + the alpha through the species table; Dilophosaurus/Sauropelta/Spinosaurus intaken without usable clips
+- [x] Combat: reach-based hits, damage/torpor routes, aggro/pack/hunt/flee/defend ecology, blood FX (M4–M19)
 - [ ] Ragdoll rig-builder (Rapier joints): death, knockout, high-speed dismount
-- [ ] Survival stats: hunger/thirst/stamina/torpor tuning
-- [ ] Per-biome spawn tables
+- [x] Survival: food/water/stamina, harvest → cook → eat, drink, saddle costs hide (M21); torpor as a player stat open
+- [~] Per-biome spawn: HABITATS by forest/biome/latitude (M14/M16)
 - [ ] First flyer (Pteranodon) — new movement mode + camera
 - [ ] First aquatic — swim volumes + underwater camera
 
 **Gate:** each species drives from its table row; ragdolls are funny and never break tame timers.
 
 ## M8 — The arc pass
-- [ ] Keystones + caldera door; recipe tablets in ruins (engrams-as-archaeology)
+- [~] Keystones ×12 + the caldera door (M8/M17/M20); recipe tablets in ruins pending (round 1)
 - [ ] The Wayfinder item (carry = guided, stow = sandbox)
 - [ ] Three fear-themed caves (portal-loaded interiors)
-- [ ] Alpha apex fight + beacon/stay ending
+- [x] Alpha apex (the Gatekeeper) + the Beacon ending with credits (M17/M20)
 - [ ] Waterfalls; ruins overgrowth pass; save/load final
 
 **Gate:** a full guided playthrough start → summit works; a pure-sandbox session never sees arc UI.

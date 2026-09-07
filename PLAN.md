@@ -70,6 +70,24 @@ A feature that does none of those is a checklist item wearing a costume, and it 
 9. **Build pattern = minecraft-JS.** Vanilla three.js + strict TypeScript + Vite (`base: './'`),
    flat `src/scripts/*.ts` modules, DOM HUD over the canvas, root-level playwright-core `.mjs`
    harness scripts, `vercel.json` static deploy (netlify.toml backup). No React, no framework.
+10. **Performance is a contract, not a phase (2026-09-07).** Reference machine: an integrated-GPU
+    Windows laptop at 1080p, **30+ fps at native resolution**. Proxy: the M5 Pro at 2560×1440,
+    ≤ 12 ms GPU per frame, gated. Resolution scaling is the player's last resort, never the default
+    fix. The causes, the levers in order and the instruments are in **`PERFORMANCE.md`**; every lever
+    is measured at the user's pixel count before it lands. (The old plan said "profile-iterate" and
+    QA ran at 1280×720 — a quarter of the real screen. That is how "60 fps" and "dips to 30" were both
+    true.)
+11. **Death costs something.** Dying drops what you carry into a corpse bag at the spot (recoverable
+    for ~5 minutes); you respawn at your bedroll if you placed one, else the beach. Health, food and
+    water reset. No XP, no levels — the pack is the stake. (Today death is a free teleport; survival
+    can't matter until it isn't.)
+12. **One visual identity, graded in post.** The assets are four styles (Sketchfab textured dinos,
+    Quaternius flat dinos, Kenney kit, hand-built trees) and it shows. Decision: commit to stylized and
+    unify with one colour LUT at the end of the frame (cheap, one pass) before considering the
+    polyperfect pack. Materials are normalised on intake (metalness 0, roughness ≥ 0.55, albedo in
+    10–25% — the M29 audit) so the LUT has a consistent input.
+13. **Day length 15 min** (was 10): a campfire evening gets to breathe; survival drains rescale with
+    `DAY_LENGTH_S` automatically.
 
 ## The six technical calls
 
@@ -99,7 +117,7 @@ A feature that does none of those is a checklist item wearing a costume, and it 
 |---|---|---|
 | Graybox + core loop | flat island through the real chunk renderer, shared mover, one dino; gather → craft → build → tame → ride, zero polish | 2–3 weeks |
 | World pass | real island bake, biomes, rivers/lakes/ocean/waterfalls, ruins | 1–2 months |
-| Optimization suite | foliage at scale, LODs/billboards, CSM, post, KTX2 streaming, settings menu | 1–2 months profile-iterate |
+| Performance contract | see `PERFORMANCE.md`: light culling, opaque grass, depth pre-pass, sky cubemap, far terrain, occlusion queries, shadow caching, KTX2, presets — measured at 2560×1440, gated ≤ 12 ms GPU | 3–4 rounds, then held by the gate |
 | Species & depth | roster to 15+ via species table, combat, survival tuning | cheap per-unit, ongoing |
 | Co-op (stretch) | PeerJS host-authority for 4 players | ~1 month |
 | **Full vision** | everything above, single-player complete | **~4–8 months elapsed** |
@@ -326,6 +344,11 @@ and desert flora · M10g ground clutter · M10h boulders and outcrops.
 
 ## The arc: an optional guided path
 
+*Status 2026-09-07: beats 1–3 and 5 are built and live (the beach statue, twelve keystones / eight
+open the door, the caldera door in the Ravine's throat, the Gatekeeper alpha, the crater Beacon and
+credits). Beat 4 (cold, the aquatic tame, the three caves) is the open content. Survival (M21), the
+ecology (M19) and the first-minutes hints (M30) are in; see CHECKLIST.md M17–M30.*
+
 Sandbox first — no dialogue, no quest log, no obligation. For anyone who wants direction, five acts
 told through geography, ruins, and what you can't survive yet (v1 design, playtest-subject):
 
@@ -352,6 +375,27 @@ told through geography, ruins, and what you can't survive yet (v1 design, playte
 
 **The Wayfinder:** a compass relic on the first beach that points to the next arc beat. Carry it =
 guided playthrough; leave it in a chest = pure sandbox. One item replaces the tutorial/quest system.
+*(2026-09-07: still the N key + a toast. Make it the item — carried in a slot, a small compass rose
+on the HUD that points, stowed in a chest to go sandbox. The M30 hints cover the first minutes.)*
+
+**Remaining order (2026-09-07), by rounds that mix one pick from each of feel / performance /
+polish / content:**
+1. **Animals alive** (feel) · **light culling + sky cubemap** (perf, PERFORMANCE A+D) · **sound**
+   (polish: footsteps by ground, dino calls by species/state, bites, water, fire — Kenney/freesound
+   CC0) · **the build tier from ruins** (content: recipe tablets in the 23 ruins unlock chest, bedroll
+   respawn, workbench, tent, fence, door, thatch roof — the Kenney kit already holds most of these).
+2. **Ragdolls** (feel) · **opaque grass + far terrain** (perf, B+E) · **the visual LUT + material
+   normalisation** (polish) · **cold on the ranges: fur off mammoths** (content, beat 4).
+3. **Tames defend you + hunger drive** (feel, if not done in 1) · **depth pre-pass + occlusion
+   queries** (perf, C+F) · **settings menu: presets, render scale, sensitivity, FOV, rebinding**
+   (polish) · **waterfalls + swamp/pine interiors** (content).
+4. **The Wayfinder item + corpse bag death** (feel) · **shadow caching + KTX2** (perf, G+H) · **playtest
+   ritual: F8 report dump + the 10-item first-ten-minutes checklist** (polish) · **caves** (content —
+   after sound and the build tier: a cave with neither is a dark room).
+5. **Roster honesty**: Dilophosaurus / Sauropelta / Spinosaurus have no clips — budget the Blender
+   authoring or drop them from the "15+" line; the flyer and the aquatic are movement modes (decision
+   7) and come after.
+6. **Co-op** last, as decided.
 
 **Rules:** capability gates, not level gates. The ruins are the tech tree (recipes past timber tier
 learned from tablets — engrams as archaeology). Tames are the skill tree. Nothing in the arc grants
