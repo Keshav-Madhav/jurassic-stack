@@ -52,8 +52,10 @@ console.log(`${px.w}×${px.h} (${(px.w * px.h / 1e6).toFixed(1)} Mpx) · ${px.gp
 check(await page.evaluate(() => window.__g.gpuMs().supported), 'GPU timer queries available (the honest instrument)')
 const extra = Number(args.find((a) => a.startsWith('--lights='))?.slice(9) ?? 0)
 if (extra) console.log(await page.evaluate((k) => `+${window.__g.setExtraLights(k)} extra point lights parked out at sea (the A/B for lever A)`, extra))
+// every point light in the scene must belong to the rig: nobody gets to add
+// one on the side (the light count is a shader define — see lights.ts)
 const lights = await page.evaluate(() => window.__g.game.lights())
-check(extra > 0 || lights.scenePointLights <= 3, `the scene holds ${lights.scenePointLights} point lights (budget 3, lever A)`)
+check(extra > 0 || lights.scenePointLights === lights.slots.length, `the scene's ${lights.scenePointLights} point lights are exactly the rig's ${lights.slots.length} slots`)
 
 const measured = {}
 for (const s of SPOTS) {

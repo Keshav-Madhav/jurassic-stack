@@ -1519,8 +1519,9 @@ async function boot(): Promise<void> {
       ambience.swell()
     }
     beacon.update(dt, cam.camera.position)
-    // the three point lights follow the three nearest emitters (lever A)
-    lights.update(dt, cam.camera)
+    // the point-light slots follow the nearest fires — ranked from the player,
+    // never from the camera (which orbits him when you turn)
+    lights.update(dt, focus)
     {
       const fb = feetPos()
       border.update(dt, fb)
