@@ -445,10 +445,19 @@ async function boot(): Promise<void> {
     vignette.classList.add('hurt')
     setTimeout(() => vignette.classList.remove('hurt'), 220)
     if (playerHp <= 0) {
-      playerHp = 100
+      // WHERE YOU WAKE UP (PLAN decision 11): the last bedroll you laid down,
+      // or the beach you washed up on. Death costs the walk back and a day's
+      // meals — not your pack; a corpse bag to recover comes later.
       if (riding) dismount()
-      player.mover.teleport(SPAWN.x, heightAt(SPAWN.x, SPAWN.z) + 1.2, SPAWN.z)
-      hud.toast('You died. Washed back ashore.')
+      const bed = building.lastBedroll()
+      const wx = bed ? bed.x : SPAWN.x
+      const wz = bed ? bed.z + 1.4 : SPAWN.z
+      player.mover.teleport(wx, heightAt(wx, wz) + 1.2, wz)
+      playerHp = 60
+      survival.food = Math.min(survival.food, 40)
+      survival.water = Math.min(survival.water, 40)
+      hud.toast(bed ? 'You wake on your bedroll, cold and hungry.' : 'You died. Washed back ashore.')
+      sfx.play('ui-error', { volume: 0.4 })
     }
   }
 
@@ -463,7 +472,7 @@ async function boot(): Promise<void> {
     if (held && ITEMS[held].placeable) {
       const placed = building.place(held as PieceKind, updateAim())
       if (placed && inventory.remove(placed, 1)) {
-        hud.toast(`Placed ${ITEMS[placed].name}`)
+        hud.toast(placed === 'bedroll' ? 'A bed of straw and hide — you will wake here.' : `Placed ${ITEMS[placed].name}`)
         sfx.play('place', { volume: 0.7 })
         return true
       }
@@ -546,11 +555,35 @@ async function boot(): Promise<void> {
     hud.toast('Dismounted')
   }
 
+  /** Sleep the night off at a bedroll. Costs the hours it skips — the drains
+   *  run for the whole night, so you wake rested and hungry (M37). */
+  const restAtBed = (): boolean => {
+    const f = feetPos()
+    const bed = building.bedrollNear(f.x, f.z)
+    if (!bed) return false
+    if (daynight.nightness < 0.3) { hud.toast('It is not dark yet.'); return true }
+    const hostile = nearestDino(45, (d) => d.state === 'aggro' || d.state === 'hunt')
+    if (hostile) { hud.toast(`You cannot sleep — a ${hostile.species.name} is close.`); return true }
+    const DAWN = 0.27
+    const frac = ((DAWN - daynight.time) % 1 + 1) % 1
+    daynight.setTime(DAWN)
+    daynight.elapsedDays += frac
+    survival.sprinting = false
+    survival.moving = false
+    const hp = survival.update(frac * DAY_LENGTH_S, creative) // the night's meals, taken
+    playerHp = Math.max(1, Math.min(100, playerHp + 45 + hp))
+    hud.toast(`You sleep until dawn. ♥ ${Math.ceil(playerHp)} · food ${Math.round(survival.food)} · water ${Math.round(survival.water)}`)
+    sfx.play('ui-confirm', { volume: 0.4 })
+    ambience.swell()
+    return true
+  }
+
   const interact = (): boolean => {
     if (riding) {
       dismount()
       return true
     }
+    if (restAtBed()) return true
     // the caldera door
     const f0 = feetPos()
     if (!doorOpen && Math.hypot(f0.x - gateSite.x, f0.z - doorZ) < 11) {
@@ -1173,6 +1206,10 @@ async function boot(): Promise<void> {
       nearWater: () => nearWaterFor(feetPos()),
       nearFire: () => { const f = feetPos(); return building.nearFire(f.x, f.z) },
       hintsSeen: () => onboarding.serialize(),
+      /** QA: take damage (the death/respawn path) */
+      hurt: (n: number) => hurtPlayer(n),
+      /** QA: where the bedroll is, and where the player would wake */
+      bedroll: () => building.lastBedroll(),
       /** QA: what the mixer has actually played, and anything that failed to load */
       sfx: () => ({ ready: sfx.ready, plays: { ...sfx.plays }, missing: [...sfx.missing] }),
       ground: () => { const f = feetPos(); return groundKindAt(f.x, f.z) },
@@ -1724,9 +1761,11 @@ async function boot(): Promise<void> {
       if (!seen('gate-sight') && Math.hypot(fk.x - gateSite.x, fk.z - gateSite.z) < 90) onboarding.hint('gate-sight')
       if (!seen('bush') && scatter.nodesNear(fk.x, fk.z, 5).bush) onboarding.hint('bush')
     }
+    const atBed = building.bedrollNear(fk.x, fk.z) !== null
     const canCook = inventory.count('rawmeat') > 0 && building.nearFire(fk.x, fk.z)
     const canDrink = !riding && nearWaterFor(fk) && survival.water < 99
     if (riding) hud.prompt('E — dismount')
+    else if (atBed) hud.prompt(daynight.nightness < 0.3 ? 'your bedroll — you will wake here' : 'E — sleep until dawn')
     else if (canCook) hud.prompt('E — cook the meat')
     else if (canDrink) hud.prompt('E — drink')
     else if (nearBeacon) hud.prompt(keystones.enough ? 'E — light the beacon' : 'the brazier is cold')

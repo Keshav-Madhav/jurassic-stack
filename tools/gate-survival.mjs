@@ -116,5 +116,44 @@ await page.waitForFunction('window.__g && window.__g.ready === true', null, { ti
 await page.waitForTimeout(800)
 const s9 = await g('window.__g.game.survival()')
 check(Math.abs(s9.food - 33) < 3 && Math.abs(s9.water - 44) < 3, `stats survive reload (food ${s9.food.toFixed(0)} water ${s9.water.toFixed(0)})`)
+
+// --- M37: the bedroll — where you wake, and sleeping the night off ---
+await g('window.__g.game.setCreative(false); window.__g.game.setGod(true)')
+await g('window.__g.teleport(-120, 1300)')
+await page.waitForTimeout(1200)
+await g('window.__g.game.give("bedroll", 1); window.__g.game.selectItem("bedroll")')
+await page.waitForTimeout(300)
+await g('window.__g.game.swing()') // lay it down
+await page.waitForTimeout(600)
+const bed = await g('window.__g.game.bedroll()')
+check(bed !== null, `the bedroll is laid down${bed ? ` at ${bed.x.toFixed(0)}, ${bed.z.toFixed(0)}` : ''}`)
+
+// sleeping: refuse by day, work by night
+await g('window.__g.setTime(0.5)')
+await page.waitForTimeout(300)
+await g('window.__g.game.interact()')
+await page.waitForTimeout(300)
+const noonTime = await g('window.__g.game.timeOfDay ? window.__g.game.timeOfDay() : 0.5')
+check(Math.abs(noonTime - 0.5) < 0.02, 'you cannot sleep at noon')
+// stand ON the bed: it snaps to the build grid a few metres ahead of where you aimed
+await page.evaluate(([x, z]) => window.__g.teleport(x, z), [bed.x, bed.z])
+await g('window.__g.setTime(0.95); window.__g.game.setSurvival({ food: 90, water: 90 })')
+await page.waitForTimeout(800)
+await g('window.__g.game.interact()')
+await page.waitForTimeout(500)
+const slept = await g('window.__g.game.survival()')
+check(slept.food < 85, `sleeping through the night costs a night's meals (food 90 → ${slept.food.toFixed(0)})`)
+
+// dying wakes you at the bedroll, not on the beach
+await g('window.__g.game.setGod(false)')
+await g('window.__g.teleport(-90, 1340)')
+await page.waitForTimeout(800)
+await g('window.__g.game.hurt(999)')
+await page.waitForTimeout(800)
+const p2 = await g('window.__g.player()')
+const dist = Math.hypot(p2.x - bed.x, p2.z - bed.z)
+check(dist < 6, `you wake at your bedroll, ${dist.toFixed(1)} m from it (not the beach)`)
+
 await browser.close()
+console.log(failed ? '\nGATE FAILED' : '\nGATE PASSED')
 process.exit(failed ? 1 : 0)

@@ -26,6 +26,7 @@ export const ITEM_MODEL: Record<ItemId, string> = {
   wall: 'kenney-fence-fortified',
   ceiling: 'kenney-floor', // planks: a flat ceiling you can stand on (the kit's roof piece is a whole frame on posts)
   saddle: 'kenney-bedroll',
+  bedroll: 'kenney-bedroll',
 }
 
 /** per-icon framing tweaks: yaw/pitch, zoom, and a vertical offset (fraction of the model's extent) */
@@ -42,6 +43,7 @@ const ICON_FRAME: Partial<Record<ItemId, { yaw?: number; pitch?: number; roll?: 
   ceiling: { pitch: 0.6 },
   foundation: { pitch: 0.6 },
   wall: { yaw: 0.5 },
+  bedroll: { pitch: 0.55, zoom: 1.05 },
   stone: { zoom: 1.1 },
   berry: { zoom: 1.05 },
 }

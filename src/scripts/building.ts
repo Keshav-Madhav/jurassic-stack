@@ -15,7 +15,7 @@ import type { Emitter, LightRig } from './lights'
 export const CELL = 3
 const WALL_H = 3
 
-export type PieceKind = 'foundation' | 'wall' | 'ceiling' | 'campfire' | 'torch'
+export type PieceKind = 'foundation' | 'wall' | 'ceiling' | 'campfire' | 'torch' | 'bedroll'
 
 export interface Piece {
   kind: PieceKind
@@ -98,14 +98,14 @@ export class Building {
     const gx = Math.round(aim.x / CELL)
     const gz = Math.round(aim.z / CELL)
 
-    if (kind === 'foundation' || kind === 'campfire' || kind === 'torch') {
+    if (kind === 'foundation' || kind === 'campfire' || kind === 'torch' || kind === 'bedroll') {
       const cx = gx * CELL
       const cz = gz * CELL
       // a fire or torch on a foundation/ceiling sits on it, else on the ground
       const under = this.pieceAt('ceiling', gx, gz, 0) ?? this.pieceAt('foundation', gx, gz, 0)
       const ground = under ? under.baseY + (under.kind === 'foundation' ? 0.35 : 0.25) : heightAt(cx, cz)
       const p: Piece = { kind, gx, gz, level: 0, edge: 0, baseY: ground }
-      if (kind === 'campfire' || kind === 'torch') {
+      if (kind === 'campfire' || kind === 'torch' || kind === 'bedroll') {
         return { piece: p, valid: !this.keys.has(this.key(p)) }
       }
       // foundation: flat-enough ground, or edge-adjacent to an existing one
@@ -179,8 +179,9 @@ export class Building {
     if (p.kind === 'wall') mesh.rotation.y = p.edge === 1 || p.edge === 3 ? Math.PI / 2 : 0
     this.group.add(mesh)
     if (p.kind === 'campfire' || p.kind === 'torch') this.lightFire(p)
-    // static collider matching the piece's box (torches don't block: a stake)
-    if (p.kind === 'torch') return
+    // static collider matching the piece's box (a torch is a stake and a
+    // bedroll is on the floor — you walk over both)
+    if (p.kind === 'torch' || p.kind === 'bedroll') return
     this.colliders.push(
       this.physics.world.createCollider(
         RAPIER.ColliderDesc.cuboid(size.x / 2, size.y / 2, size.z / 2).setTranslation(pos.x, pos.y, pos.z),
@@ -202,6 +203,7 @@ export class Building {
       case 'wall': return this.kit!.instance(file, { height: WALL_H })
       case 'campfire': return this.kit!.instance(file, { width: 1.3 })
       case 'torch': return this.kit!.instance(file, { height: 1.6 })
+      case 'bedroll': return this.kit!.instance(file, { width: 1.9 })
     }
     void size
     return this.kit!.instance(file, {})
@@ -268,6 +270,8 @@ export class Building {
         return { pos: new THREE.Vector3(cx, p.baseY + 0.25, cz), size: new THREE.Vector3(1.1, 0.5, 1.1) }
       case 'torch':
         return { pos: new THREE.Vector3(cx, p.baseY + 0.8, cz), size: new THREE.Vector3(0.2, 1.6, 0.2) }
+      case 'bedroll':
+        return { pos: new THREE.Vector3(cx, p.baseY + 0.12, cz), size: new THREE.Vector3(1.9, 0.25, 0.9) }
       case 'wall': {
         const off = CELL / 2
         const horiz = p.edge === 0 || p.edge === 2
@@ -309,6 +313,25 @@ export class Building {
 
   count(): number {
     return this.pieces.length
+  }
+
+  /** The bedroll you are standing at, if any (the rest verb). */
+  bedrollNear(x: number, z: number, r = 2.6): { x: number; z: number; y: number } | null {
+    for (const p of this.pieces) {
+      if (p.kind !== 'bedroll') continue
+      const bx = p.gx * CELL, bz = p.gz * CELL
+      if (Math.hypot(bx - x, bz - z) < r) return { x: bx, z: bz, y: p.baseY }
+    }
+    return null
+  }
+
+  /** Where you wake up: the last bedroll you laid down (M37 / PLAN decision 11). */
+  lastBedroll(): { x: number; z: number; y: number } | null {
+    for (let i = this.pieces.length - 1; i >= 0; i--) {
+      const p = this.pieces[i]
+      if (p.kind === 'bedroll') return { x: p.gx * CELL, z: p.gz * CELL, y: p.baseY }
+    }
+    return null
   }
 
   /** every lit fire's position, for the crackle (sfx.ts) */

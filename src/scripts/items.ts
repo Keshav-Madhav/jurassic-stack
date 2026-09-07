@@ -3,7 +3,7 @@
 export type ItemId =
   | 'wood' | 'stone' | 'fiber' | 'flint' | 'berry' | 'rawmeat' | 'cookedmeat' | 'hide'
   | 'hatchet' | 'spear'
-  | 'campfire' | 'torch' | 'foundation' | 'wall' | 'ceiling'
+  | 'campfire' | 'torch' | 'foundation' | 'wall' | 'ceiling' | 'bedroll'
   | 'saddle'
 
 export interface ItemDef {
@@ -30,6 +30,7 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   foundation: { id: 'foundation', name: 'Foundation', icon: '⬜', placeable: true },
   wall: { id: 'wall', name: 'Wall', icon: '🧱', placeable: true },
   ceiling: { id: 'ceiling', name: 'Ceiling', icon: '⬛', placeable: true },
+  bedroll: { id: 'bedroll', name: 'Bedroll', icon: '🛏️', placeable: true },
   saddle: { id: 'saddle', name: 'Saddle', icon: '🪑' },
 }
 
@@ -47,5 +48,6 @@ export const RECIPES: Recipe[] = [
   { output: 'foundation', count: 1, cost: { wood: 8, fiber: 4 } },
   { output: 'wall', count: 1, cost: { wood: 5, fiber: 2 } },
   { output: 'ceiling', count: 1, cost: { wood: 6, fiber: 3 } },
+  { output: 'bedroll', count: 1, cost: { fiber: 16, hide: 3 } }, // straw and skins: where you wake up (M37)
   { output: 'saddle', count: 1, cost: { fiber: 12, hide: 6, wood: 4 } }, // hide off a carcass: the hunt feeds the saddle (M21)
 ]
