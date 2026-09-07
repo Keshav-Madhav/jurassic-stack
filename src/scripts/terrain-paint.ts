@@ -16,23 +16,28 @@ export const skirtDepthForStep = (step: number) => 8 + step * 4 // 2 m step → 
 
 const C_DEEP = new THREE.Color(0x24312a) // underwater
 const C_SAND = new THREE.Color(0xa08753)
-const C_GRASS_LUSH = new THREE.Color(0x1f3d18) // dark rich green
-const C_GRASS_LIGHT = new THREE.Color(0x35571f)
-const C_GRASS_DRY = new THREE.Color(0x555a28) // olive dry patches
+// PALETTE NOTE (M28): these hexes are sRGB; `new Color(0x1f3d18)` is 0.014/
+// 0.047/0.009 LINEAR — a lawn at 4% albedo. Real grass is 10–15%, soil 8–12%.
+// The sun (2.9) was tuned to lift this, which is why every true-albedo prop
+// (rocks, ruins, the kit) blew out beside it. Lifted toward real albedos;
+// the shader's ×2.2 texture recentre stays.
+const C_GRASS_LUSH = new THREE.Color(0x2f5a22) // rich green (lum ~0.08)
+const C_GRASS_LIGHT = new THREE.Color(0x4c7a2c)
+const C_GRASS_DRY = new THREE.Color(0x767a38) // olive dry patches
 const C_ROCK = new THREE.Color(0x6b6762) // weathered gray (lifted: the ranges read as coal heaps at noon — M18)
 const C_ROCK_STEEP = new THREE.Color(0x504c47)
 const C_ALPINE = new THREE.Color(0x6a6350) // high scree and thin turf between the rock and the snow
 // (lifted M22: the forest floor and the banks read as coal-black in every
 // eye-level shot — a floor of litter is brown, and 2× brighter than this was)
-const C_FLOOR = new THREE.Color(0x4a3a26) // forest floor: dirt + leaf litter
-const C_FLOOR_LIT = new THREE.Color(0x66522f)
-const C_MUD = new THREE.Color(0x5a4a33) // wet banks
+const C_FLOOR = new THREE.Color(0x6a5438) // forest floor: dirt + leaf litter
+const C_FLOOR_LIT = new THREE.Color(0x8a7048)
+const C_MUD = new THREE.Color(0x76624a) // wet banks
 const C_SHORE_SAND = new THREE.Color(0x8f7a52)
-const C_SWAMP = new THREE.Color(0x2e3320) // murky marsh ground
-const C_SWAMP_WET = new THREE.Color(0x252b1e)
+const C_SWAMP = new THREE.Color(0x46502e) // murky marsh ground
+const C_SWAMP_WET = new THREE.Color(0x3a4530)
 const C_DESERT = new THREE.Color(0x9a8054) // dry flats
 const C_DESERT_DARK = new THREE.Color(0x7a6543)
-const C_PLAINS = new THREE.Color(0x4a6a28) // open grassland, lighter
+const C_PLAINS = new THREE.Color(0x6a8a36) // open grassland, lighter
 
 /** Distance to the nearest river centerline or lake ring (for wet banks). */
 // Distance to the nearest water edge, from an 8 m field computed once

@@ -46,6 +46,17 @@ export class WaterSystem {
     const oceanGeo = new THREE.PlaneGeometry(HALF_SIZE * 6, HALF_SIZE * 6, 96, 96).rotateX(-Math.PI / 2)
     const ocean = new THREE.Mesh(oceanGeo, this.makeWaterMat(0x2e6ba8, 0.9, new THREE.Vector2(0.4, 0.2), 0.28))
     ocean.position.y = SEA_LEVEL
+    // the deep: an opaque sea floor under the ocean out to the horizon. The
+    // terrain ends at the 4 km canvas, and past it the translucent sheet
+    // showed the sky through — a lighter rectangle round the island from the
+    // air (M28). Dark blue-green, fogged, 24 m down like the canvas's own floor
+    const deep = new THREE.Mesh(
+      new THREE.PlaneGeometry(HALF_SIZE * 6, HALF_SIZE * 6).rotateX(-Math.PI / 2),
+      new THREE.MeshLambertMaterial({ color: 0x16302e }),
+    )
+    deep.position.y = SEA_LEVEL - 24
+    deep.receiveShadow = false
+    this.group.add(deep)
     // Transparent sheets with depthWrite:false sort by mesh center — arbitrary
     // for island-sized overlapping sheets, so a FAR sheet could draw over a
     // NEAR one (user-hit: ocean striping over the swamp, river over swamp

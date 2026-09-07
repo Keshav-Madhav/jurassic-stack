@@ -518,3 +518,9 @@ Findings and fixes, each measured with the new jitter meter (`__g.frameStats()`,
 - [x] **Palms** shipped one lime atlas for trunk and fronds (the darkening rule keys on colour, and theirs is white × map): darkened whole
 - [x] **The player**: default facing was +z — every fresh spawn had him staring at the camera. He faces north by default and, when idle, comes round to face where the camera looks (third-person convention)
 - [x] Gates 7 files 131/131, jitter 0 hitches everywhere
+
+### M28 — THE GROUND PALETTE (the coal-black hills)
+- [x] Standing on the east foothill at noon the ground filled the frame near-black. The vertex colour there read **0.019 / 0.022 / 0.010** — a 2% albedo. The whole palette had the hex trap: `0x1f3d18` grass is 0.014/0.047/0.009 LINEAR (4%), the forest floor 0.068/0.042/0.019, the swamp 3%. Real grass is 10–15%, soil 8–12%. The 2.9 sun had been tuned to lift this — which is exactly why every true-albedo thing (rocks, ruins, the kit) blew out beside it
+- [x] Palette lifted toward real albedo (grass lush 0x2f5a22 / light 0x4c7a2c / dry 0x767a38, plains 0x6a8a36, floor 0x6a5438 / 0x8a7048, mud 0x76624a, swamp 0x46502e / 0x3a4530); the shader's ×2.2 texture recentre unchanged. The foothill now reads as earth, the meadow as a meadow, the wood floor as litter — and the rocks and ruins sit in it instead of glowing
+- [x] **The sea past the canvas**: the translucent ocean sheet showed the sky through where the terrain ends at 4 km — a lighter rectangle round the island from the air. An opaque dark sea floor 24 m under the whole sheet
+- [x] Gates 7 files 131/131, jitter 0 hitches
