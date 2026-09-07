@@ -108,9 +108,14 @@ against measurement and should each be A/B'd before any of them is built.
 | **H1** | **The upload warden**: sweep the scene AND every registered source root every 45 frames, `initTexture` two a frame — long before anything draws them | the plain's 54-texture, 475 ms freeze → 30 textures, ~110 ms | done M31 |
 | **H2** | **`compileAsync` for the species warm path**: two blocking `renderer.compile()` calls became one parallel-compile promise | a species arriving cost 200–900 ms of frozen frame | done M31 |
 | **H3** | **One island-wide shadow frame at load**: a material compiles its DEPTH variant when it first enters the 85 m shadow box, so every new region paid 3–5 depth compiles | new-region compiles at load instead of at sight | done M31 |
-| **H4** | **~36 textures still upload on first sight of a region** — they are reachable from neither the scene nor the registered roots. Find their owner (suspicion: per-species impostor render targets and the rigs' `MeshPhysicalMaterial` 2048² map/normal/ao/metalness/specularColor sets) | plain still spends ~90 ms once | OPEN |
-| **H5** | **Scatter cell attach costs 12–58 ms** in the frame you walk into a new area — the largest remaining CPU hitch | every region, repeatedly | OPEN |
+| **H4** | **The environment map was set AFTER the warm-up compiled everything.** `scene.environment` is part of every material's program cache key, so the whole scene silently recompiled material by material as you first saw each one. Plus: every species is now warmed at load (bounded by a 4 s race), so no rig compiles on first sight | 130–180 ms per region → **0 programs on a full lap** | done M33 |
+| **H5** | **The scatter visibility pass**: re-parsed group keys into strings and did three Map lookups per cell, over thousands of cells, every 3 m walked. Flattened to resolved references and plain numbers | 12–58 ms → **5–13 ms** | done M33 |
 | **H6** | **A teleport rebuilds terrain synchronously (~770 ms)** — QA-only today, but the same code path runs at load | once per teleport | OPEN |
+| **H7** | **~30 textures still upload on first sight of the plain** — reachable from neither the scene nor the registered roots, and no longer costing a visible hitch (the warden drains them). Worth finding when it next matters | ~16 ms | OPEN |
+
+**The lap after M33** (`tools/qa-hitch.mjs`, worst frame per region, 2560×1440): spawn 12 ms · wood line 23 ·
+plain 25 · river 26 · pines 23 · ravine 15 · foothills 31 · dunes 16. Zero shader compiles anywhere.
+The worst frame on the island is 31 ms of scatter CPU — the next thing to budget, if anything.
 
 ## Instruments
 

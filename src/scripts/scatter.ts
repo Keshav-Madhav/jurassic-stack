@@ -833,36 +833,69 @@ export class Scatter {
     return () => { for (const p of was) p.show(false) }
   }
 
+  /** The visibility pass, flattened. It used to walk `propMeta` as a Map and,
+   *  for every cell, re-parse the group key into kind/variant/cell strings and
+   *  do three more Map lookups — string work over thousands of cells, run
+   *  every 3 m of walking. It was the largest CPU hitch left in the game
+   *  (12-58 ms in the frame you crossed into a new area, M31 hitch hunt).
+   *  Everything constant is resolved ONCE here; the pass itself is then plain
+   *  numbers over a flat array. */
+  private vis: {
+    prop: InstancedProp
+    minX: number; maxX: number; minZ: number; maxZ: number
+    /** 0 cover · 1 small · 2 no cards (ends at the mid band) · 3 full LOD chain */
+    mode: number
+    dist: number
+    mid: InstancedProp | null
+    set: SlotSet | null
+    cell: string
+  }[] | null = null
+
+  private buildVisList(): void {
+    this.vis = []
+    for (const [key, meta] of this.propMeta) {
+      const { kind, variant } = parseGroupKey(key)
+      const cell = key.slice(key.lastIndexOf('#') + 1)
+      const set = this.impostors.get(`${kind}#${variant}`) ?? null
+      this.vis.push({
+        prop: this.props.get(key)!,
+        minX: meta.minX, maxX: meta.maxX, minZ: meta.minZ, maxZ: meta.maxZ,
+        mode: meta.cover ? 0 : meta.small ? 1 : set ? 3 : 2,
+        dist: meta.cover
+          ? (COVER_DIST_OVERRIDE[kind] ?? COVER_DRAW_DIST)
+          : meta.small
+            ? (SMALL_SOLID_DIST[kind] ?? SMALL_SOLID_DRAW_DIST)
+            : 0,
+        mid: this.mids.get(`${kind}#${cell}`) ?? null,
+        set,
+        cell,
+      })
+    }
+  }
+
   /** Hide ground-cover cells far from the viewer (big fill/vertex win) and
    *  flip built-tree cells between full and far LOD. */
   updateVisibility(x: number, z: number): void {
-    for (const [key, meta] of this.propMeta) {
+    if (!this.vis) this.buildVisList()
+    for (const v of this.vis!) {
       // distance to the cell's bounding box (0 inside it)
-      const ddx = Math.max(meta.minX - x, 0, x - meta.maxX)
-      const ddz = Math.max(meta.minZ - z, 0, z - meta.maxZ)
-      const d = Math.hypot(ddx, ddz)
-      if (meta.cover) {
-        this.props.get(key)!.show(d < (COVER_DIST_OVERRIDE[parseGroupKey(key).kind] ?? COVER_DRAW_DIST))
+      const ddx = Math.max(v.minX - x, 0, x - v.maxX)
+      const ddz = Math.max(v.minZ - z, 0, z - v.maxZ)
+      const d = Math.sqrt(ddx * ddx + ddz * ddz)
+      if (v.mode < 2) {
+        v.prop.show(d < v.dist)
         continue
       }
-      if (meta.small) {
-        this.props.get(key)!.show(d < (SMALL_SOLID_DIST[parseGroupKey(key).kind] ?? SMALL_SOLID_DRAW_DIST))
-        continue
-      }
-      const { kind, variant } = parseGroupKey(key)
-      const set = this.impostors.get(`${kind}#${variant}`)
-      if (!set) {
+      if (v.mode === 2) {
         // no cards for this kind (cacti, dead trees, palms, willows, mangroves):
         // it simply ends at the mid band — it drew island-wide before
-        this.props.get(key)!.show(d < TREE_LOD_MID)
+        v.prop.show(d < TREE_LOD_MID)
         continue
       }
-      const cell = key.slice(key.lastIndexOf('#') + 1)
-      const mid = this.mids.get(`${kind}#${cell}`)
-      const band = d < TREE_LOD_FAR ? 0 : mid && d < TREE_LOD_MID ? 1 : 2
-      this.props.get(key)!.show(band === 0)
-      if (mid) mid.show(band === 1)
-      set.setCell(cell, band === 2)
+      const band = d < TREE_LOD_FAR ? 0 : v.mid && d < TREE_LOD_MID ? 1 : 2
+      v.prop.show(band === 0)
+      if (v.mid) v.mid.show(band === 1)
+      v.set!.setCell(v.cell, band === 2)
     }
   }
 

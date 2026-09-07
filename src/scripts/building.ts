@@ -311,8 +311,12 @@ export class Building {
     return this.pieces.length
   }
 
-  /** is there a campfire within `r` of (x, z)? (cooking) */
-  nearFire(x: number, z: number, r = 3.5): boolean {
+  /** Is there a campfire within `r` of (x, z)? (cooking.)
+   *  5 m, not 3.5: a fire snaps to the 3 m build grid, so the one you just
+   *  placed can sit 2.1 m from where you aimed, and you aim a few metres ahead
+   *  of your feet — at 3.5 m "cook at the fire you are standing at" failed
+   *  about half the time (the survival gate's long-standing flake, M32). */
+  nearFire(x: number, z: number, r = 5): boolean {
     for (const p of this.pieces) {
       if (p.kind !== 'campfire') continue
       if (Math.hypot(p.gx * CELL - x, p.gz * CELL - z) < r) return true

@@ -255,12 +255,16 @@ async function boot(): Promise<void> {
 
   // --- dinos ---
   const dinos: Dino[] = []
+  /** every species' first rig, so the warm-up can wait for them (M32) */
+  const firstRigOfSpecies = new Map<string, Promise<void>>()
   const spawnDino = (speciesId: string, x: number, z: number): Dino => {
     const d = new Dino(SPECIES[speciesId] ?? SPECIES.raptor, x, z, dinos.length)
     dinos.push(d)
     scene.add(d.object)
     Dino.scene = scene
-    void d.load()
+    const loading = d.load()
+    if (!firstRigOfSpecies.has(d.species.id)) firstRigOfSpecies.set(d.species.id, loading)
+    void loading
     return d
   }
   // TAMED dinos persist from the save; the WILD roster always spawns fresh —
@@ -1133,6 +1137,29 @@ async function boot(): Promise<void> {
   // compile pass + one shadow-mapped frame for the depth variants.
   {
     const t0 = performance.now()
+    // THE SCENE MUST BE IN ITS FINAL LIGHTING STATE BEFORE ANYTHING COMPILES.
+    // `scene.environment` is part of every material's program cache key, and
+    // DayNight only sets it on its first apply() — which happened in the first
+    // frame, AFTER this warm-up. So the warm-up compiled ~100 programs against
+    // a null environment and the game quietly recompiled each material the
+    // moment it was first drawn: a 130-180 ms freeze on entering a region,
+    // named after whatever tree or hide happened to appear there (M32). One
+    // call, and they all compile here instead.
+    daynight.setTime(daynight.time)
+    // AND EVERY SPECIES MUST BE HERE. A rig that loads after this block goes
+    // through Dino.onFirstRig instead, and its materials compile in whatever
+    // frame it is first drawn — a 40-180 ms freeze the first time you meet a
+    // carno (M32). The clone pump feeds four rigs a frame, so one rig per
+    // species has arrived within a few frames of the world being built; wait
+    // for exactly those, then warm them all together with everything else.
+    // ...but never hold the world hostage to the network: on a cold CDN the
+    // eleven rigs can take seconds, and a player staring at a blank page is a
+    // worse bargain than a hitch when they first meet a carno. Whatever has
+    // not arrived in four seconds falls back to the Dino.onFirstRig path.
+    await Promise.race([
+      Promise.all([...firstRigOfSpecies.values()]).catch(() => {}),
+      new Promise((r) => setTimeout(r, 4000)),
+    ])
     const toggled: THREE.Object3D[] = []
     const reattach = scatter.showAll()
     const reattachRuins = ruins.showAll()

@@ -42,14 +42,14 @@ for (const [x, z] of LAP) {
     const st = window.__g.frameStats()
     window.__g.setIntent(0, 0)
     const progs = window.__g.renderer.info.programs
-    let fresh = 0
-    for (const p of progs) if (!window.__seen.has(p.cacheKey)) { window.__seen.add(p.cacheKey); fresh++ }
+    const fresh = []
+    for (const p of progs) if (!window.__seen.has(p.cacheKey)) { window.__seen.add(p.cacheKey); fresh.push(`${p.name || '(' + p.cacheKey.split(',').filter((t) => t && t !== 'false' && t !== 'true').slice(0, 4).join(',') + ')'}`) }
     const dtex = window.__g.renderer.info.memory.textures - window.__tex
     window.__tex = window.__g.renderer.info.memory.textures
     return { st, fresh, dtex, gpu: window.__g.gpuMs() }
   })
   worstEver = Math.max(worstEver, r.st.max)
-  console.log(`${String(x).padStart(5)},${String(z).padStart(5)}  p50 ${String(r.st.p50).padStart(5)} p99 ${String(r.st.p99).padStart(5)} max ${String(r.st.max).padStart(6)} ms · hitches>25ms ${String(r.st.over25).padStart(3)} · +${r.fresh} programs +${r.dtex} textures`)
+  console.log(`${String(x).padStart(5)},${String(z).padStart(5)}  p50 ${String(r.st.p50).padStart(5)} p99 ${String(r.st.p99).padStart(5)} max ${String(r.st.max).padStart(6)} ms · hitches>25ms ${String(r.st.over25).padStart(3)} · +${r.fresh.length} programs${r.fresh.length ? ' [' + r.fresh.join(', ') + ']' : ''} +${r.dtex} textures`)
   if (r.st.worst && r.st.worst.ms > 25) {
     const sec = Object.entries(r.st.worst.sec).filter(([, v]) => v > 0.5).map(([k, v]) => `${k} ${v.toFixed(1)}`).join(' · ')
     console.log(`         worst frame ${r.st.worst.ms.toFixed(0)} ms: ${sec}`)
