@@ -46,8 +46,20 @@ const REACH = 3.2
 const INTERACT_RANGE = 3.8
 
 async function boot(): Promise<void> {
+  // The boot card (index.html #boot). Every first-sight cost — shader
+  // compiles, texture uploads, the eleven rigs — is paid behind it, so the
+  // first frame the player sees is a warm one (M33).
+  const bootEl = document.getElementById('boot')
+  const bootLine = document.getElementById('boot-line')
+  const bootBar = bootEl?.querySelector('#boot-bar i') as HTMLElement | null
+  const bootStage = (text: string, pct: number): void => {
+    if (bootLine) bootLine.textContent = text
+    if (bootBar) bootBar.style.width = `${pct}%`
+  }
+  bootStage('reading the island…', 6)
   await loadHeightmap() // everything below samples heightAt
   await loadNavmesh()
+  bootStage('finding the paths…', 14)
   const app = document.getElementById('app')!
   const renderer = new THREE.WebGLRenderer({ antialias: true })
   renderer.setSize(innerWidth, innerHeight)
@@ -61,6 +73,7 @@ async function boot(): Promise<void> {
   // F3: real GPU milliseconds (the JS render timer measures submit, not draw)
   const gpuTimer = new GpuTimer(renderer.getContext() as WebGL2RenderingContext)
   let perfHud = false
+  let speciesWarmed = 0
   let gpuProbe = false
   let paused = false
   let frozen = false
@@ -121,6 +134,7 @@ async function boot(): Promise<void> {
   onboarding.restore(save?.hints)
 
   const scatter = new Scatter()
+  bootStage('growing the forest…', 26)
   await scatter.load(renderer)
   const grass = new GrassField()
   scene.add(grass.group)
@@ -141,6 +155,7 @@ async function boot(): Promise<void> {
   // door) samples it, and a sampler bound null at first compile stays black
   await loadStoneTexture()
   const ruins = new Ruins()
+  bootStage('raising the ruins…', 44)
   await ruins.build(physics)
   scene.add(ruins.group)
   ruins.group.name = 'ruins'
@@ -243,6 +258,7 @@ async function boot(): Promise<void> {
 
   // the kit: downloaded item/buildable models + the icons rendered from them
   const kit = new Kit()
+  bootStage('packing the kit…', 56)
   await kit.load()
   kit.captureIcons(renderer)
   const building = new Building(physics, kit, lights)
@@ -255,16 +271,12 @@ async function boot(): Promise<void> {
 
   // --- dinos ---
   const dinos: Dino[] = []
-  /** every species' first rig, so the warm-up can wait for them (M32) */
-  const firstRigOfSpecies = new Map<string, Promise<void>>()
   const spawnDino = (speciesId: string, x: number, z: number): Dino => {
     const d = new Dino(SPECIES[speciesId] ?? SPECIES.raptor, x, z, dinos.length)
     dinos.push(d)
     scene.add(d.object)
     Dino.scene = scene
-    const loading = d.load()
-    if (!firstRigOfSpecies.has(d.species.id)) firstRigOfSpecies.set(d.species.id, loading)
-    void loading
+    void d.load()
     return d
   }
   // TAMED dinos persist from the save; the WILD roster always spawns fresh —
@@ -755,7 +767,7 @@ async function boot(): Promise<void> {
         return { family: fam.name || fam.type, name: o.name, instanced: (o as THREE.InstancedMesh).isInstancedMesh ?? false, instanceId: h.instanceId, dist: +h.distance.toFixed(1), tris: (o.geometry.index ? o.geometry.index.count : o.geometry.attributes.position.count) / 3, mat: `${m.type} color=${m.color?.getHexString()} rough=${m.roughness} map=${!!m.map} vc=${!!m.vertexColors}` }
       })
     },
-    setLod: (bands: { far?: number; mid?: number; cover?: number }) => { const r = setLodBands(bands); lastVisX = Infinity; return r },
+    setLod: (bands: { far?: number; mid?: number; cover?: number }) => { const r = setLodBands(bands); scatter.updateVisibility(cam.camera.position.x, cam.camera.position.z, true); return r },
     /** QA: what the camera is about to draw — visible, in-frustum meshes per scene group (≈ draw calls before multi-material splits) */
     drawAudit: () => {
       const c = cam.camera
@@ -1127,6 +1139,7 @@ async function boot(): Promise<void> {
   }
   ;(window as unknown as { __g: typeof dbg }).__g = dbg
 
+  bootStage('lighting the world…', 68)
   // --- shader warm-up ---
   // three.js compiles a program the first time a material/object combination
   // is drawn; on this scene (instanced props of 20 kinds, 11 skinned species,
@@ -1146,30 +1159,21 @@ async function boot(): Promise<void> {
     // named after whatever tree or hide happened to appear there (M32). One
     // call, and they all compile here instead.
     daynight.setTime(daynight.time)
-    // AND EVERY SPECIES MUST BE HERE. A rig that loads after this block goes
-    // through Dino.onFirstRig instead, and its materials compile in whatever
-    // frame it is first drawn — a 40-180 ms freeze the first time you meet a
-    // carno (M32). The clone pump feeds four rigs a frame, so one rig per
-    // species has arrived within a few frames of the world being built; wait
-    // for exactly those, then warm them all together with everything else.
-    // ...but never hold the world hostage to the network: on a cold CDN the
-    // eleven rigs can take seconds, and a player staring at a blank page is a
-    // worse bargain than a hitch when they first meet a carno. Whatever has
-    // not arrived in four seconds falls back to the Dino.onFirstRig path.
-    await Promise.race([
-      Promise.all([...firstRigOfSpecies.values()]).catch(() => {}),
-      new Promise((r) => setTimeout(r, 4000)),
-    ])
+    // (The rigs are NOT waited for here. 31 MB of dino GLBs is the bulk of the
+    // load; blocking the world on them cost four seconds and, measured, got
+    // 0 of 12 species in on time. Species warm as they arrive instead — see
+    // Dino.onFirstRig below, which compiles a rig while it is still hidden.)
     const toggled: THREE.Object3D[] = []
     const reattach = scatter.showAll()
     const reattachRuins = ruins.showAll()
     scene.traverse((o) => { if (!o.visible) { o.visible = true; toggled.push(o) } })
     const detach: (() => void)[] = []
     const seen = new Set<string>()
+    const warmRigs: [string, THREE.Object3D][] = []
     for (const d of dinos) {
       if (seen.has(d.species.id)) continue
       const undo = d.attachForWarmup()
-      if (undo) { seen.add(d.species.id); detach.push(undo) }
+      if (undo && d.rig) { seen.add(d.species.id); detach.push(undo); warmRigs.push([d.species.id, d.rig]) }
     }
     renderer.compile(scene, cam.camera)
     // ONE ISLAND-WIDE SHADOW FRAME: the depth variant of a material compiles
@@ -1196,6 +1200,15 @@ async function boot(): Promise<void> {
       })
     }
     uploadTextures(scene)
+    // and every species' mid-band impostor card, captured here rather than by
+    // the first rig to arrive after the hook is installed — that capture
+    // compiled the card's program in whatever frame it landed in (M33)
+    for (const [id, model] of warmRigs) {
+      const sp = SPECIES[id]
+      if (sp && !sp.alpha) dinoImpostors.capture(renderer, id, model, sp.height, sp.facingOffset ?? 0)
+      Dino.markWarmed(id)
+    }
+    renderer.compile(scene, cam.camera) // the card programs
     for (const undo of detach) undo()
     for (const o of toggled) o.visible = false
     reattach()
@@ -1214,14 +1227,33 @@ async function boot(): Promise<void> {
     Dino.onFirstRig = (id, model) => {
       const t = performance.now()
       model.updateMatrixWorld(true)
-      void renderer.compileAsync(scene, cam.camera).then(() => {
+      // THE RIG IS HIDDEN UNTIL ITS SHADERS EXIST. renderer.compile(root, cam,
+      // scene) compiles the materials under `root` against the LIVE scene's
+      // lights, fog and environment — and it walks with traverse(), not
+      // traverseVisible(), so a hidden rig still compiles. That is the whole
+      // trick: the async compile can no longer lose the race to the first
+      // frame that draws the animal, which is how a species used to cost a
+      // 40-100 ms freeze the moment you met it (M33).
+      model.visible = false
+      void renderer.compileAsync(model as unknown as THREE.Scene, cam.camera, scene).then(() => {
+        model.visible = true
+        // The DEPTH variant only compiles when the rig is actually drawn into
+        // the shadow map — and at this moment the animal is almost always
+        // dormant, which means its whole object is detached from the scene
+        // (M24). So the shadow frame drew nothing and the depth program was
+        // left to compile in play, the first time one woke near you: a 120 ms
+        // freeze with no new material in sight (M33). Attach it for the frame.
+        const obj = model.parent
+        const parked = obj !== null && obj.parent === null && Dino.scene !== null
+        if (parked) Dino.scene!.add(obj!)
         const saved = daynight.shadowFocus()
         const p = new THREE.Vector3()
         model.getWorldPosition(p)
         daynight.focusShadow(p.x, p.z)
         renderer.shadowMap.needsUpdate = true
-        renderer.render(scene, cam.camera)
+        renderer.render(scene, cam.camera) // compiles the skinned DEPTH variant
         daynight.focusShadow(saved.x, saved.z)
+        if (parked) obj!.parent?.remove(obj!)
         uploadTextures(model)
         // and the species' cross-card impostor for the mid band — then compile
         // it too, or its first appearance is a new program mid-frame (M30 spin)
@@ -1230,10 +1262,56 @@ async function boot(): Promise<void> {
           dinoImpostors.capture(renderer, id, model, sp.height, sp.facingOffset ?? 0)
           void renderer.compileAsync(scene, cam.camera)
         }
+        speciesWarmed++
         if (import.meta.env.DEV) console.log(`warm ${id}: ${(performance.now() - t).toFixed(0)} ms`)
       })
     }
-    console.log(`shader warm-up: ${renderer.info.programs?.length ?? '?'} programs in ${(performance.now() - t0).toFixed(0)} ms`)
+    console.log(`shader warm-up: ${renderer.info.programs?.length ?? '?'} programs, ${seen.size} species ready in ${(performance.now() - t0).toFixed(0)} ms`)
+  }
+
+  // --- the boot card comes down when the island is warm ---
+  // The eleven rigs are 31 MB and warm one at a time as they arrive; each one
+  // compiles its shaders and uploads its skin the first time it is drawn. Those
+  // used to land in the player's first minute as 40-100 ms freezes. Now the
+  // card stays up until every species has been through that (or 12 s, because
+  // a slow connection must still get to play), and `ready` — which every gate
+  // and QA tool waits on — means "warm", not "the canvas exists".
+  // not the Gatekeeper: it stands behind the caldera door, it shares the
+  // T-Rex's rig (so its shaders are already built), and waiting for its clone
+  // to reach the front of a 200-deep queue added five seconds to the load
+  const speciesTotal = new Set(dinos.filter((d) => !d.species.alpha).map((d) => d.species.id)).size
+  const bootDeadline = performance.now() + 12000
+  let bootDone = false
+  const bootTick = (): void => {
+    if (bootDone) return
+    const done = speciesWarmed >= speciesTotal || performance.now() > bootDeadline
+    bootStage(`waking the animals… ${Math.min(speciesWarmed, speciesTotal)}/${speciesTotal}`, 70 + 30 * Math.min(1, speciesWarmed / Math.max(1, speciesTotal)))
+    if (!done) return
+    bootDone = true
+    // ONE LAST ISLAND-WIDE SHADOW FRAME, with a rig of every species attached.
+    // A skinned material's DEPTH program only exists once it has been drawn
+    // into the shadow map, and the load warm-up ran before any rig had loaded.
+    // Everything that arrived since gets its depth variant here, behind the
+    // card, instead of the first time an animal walks past you (M33).
+    {
+      const undo: (() => void)[] = []
+      const seen = new Set<string>()
+      for (const d of dinos) {
+        if (seen.has(d.species.id)) continue
+        seen.add(d.species.id)
+        const u = d.attachForWarmup()
+        if (u) undo.push(u)
+      }
+      daynight.setShadowExtent(2100)
+      renderer.shadowMap.needsUpdate = true
+      renderer.render(scene, cam.camera)
+      daynight.setShadowExtent(85)
+      renderer.shadowMap.needsUpdate = true
+      renderer.render(scene, cam.camera)
+      for (const u of undo) u()
+    }
+    bootEl?.classList.add('done')
+    setTimeout(() => bootEl?.remove(), 900)
   }
 
   // --- THE UPLOAD WARDEN ---
@@ -1291,8 +1369,6 @@ async function boot(): Promise<void> {
   const sepBuckets = new Map<number, Dino[]>()
   let cardCamX = Infinity, cardCamZ = Infinity, cardCamYaw = 0
   const senses: Senses = { awake, onHit: (x, y, z, heavy) => hitFx.burst(x, y, z, heavy) }
-  let lastVisX = Infinity
-  let lastVisZ = Infinity
   const perfSec = { dinos: 0, scatter: 0, grass: 0, terrain: 0, physics: 0 }
   /** this frame's raw section times + the worst frame since the last read (the hitch hunt) */
   const frameSec = { dinos: 0, scatter: 0, grass: 0, terrain: 0, physics: 0, uploads: 0, update: 0, render: 0, newProgs: 0, newTex: 0 }
@@ -1477,14 +1553,14 @@ async function boot(): Promise<void> {
     }
     let tS = performance.now()
     scatter.ensureCollidersAround(focus.x, focus.z, physics)
+    scatter.pumpColliders(physics)
     // LOD bands and cover culling re-evaluate when the viewer has moved 3 m
     // (12K prop groups a frame was 2 ms of the same answer)
     {
       const vx = freeCam ? freeCam.x : focus.x, vz = freeCam ? freeCam.z : focus.z
-      if (Math.hypot(vx - lastVisX, vz - lastVisZ) > 3) {
-        lastVisX = vx; lastVisZ = vz
-        scatter.updateVisibility(vx, vz)
-      }
+      // every frame: scatter starts a sweep when the viewer has moved 3 m and
+      // spreads it over the next four frames (M33)
+      scatter.updateVisibility(vx, vz)
     }
     perfSec.scatter = perfSec.scatter * 0.95 + (performance.now() - tS) * 0.05
     frameSec.scatter = performance.now() - tS
@@ -1628,7 +1704,8 @@ async function boot(): Promise<void> {
     frameSec.render = t2 - t1
     if (!worstFrame || t2 - t0 > worstFrame.ms) worstFrame = { ms: t2 - t0, sec: { ...frameSec }, z: feetPos().z }
     adaptResolution(dt * 1000)
-    dbg.ready = true
+    bootTick()
+    dbg.ready = bootDone
   }
   requestAnimationFrame(frame)
 

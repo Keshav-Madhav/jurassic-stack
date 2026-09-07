@@ -9,6 +9,16 @@
   <body>
     <div id="app"></div>
 
+    <!-- The boot card. The page used to sit black for ten seconds and then
+         drop you into the world mid-warm-up; now the island loads behind
+         this, and the first frame you see is a warm one. -->
+    <div id="boot">
+      <h1>JURASSIC STACK</h1>
+      <p id="boot-line">reading the island…</p>
+      <div id="boot-bar"><i></i></div>
+      <p id="boot-hint">WASD to move · SHIFT to sprint · E to interact · TAB for the pack</p>
+    </div>
+
     <!-- DOM HUD layers (same pattern as minecraft-JS: game canvas in #app,
          UI as plain DOM on top, built/managed from src/scripts). -->
     <div id="hud"></div>

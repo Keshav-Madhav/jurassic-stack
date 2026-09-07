@@ -111,7 +111,10 @@ against measurement and should each be A/B'd before any of them is built.
 | **H4** | **The environment map was set AFTER the warm-up compiled everything.** `scene.environment` is part of every material's program cache key, so the whole scene silently recompiled material by material as you first saw each one. Plus: every species is now warmed at load (bounded by a 4 s race), so no rig compiles on first sight | 130–180 ms per region → **0 programs on a full lap** | done M33 |
 | **H5** | **The scatter visibility pass**: re-parsed group keys into strings and did three Map lookups per cell, over thousands of cells, every 3 m walked. Flattened to resolved references and plain numbers | 12–58 ms → **5–13 ms** | done M33 |
 | **H6** | **A teleport rebuilds terrain synchronously (~770 ms)** — QA-only today, but the same code path runs at load | once per teleport | OPEN |
-| **H7** | **~30 textures still upload on first sight of the plain** — reachable from neither the scene nor the registered roots, and no longer costing a visible hitch (the warden drains them). Worth finding when it next matters | ~16 ms | OPEN |
+| **H7** | **~30-50 textures still upload on first sight of the plain** — reachable from neither the scene nor the registered roots, and no longer costing a visible hitch (the warden drains them) | ~16 ms | OPEN |
+| **H8** | **One depth-variant compile at the wood line**, owner unidentified — the only region on the lap that still hitches (144 ms, once, ever) | 144 ms once | OPEN |
+| **H9** | **Colliders a few a frame** — crossing a chunk boundary built the whole 3×3 neighbourhood's trunks and rock hulls in one frame | 11–24 ms → gone | done M34 |
+| **H10** | **The boot card**: `ready` means warm. Every species' shaders, textures, impostor card and shadow-depth variant are paid behind a title card instead of in the player's first minute | 40–150 ms × 11 → load | done M34 |
 
 **The lap after M33** (`tools/qa-hitch.mjs`, worst frame per region, 2560×1440): spawn 12 ms · wood line 23 ·
 plain 25 · river 26 · pines 23 · ravine 15 · foothills 31 · dunes 16. Zero shader compiles anywhere.

@@ -38,9 +38,15 @@ function pumpClones(): void {
   if (cloneQueue.length) requestAnimationFrame(pumpClones)
   else clonePump = false
 }
-function whenMyTurn(): Promise<void> {
+/** `front`: the first rig of a species jumps the queue. The load-time warm-up
+ *  waits for one rig of every species before it compiles anything (M33), and
+ *  behind ~200 queued clones at four a frame — on boot frames that are already
+ *  100 ms long — seven of the eleven species missed the boat and compiled
+ *  later, in the frame you first met one. */
+function whenMyTurn(front = false): Promise<void> {
   return new Promise((resolve) => {
-    cloneQueue.push(resolve)
+    if (front) cloneQueue.unshift(resolve)
+    else cloneQueue.push(resolve)
     if (!clonePump) { clonePump = true; requestAnimationFrame(pumpClones) }
   })
 }
@@ -50,7 +56,8 @@ export const clipNamesByModel = new Map<string, string[]>()
 const DARK_SKIN_LIFT: Record<string, number> = { 'models/dinos/Carnotaurus.glb': 1.55, 'models/dinos/Allosaurus.glb': 1.7, 'models/dinos/Mammoth.glb': 1.6 }
 const lifted = new Set<string>()
 async function loadModel(url: string) {
-  if (!modelCache.has(url)) modelCache.set(url, loader.loadAsync(url))
+  const firstOfSpecies = !modelCache.has(url)
+  if (firstOfSpecies) modelCache.set(url, loader.loadAsync(url))
   const gltf = await modelCache.get(url)!
   if (!clipNamesByModel.has(url)) clipNamesByModel.set(url, gltf.animations.map((a) => a.name))
   registerWarmRoot(gltf.scene) // its textures upload before any clone is drawn (M31)
@@ -74,7 +81,7 @@ async function loadModel(url: string) {
       }
     })
   }
-  await whenMyTurn()
+  await whenMyTurn(firstOfSpecies)
   return { scene: (await import('three/addons/utils/SkeletonUtils.js')).clone(gltf.scene) as THREE.Group, animations: gltf.animations }
 }
 
@@ -307,11 +314,37 @@ export class Dino {
   }
 
   /** Warm-up: attach the rig for one compile pass; returns a detach callback (or null if already attached / not loaded). */
+  /** the loaded rig, for the load-time warm-up (impostor capture) */
+  get rig(): THREE.Object3D | null {
+    return this.model
+  }
+
+  /** the warm-up handled this species: don't fire onFirstRig for it later */
+  static markWarmed(id: string): void {
+    Dino.warmed.add(id)
+  }
+
+  /** how many species have had their rig compiled, textures uploaded and card
+   *  captured — the boot card waits on this before it lets the player in */
+  static get warmedCount(): number {
+    return Dino.warmed.size
+  }
+
+  /** Put this rig where the warm-up's compile can SEE it. `renderer.compile`
+   *  walks the scene with traverseVisible, and at load most dinos are dormant
+   *  and their whole object is detached (M24) — so hanging the model on a
+   *  detached object compiled nothing, and the species' materials compiled
+   *  later, in whatever frame you first met one: a 40-100 ms freeze (M33). */
   attachForWarmup(): (() => void) | null {
     if (!this.model || this.model.parent) return null
     const model = this.model
     this.object.add(model)
-    return () => { this.object.remove(model) }
+    const wasDetached = !this.object.parent && Dino.scene !== null
+    if (wasDetached) Dino.scene!.add(this.object)
+    return () => {
+      this.object.remove(model)
+      if (wasDetached) this.object.parent?.remove(this.object)
+    }
   }
 
   /** QA: which clip each slot resolved to (null = the species regex matched nothing) */

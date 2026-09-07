@@ -592,8 +592,16 @@ class SlotSet {
   }
 
   /** flip a whole cell's block (one upload) */
+  /** the cell's slot range, resolved once so the per-frame pass needs no Map lookup */
+  rangeOf(cell: string): { start: number; ids: number[]; shown: boolean } | null {
+    return this.ranges.get(cell) ?? null
+  }
+
   setCell(cell: string, show: boolean): void {
-    const r = this.ranges.get(cell)
+    this.setRange(this.ranges.get(cell) ?? null, show)
+  }
+
+  setRange(r: { start: number; ids: number[]; shown: boolean } | null, show: boolean): void {
     if (!r || r.shown === show) return
     r.shown = show
     for (const id of r.ids) this.write(this.slotOf.get(id)!, this.nodes[id], show && this.nodes[id].alive)
@@ -848,10 +856,11 @@ export class Scatter {
     dist: number
     mid: InstancedProp | null
     set: SlotSet | null
-    cell: string
+    range: { start: number; ids: number[]; shown: boolean } | null
   }[] | null = null
 
   private buildVisList(): void {
+    const t0 = performance.now()
     this.vis = []
     for (const [key, meta] of this.propMeta) {
       const { kind, variant } = parseGroupKey(key)
@@ -868,16 +877,54 @@ export class Scatter {
             : 0,
         mid: this.mids.get(`${kind}#${cell}`) ?? null,
         set,
-        cell,
+        range: set?.rangeOf(cell) ?? null,
       })
     }
+    if (import.meta.env.DEV) console.log(`scatter visibility list: ${this.vis.length} cells in ${(performance.now() - t0).toFixed(0)} ms`)
   }
 
-  /** Hide ground-cover cells far from the viewer (big fill/vertex win) and
-   *  flip built-tree cells between full and far LOD. */
-  updateVisibility(x: number, z: number): void {
+  /** how far the viewer moves before the next sweep starts */
+  private static readonly VIS_STEP = 3
+  private visCursor = -1
+  private visX = Infinity
+  private visZ = Infinity
+
+  /**
+   * Hide ground-cover cells far from the viewer (big fill/vertex win) and flip
+   * built-tree cells between full and far LOD.
+   *
+   * Called EVERY FRAME, and does a quarter of the island each time: a sweep
+   * starts when the viewer has moved three metres and finishes over the next
+   * four frames. Doing the whole island in the frame you crossed the threshold
+   * was the largest CPU spike left in the game (13-25 ms of a 40 ms worst
+   * frame, M33). The bands have hundreds of metres of hysteresis, so a cell
+   * learning its new band four frames late is invisible; the total work is
+   * unchanged, only its shape.
+   */
+  updateVisibility(x: number, z: number, immediate = false): void {
     if (!this.vis) this.buildVisList()
-    for (const v of this.vis!) {
+    const list = this.vis!
+    const idle = this.visCursor < 0
+    if (idle) {
+      const moved = Math.hypot(x - this.visX, z - this.visZ)
+      if (!immediate && moved < Scatter.VIS_STEP) return
+      // pin the position for the whole sweep, so the four slices agree
+      this.visX = x
+      this.visZ = z
+      this.visCursor = 0
+    }
+    const from = this.visCursor
+    const to = immediate ? list.length : Math.min(list.length, from + Math.ceil(list.length / 4))
+    this.visCursor = to >= list.length ? -1 : to
+    this.sweep(from, to)
+  }
+
+  private sweep(from: number, to: number): void {
+    const x = this.visX
+    const z = this.visZ
+    const list = this.vis!
+    for (let i = from; i < to; i++) {
+      const v = list[i]
       // distance to the cell's bounding box (0 inside it)
       const ddx = Math.max(v.minX - x, 0, x - v.maxX)
       const ddz = Math.max(v.minZ - z, 0, z - v.maxZ)
@@ -895,7 +942,7 @@ export class Scatter {
       const band = d < TREE_LOD_FAR ? 0 : v.mid && d < TREE_LOD_MID ? 1 : 2
       v.prop.show(band === 0)
       if (v.mid) v.mid.show(band === 1)
-      v.set!.setCell(v.cell, band === 2)
+      v.set!.setRange(v.range, band === 2)
     }
   }
 
@@ -1127,12 +1174,42 @@ export class Scatter {
         this.treeColliders.delete(id)
       }
     }
+    // COLLIDERS ARE BUILT A FEW A FRAME. Crossing a chunk boundary used to
+    // create the whole 3×3 neighbourhood's trunks and rock hulls in one frame —
+    // a convex hull per boulder, in Rapier, synchronously — and that was the
+    // biggest CPU spike left in the game: 11-24 ms every time you walked into a
+    // new area (M33). The queue is sorted nearest-first, so what you could
+    // actually bump into exists first; at 9 m/s a sprinting player covers 1.5 m
+    // in the ten frames a full neighbourhood takes.
+    const pending: number[] = []
     for (const ck of this.activeChunks) {
       const ids = this.solidByChunk.get(ck)
       if (!ids) continue
       for (const id of ids) {
+        const n = this.nodes[id]
+        if (!n.alive || this.treeColliders.has(n.id)) continue
+        pending.push(id)
+      }
+    }
+    if (!Number.isNaN(x)) pending.sort((a, b) => {
+      const na = this.nodes[a], nb = this.nodes[b]
+      return (na.x - x) ** 2 + (na.z - z) ** 2 - ((nb.x - x) ** 2 + (nb.z - z) ** 2)
+    })
+    this.pendingColliders = pending
+    if (force) this.pumpColliders(physics, Infinity)
+  }
+
+  private pendingColliders: number[] = []
+
+  /** Create up to `budget` queued colliders (nearest first). Called every frame. */
+  pumpColliders(physics: Physics, budget = 24): void {
+    if (!this.pendingColliders.length) return
+    let made = 0
+    while (this.pendingColliders.length && made < budget) {
+      const id = this.pendingColliders.shift()!
       const n = this.nodes[id]
       if (!n.alive || this.treeColliders.has(n.id)) continue
+      made++
       const rock = n.kind === 'rock' || n.kind === 'boulder' || n.kind === 'outcrop'
       if (rock) {
         // rock gets the shape you see: a convex hull of the prop's own
@@ -1150,7 +1227,6 @@ export class Scatter {
         RAPIER.ColliderDesc.cylinder(half, radius).setTranslation(n.x, n.y + half, n.z),
       )
       this.treeColliders.set(n.id, col)
-      }
     }
   }
 

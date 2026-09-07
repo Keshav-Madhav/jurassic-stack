@@ -85,6 +85,12 @@ Vercel. **No React, no framework.**
   `--disable-gpu-vsync --disable-frame-rate-limit` or every frame reads 16.7 ms. And nothing is warm
   for 30 seconds: spawn reads 11 ms until then and 6.5 ms after. `tools/qa-gpu.mjs`,
   `tools/gate-perf.mjs` and `tools/qa-hitch.mjs` all do this; see PERFORMANCE.md.
+- **`ready` means WARM** (M34): the boot card (index.html `#boot`) stays up until every species has
+  compiled its shaders, uploaded its skin, captured its impostor card and been drawn into the shadow
+  map once. Anything new that a player meets later — a species, a buildable, a biome's props — must
+  either exist before the load warm-up or warm itself behind that card. `renderer.compile(root,
+  camera, scene)` compiles a DETACHED, HIDDEN root against the live scene (it walks with `traverse`,
+  not `traverseVisible`), which is how a rig warms without ever being drawn cold.
 - **A hitch is a first sight** (M31): the steady frame is fine (5–7 ms GPU at 2560×1440). What the
   player feels is the frame that uploads 54 textures or compiles 21 shaders because they walked
   somewhere new. Anything that loads a model registers it with `registerWarmRoot()` (uploads.ts) so
