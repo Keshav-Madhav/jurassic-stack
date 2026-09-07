@@ -42,5 +42,37 @@ const keys = [...seen]
 check(keys.some((k) => k.includes(' hunt → ')), `a carnivore hunted (${keys.filter((k) => k.includes(' hunt')).join('; ') || 'none'})`)
 check(keys.some((k) => /^(pachy|parasaur|trike|stego) flee/.test(k)), `herbivores fled (${keys.filter((k) => k.includes(' flee')).join('; ') || 'none'})`)
 check(!keys.some((k) => /^(pachy|parasaur) hunt/.test(k)), 'no herbivore hunts')
+
+// --- M36: a tame fights for you ---
+const g = (expr) => page.evaluate(expr)
+// creative gives an instant KO and an instant tame; then the player picks a
+// fight with a wild carnivore and the pack is expected to answer
+await g('window.__g.game.setCreative(true); window.__g.game.setGod(true)')
+await page.waitForTimeout(400)
+const pRaptor = await page.evaluate(() => { const p = window.__g.player(); return window.__g.game.spawnDino('raptor', p.x + 3, p.z - 1) })
+await page.waitForTimeout(2500)
+await page.evaluate((i) => window.__g.game.gotoDinoIndex(i), pRaptor)
+await page.waitForTimeout(300)
+await g('window.__g.game.swing()')
+await page.waitForTimeout(400)
+await g('window.__g.game.interact()')
+await page.waitForTimeout(600)
+const tamed = await page.evaluate((i) => window.__g.game.dinoStates()[i].state, pRaptor)
+check(tamed === 'tamed', `a raptor is tamed for the guard test (${tamed})`)
+
+await g('window.__g.game.setCreative(false)')
+const foe = await page.evaluate(() => { const p = window.__g.player(); return window.__g.game.spawnDino('carno', p.x + 7, p.z - 5) })
+await page.waitForTimeout(2500)
+const hpBefore = await page.evaluate((i) => window.__g.game.dinoStates()[i].hp, foe)
+await page.evaluate((i) => window.__g.game.gotoDinoIndex(i), foe)
+await page.waitForTimeout(400)
+await g('window.__g.game.swing()') // the player swings first: the tames should pile in
+await page.waitForTimeout(2500)
+const guarding = await page.evaluate((i) => window.__g.game.dinoStates()[i].guarding, pRaptor)
+check(guarding === true, 'the tame takes up the fight when you swing first')
+await page.waitForTimeout(6000)
+const hpAfter = await page.evaluate((i) => window.__g.game.dinoStates()[i].hp, foe)
+check(hpAfter < hpBefore, `the tame actually bites: the carno is ${hpBefore} → ${hpAfter} hp`)
+
 await browser.close()
 process.exit(failed ? 1 : 0)

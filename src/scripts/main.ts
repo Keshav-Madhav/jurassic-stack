@@ -426,7 +426,19 @@ async function boot(): Promise<void> {
   }
 
   let god = false // QA: the taming gate punches a raptor that punches back
-  const hurtPlayer = (damage: number): void => {
+  /** Every tame within earshot goes for whatever just went for you (M36). */
+  const rallyTames = (foe: Dino | null | undefined): void => {
+    if (!foe) return
+    const f = feetPos()
+    for (const d of dinos) {
+      if (d.state !== 'tamed' || d.ridden || d === foe) continue
+      if (d.object.position.distanceTo(f) > 45) continue
+      d.guard(foe)
+    }
+  }
+
+  const hurtPlayer = (damage: number, from?: Dino): void => {
+    rallyTames(from)
     if (creative || god) return
     if (damage > 0) sfx.play('player-hurt', { volume: 0.7, cooldown: 0.5 })
     playerHp -= damage
@@ -489,6 +501,7 @@ async function boot(): Promise<void> {
       const tp = target.object.position
       hitFx.burst(tp.x, tp.y + target.species.height * 0.5, tp.z, held === 'spear')
       sfx.play('hit-flesh', { volume: 0.8, at: { x: tp.x, y: tp.y + 1, z: tp.z } })
+      rallyTames(target) // your animals join in
       hud.toast(target.state === 'ko' ? `${target.species.name} knocked out!` : target.state === 'dead' ? `${target.species.name} killed` : `Hit ${target.species.name} (torpor ${Math.round(target.torpor)}/${target.species.torporMax})`)
       return true
     }
@@ -1013,7 +1026,7 @@ async function boot(): Promise<void> {
       panelOpen: () => hud.panelOpen,
       iconCount: () => kit.icons.size,
       icon: (id: string) => kit.icons.get(id as ItemId) ?? null,
-      dinoStates: () => dinos.map((d) => ({ state: d.state, torpor: d.torpor, saddled: d.saddled })),
+      dinoStates: () => dinos.map((d) => ({ state: d.state, torpor: d.torpor, saddled: d.saddled, guarding: d.guarding, hp: Math.round(d.hp), species: d.species.id })),
       /** QA: the awake ecology — who is doing what to whom */
       ecology: () => awake.filter((d) => d.state !== 'idle' && d.state !== 'wander').map((d) => ({ sp: d.species.id, state: d.state, hp: Math.round(d.hp), x: Math.round(d.object.position.x), z: Math.round(d.object.position.z), foe: d.currentFoe ? d.currentFoe.species.id : d.state === 'aggro' || d.state === 'hunt' ? 'player' : null })),
       /** QA: drop a wild dino of a species here */

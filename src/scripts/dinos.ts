@@ -536,7 +536,7 @@ export class Dino {
     return false
   }
 
-  update(dt: number, playerPos: THREE.Vector3, attackPlayer: (damage: number) => void, senses?: Senses): void {
+  update(dt: number, playerPos: THREE.Vector3, attackPlayer: (damage: number, from?: Dino) => void, senses?: Senses): void {
     this.attackCooldown -= dt
     const pos = this.object.position
     this.distToPlayer = pos.distanceTo(playerPos)
@@ -655,6 +655,41 @@ export class Dino {
         return
       }
       case 'tamed': {
+        // a quarrel first: chase the enemy down, bite it, and never stray more
+        // than 40 m from the person you are protecting
+        const foe = this.guardFoe
+        if (foe) {
+          this.guardT -= dt
+          const gone = foe.state === 'dead' || foe.state === 'ko' || foe.dormant
+          const strayed = pos.distanceTo(playerPos) > 40
+          if (this.guardT <= 0 || gone || strayed || this.ridden) {
+            this.guardFoe = null
+            this.waypoints.length = 0
+          } else {
+            const fp = foe.object.position
+            const fd = pos.distanceTo(fp)
+            const reach = this.species.attackRange + foe.species.height * 0.45
+            if (fd <= reach) {
+              this.speed = Math.max(0, this.speed - 10 * dt)
+              this.waypoints.length = 0
+              const want = Math.atan2(fp.x - pos.x, fp.z - pos.z)
+              let dd = want - this.heading
+              while (dd > Math.PI) dd -= Math.PI * 2
+              while (dd < -Math.PI) dd += Math.PI * 2
+              this.heading += THREE.MathUtils.clamp(dd, -this.species.turnRate * dt, this.species.turnRate * dt)
+              if (this.attackCooldown <= 0) {
+                this.attackCooldown = 1.4
+                const a = this.actions.attack
+                if (a) { a.reset().setLoop(THREE.LoopOnce, 1); a.timeScale = 1; a.play() }
+                foe.takeHitFrom(this, this.species.attackDamage)
+                senses?.onHit(fp.x, fp.y + foe.species.height * 0.5, fp.z, this.species.attackDamage > 30)
+              }
+            } else {
+              this.seek(fp.x, fp.z, dt, this.species.runSpeed)
+            }
+            break
+          }
+        }
         const d = pos.distanceTo(playerPos)
         if (d > 6) this.seekVia(playerPos, dt, d > 14 ? this.species.runSpeed : this.species.walkSpeed)
         else {
@@ -703,7 +738,7 @@ export class Dino {
               foe.takeHitFrom(this, this.species.attackDamage)
               senses?.onHit(foe.object.position.x, foe.object.position.y + foe.species.height * 0.5, foe.object.position.z, this.species.attackDamage > 30)
             } else {
-              attackPlayer(this.species.attackDamage)
+              attackPlayer(this.species.attackDamage, this)
               senses?.onHit(playerPos.x, playerPos.y + 1.2, playerPos.z, this.species.attackDamage > 30)
             }
           }
@@ -868,7 +903,7 @@ export class Dino {
     }
     this.hp -= damage
     if (this.hp <= 0) { this.die(); return }
-    if (this.state === 'tamed') return
+    if (this.state === 'tamed') { this.guard(attacker); return }
     if (this.state === 'hunt' && this.foe === attacker) { this.stateT = Math.max(this.stateT, 12); return } // prey fighting back doesn't break the hunt
     // a much bigger animal striking you is a reason to run, whatever your temper
     const outsized = attacker.species.height > this.species.height * 1.25
@@ -1019,6 +1054,27 @@ export class Dino {
   private stopKo(): void {
     this.actions.ko?.stop()
     this.toppleWanted = false
+  }
+
+  /** A tame's quarrel: who it is defending its owner from, and for how long.
+   *  Tames used to stand and take it — the comment in takeHitFrom even claimed
+   *  they fought back, and the line under it returned instead (M36). */
+  private guardFoe: Dino | null = null
+  private guardT = 0
+
+  /** Set this tame on an enemy (its owner was bitten, or swung first). */
+  guard(foe: Dino, seconds = 22): void {
+    if (this.state !== 'tamed' || this.ridden || foe === this) return
+    if (foe.state === 'dead' || foe.state === 'ko' || foe.state === 'tamed') return
+    if (this.guardFoe === foe) { this.guardT = Math.max(this.guardT, seconds); return }
+    this.guardFoe = foe
+    this.guardT = seconds
+    this.say('roar')
+  }
+
+  /** is this tame currently fighting for you? (HUD/QA) */
+  get guarding(): boolean {
+    return this.guardFoe !== null
   }
 
   /** herd pull: main.ts sets this each think from the awake set (same species, within 60 m) */
