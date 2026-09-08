@@ -8,7 +8,11 @@
 // changes the scene's light count or material set — the two things that would
 // recompile every shader (M20/M31) — which is why "shadows: off" is a map size
 // of zero-ish rather than `shadowMap.enabled = false`.
+export type EffectsLevel = 'off' | 'basic' | 'full'
+
 export interface SettingsValues {
+  /** post-processing: off · basic (grade + bloom) · full (+ ambient occlusion) */
+  effects: EffectsLevel
   /** 0 = adaptive (the default: the game picks), else a fixed device pixel ratio */
   renderScale: number
   /** shadow map size; 0 = the smallest we offer, not "off" (off recompiles everything) */
@@ -22,6 +26,7 @@ export interface SettingsValues {
 }
 
 export const DEFAULTS: SettingsValues = {
+  effects: 'full',
   renderScale: 0,
   shadowSize: 1024,
   grass: true,
@@ -56,11 +61,21 @@ interface Row {
   label: string
   hint?: string
   /** choices for a segmented control, or a range for a slider */
-  choices?: { label: string; value: number | boolean }[]
+  choices?: { label: string; value: number | boolean | string }[]
   range?: { min: number; max: number; step: number; format: (v: number) => string }
 }
 
 const ROWS: Row[] = [
+  {
+    key: 'effects',
+    label: 'Effects',
+    hint: 'the grade and smoothing, and bloom on top — about 1.5 ms',
+    choices: [
+      { label: 'Full', value: 'full' },
+      { label: 'Basic', value: 'basic' },
+      { label: 'Off', value: 'off' },
+    ],
+  },
   {
     key: 'renderScale',
     label: 'Render scale',
@@ -151,7 +166,7 @@ export class SettingsPanel {
     this.el.querySelectorAll<HTMLButtonElement>('.opt').forEach((b) =>
       b.addEventListener('click', () => {
         const raw = b.dataset.value!
-        const value = raw === 'true' ? true : raw === 'false' ? false : Number(raw)
+        const value = raw === 'true' ? true : raw === 'false' ? false : Number.isNaN(Number(raw)) ? raw : Number(raw)
         this.set(b.dataset.key as keyof SettingsValues, value as never)
       }),
     )

@@ -41,6 +41,7 @@ import { Ambience } from './ambience'
 import { GpuTimer } from './gpu-timer'
 import { Sfx } from './sfx'
 import { SettingsPanel } from './settings'
+import { Post } from './post'
 import { groundKindAt } from './terrain-paint'
 import { warmRoots } from './uploads'
 import { LightRig } from './lights'
@@ -74,6 +75,12 @@ async function boot(): Promise<void> {
   // ~17K tree casters into the 2048 map every frame was the top GPU cost
   renderer.shadowMap.autoUpdate = false
   app.appendChild(renderer.domElement)
+  // With a composer in the way, renderer.info resets at every PASS — so a read
+  // after the frame reported one draw call (the last full-screen quad) and the
+  // F3 panel and the settings gate both believed it (M42). Reset once a frame
+  // instead, and the counters cover the scene plus its post passes.
+  renderer.info.autoReset = false
+
   // F3: real GPU milliseconds (the JS render timer measures submit, not draw)
   const gpuTimer = new GpuTimer(renderer.getContext() as WebGL2RenderingContext)
   let perfHud = false
@@ -305,6 +312,9 @@ async function boot(): Promise<void> {
   bootStage('packing the kit…', 56)
   await kit.load()
   kit.captureIcons(renderer)
+  // the look, finished in post — see post.ts (and PERFORMANCE.md: this is the
+  // headroom the M31-M41 rounds bought, spent deliberately)
+  const post = new Post(renderer, scene, cam.camera)
   const chests = new Chests()
   if (save) chests.restore(save.chests as Parameters<Chests['restore']>[0])
   const building = new Building(physics, kit, lights)
@@ -374,6 +384,8 @@ async function boot(): Promise<void> {
   const applySettings = (v = settings.values): void => {
     if (v.renderScale > 0) { adaptive = false; pixelRatio = v.renderScale; renderer.setPixelRatio(v.renderScale); renderer.setSize(innerWidth, innerHeight) }
     else adaptive = true
+    post.setQuality(v.effects)
+    { const s2 = renderer.getDrawingBufferSize(new THREE.Vector2()); post.setSize(s2.x, s2.y) }
     daynight.setShadowSize(v.shadowSize)
     grass.setEnabled(v.grass, scene)
     setLodBands({ far: 120 * v.drawDistance, mid: 260 * v.drawDistance, cover: 90 * v.drawDistance })
@@ -892,6 +904,8 @@ async function boot(): Promise<void> {
     cam.camera.aspect = innerWidth / innerHeight
     cam.camera.updateProjectionMatrix()
     renderer.setSize(innerWidth, innerHeight)
+    const s2 = renderer.getDrawingBufferSize(new THREE.Vector2())
+    post.setSize(s2.x, s2.y)
   })
 
   // --- debug/E2E API: the gate drives the same verbs the input layer calls ---
@@ -979,7 +993,9 @@ async function boot(): Promise<void> {
       for (const r of Object.values(out)) r.tris = Math.round(r.tris)
       return out
     },
-    setPixelRatio: (r: number) => { adaptive = false; pixelRatio = r; renderer.setPixelRatio(r); renderer.setSize(innerWidth, innerHeight) },
+    /** QA: the post stack, one layer at a time */
+    post: () => post,
+    setPixelRatio: (r: number) => { adaptive = false; pixelRatio = r; renderer.setPixelRatio(r); renderer.setSize(innerWidth, innerHeight); const s2 = renderer.getDrawingBufferSize(new THREE.Vector2()); post.setSize(s2.x, s2.y) },
     pixelRatio: () => pixelRatio,
     setAdaptive: (on: boolean) => { adaptive = on },
     /** QA: stop the game loop so the GPU profiler owns the device */
@@ -1609,6 +1625,7 @@ async function boot(): Promise<void> {
       last = now
       return
     }
+    renderer.info.reset()
     const t0 = performance.now()
     frameTimes.push(now - last)
     if (frameTimes.length > 2000) frameTimes.splice(0, 1000)
@@ -1939,7 +1956,12 @@ async function boot(): Promise<void> {
     const progsBefore = renderer.info.programs?.length ?? 0
     const texBefore = renderer.info.memory.textures
     if (perfHud || gpuProbe) { gpuTimer.poll(); gpuTimer.begin() }
-    renderer.render(scene, cam.camera)
+    if (post.enabled) {
+      post.gradeFor(daynight.nightness, daynight.keyColor)
+      post.render()
+    } else {
+      renderer.render(scene, cam.camera)
+    }
     if (perfHud || gpuProbe) gpuTimer.end()
     const t2 = performance.now()
     frameSec.newProgs = (renderer.info.programs?.length ?? 0) - progsBefore
@@ -2044,6 +2066,7 @@ async function boot(): Promise<void> {
     pixelRatio = next
     renderer.setPixelRatio(pixelRatio)
     renderer.setSize(innerWidth, innerHeight)
+    { const s2 = renderer.getDrawingBufferSize(new THREE.Vector2()); post.setSize(s2.x, s2.y) }
   }
 
   // The player's own settings, applied once everything they touch exists —

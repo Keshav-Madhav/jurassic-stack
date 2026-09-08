@@ -85,6 +85,12 @@ Vercel. **No React, no framework.**
   `--disable-gpu-vsync --disable-frame-rate-limit` or every frame reads 16.7 ms. And nothing is warm
   for 30 seconds: spawn reads 11 ms until then and 6.5 ms after. `tools/qa-gpu.mjs`,
   `tools/gate-perf.mjs` and `tools/qa-hitch.mjs` all do this; see PERFORMANCE.md.
+- **The frame goes through the composer** (M42, `post.ts`): grade + FXAA + bloom, switchable in
+  settings. Two traps it cost to learn: `renderer.info` resets at every PASS, so read it once a frame
+  with `autoReset = false` (or the draw-call count is 1); and `gpuMs()` percentiles cover ~240
+  frames, which is EIGHT SECONDS at 30 ms — wait out the ring before comparing two configurations,
+  or three of them report the same number. Any new pass must be measured with `tools/qa-post.mjs`
+  and switchable, and must never render the scene geometry a second time.
 - **Sound: `sfx.ts` for events, `ambience.ts` for the bed** (M35). One AudioContext, opened by
   ambience on the first gesture; sfx hangs its own bus off it. Events call `sfx.play(id, { at })`
   with a WORLD POSITION and let the mixer do distance and pan — never gate on distance at the call

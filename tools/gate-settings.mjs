@@ -17,11 +17,15 @@ const ready = () => page.waitForFunction('window.__g && window.__g.ready === tru
 await page.goto(url, { waitUntil: 'networkidle' })
 await ready()
 const g = (expr) => page.evaluate(expr)
-const click = (label) => page.evaluate((t) => {
-  const b = [...document.querySelectorAll('#hud-settings .opt')].find((x) => x.textContent === t)
+// row-aware: "Off" belongs to both Effects and Grass, and clicking the first
+// match turned the grass check into an effects check (M42)
+const click = (row, label) => page.evaluate(([r, t]) => {
+  const rows = [...document.querySelectorAll('#hud-settings .row')]
+  const el = rows.find((x) => x.querySelector('label')?.textContent?.startsWith(r))
+  const b = el ? [...el.querySelectorAll('.opt')].find((x) => x.textContent === t) : null
   if (b) b.click()
   return !!b
-}, label)
+}, [row, label])
 
 await g('window.__g.game.setGod(true); window.__g.teleport(-286, 793)')
 await page.waitForTimeout(2500)
@@ -32,15 +36,15 @@ await page.waitForTimeout(500)
 check(await g('!document.getElementById("hud-settings").hidden'), 'O opens the settings')
 check(await g('!document.pointerLockElement'), 'and gives the mouse back')
 
-check(await click('70%'), 'render scale 70% is offered')
+check(await click('Render scale', '70%'), 'render scale 70% is offered')
 await page.waitForTimeout(700)
 check((await g('window.__g.pixelRatio()')) < base.pr, `render scale applied (${base.pr} → ${await g('window.__g.pixelRatio()')})`)
 
-check(await click('Off'), 'grass off is offered')
+check(await click('Grass', 'Off'), 'grass off is offered')
 await page.waitForTimeout(700)
 check((await g('!window.__g.scene.getObjectByName("grass")')) === true, 'the grass field is DETACHED, not just hidden')
 
-check(await click('Near'), 'draw distance near is offered')
+check(await click('Draw distance', 'Near'), 'draw distance near is offered')
 await page.waitForTimeout(1500)
 const near = await g('window.__g.renderInfo().calls')
 check(near < base.calls, `a nearer draw distance draws less (${base.calls} → ${near} calls)`)
@@ -63,9 +67,17 @@ check(after.pr < base.pr && after.fov === 85 && after.grass === false, `remember
 // and the panel can put it all back
 await page.keyboard.press('KeyO')
 await page.waitForTimeout(400)
-await click('Auto'); await click('On'); await click('Normal')
+await click('Render scale', 'Auto'); await click('Grass', 'On'); await click('Draw distance', 'Normal')
 await page.waitForTimeout(900)
 check((await g('!!window.__g.scene.getObjectByName("grass")')) === true, 'grass comes back on')
+
+// the effects row drives the post stack
+check(await click('Effects', 'Off'), 'effects off is offered')
+await page.waitForTimeout(600)
+check((await g('window.__g.post().enabled')) === false, 'effects off drops the composer entirely')
+check(await click('Effects', 'Full'), 'and back to full')
+await page.waitForTimeout(600)
+check((await g('window.__g.post().enabled')) === true, 'the composer is back')
 
 await browser.close()
 console.log(failed ? '\nGATE FAILED' : '\nGATE PASSED')

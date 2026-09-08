@@ -145,10 +145,32 @@ The worst frame on the island is 31 ms of scatter CPU — the next thing to budg
   (M18/M30); a first-sight compile is a 50–200 ms hitch.
 - Measure GPU with timer queries at the user's pixel count; the JS render timer measures submit.
 
+## Post-processing (M42) — the headroom, spent
+
+The budget was met, so the rule that said "not until it is" was satisfied and the look got its pass:
+a **grade** (split-tone warm shadows / cool highlights, saturation, vignette, all riding the day's
+curve), **FXAA**, and **bloom** on a threshold of 2.4 in LINEAR HDR so only fire, the beacon and the
+sun's disc bleed. Price list at 2560×1440 (`tools/qa-post.mjs`):
+
+| | wood line | spawn |
+|---|---|---|
+| no post | 5.83 ms | 3.39 ms |
+| basic (grade + FXAA) | **5.83** | **3.39** |
+| full (+ bloom) | **6.95** | **4.41** |
+
+Basic is free because the composer's target drops the renderer's 4× MSAA and FXAA costs less than
+the resolve did. Full costs 1.1 ms. Both are in `settings.ts` (Effects: Off / Basic / Full).
+
+**Ambient occlusion was built, measured and cut.** GTAO looked right — real contact under rocks and
+canopy, 40% of pixels moved — and cost **5 ms at half resolution and still 7-10 at quarter**, because
+its price is not the AO maths but the SECOND SCENE RENDER it does for normals: 350 draw calls and
+3 Mtri again, which no resolution change touches. Against a 12 ms contract that is the whole budget
+for an effect you have to look for. If AO returns it must read the depth buffer the main pass already
+wrote (a custom 8-tap pass) and never render geometry twice.
+
 ## Not doing
 
-- Post-processing / N8AO: full-screen passes on a fill-bound frame. Revisit only after the budget is
-  met with headroom.
+- N8AO / anything that renders the scene a second time — see the GTAO measurement above.
 - Tessellation/displacement: user said not yet.
 - WebGPU: three's WebGPU renderer would give real compute-driven culling and light clustering, but
   it's a port of every custom shader in the project. Note it as the long-term path; not this year.
