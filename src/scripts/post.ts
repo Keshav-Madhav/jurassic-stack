@@ -14,14 +14,13 @@
 //    a vignette — that runs on a curve with the time of day, so noon, dusk and
 //    a moonlit night are one family rather than three exposures.
 //
-// AMBIENT OCCLUSION WAS BUILT, MEASURED AND CUT. GTAO looked right — real
-// contact under the rocks and the canopy — and cost 5 ms at half resolution
-// and still 7-10 at quarter, because its price is not the AO maths but the
-// SECOND SCENE RENDER it does for normals: 350 draw calls and 3 Mtri again,
-// which no resolution change touches. Against a 12 ms contract that is the
-// whole budget for an effect you have to look for. If it comes back it has to
-// read the depth buffer the main pass already wrote (a custom 8-tap pass) and
-// never render geometry twice.
+// AMBIENT OCCLUSION IS HERE, AND OFF BY DEFAULT. GTAO looks right — real
+// contact under the rocks and the canopy — and costs 5-7 ms, because its price
+// is not the AO maths but the SECOND SCENE RENDER it does for normals: 350
+// draw calls and 3 Mtri again, which no resolution change touches. That is
+// half the frame budget for something you have to look for, so it cannot be
+// the default (M42) — but it is a real improvement on a machine with the
+// frames to spare, so the settings offer it with the price on the label (M44).
 //
 // Every layer is switchable and measured on its own (`tools/qa-post.mjs`,
 // `settings.ts`), because a pass you cannot turn off is a pass you cannot
@@ -29,6 +28,7 @@
 import * as THREE from 'three'
 import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js'
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js'
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
@@ -161,6 +161,7 @@ export class Post {
   readonly composer: EffectComposer
   private renderPass: RenderPass
   private bloom: UnrealBloomPass
+  private gtao: GTAOPass
   private air: ShaderPass
   private grade: ShaderPass
   private fxaa: ShaderPass
@@ -187,6 +188,15 @@ export class Post {
 
     // AO at half resolution and denoised — full res costs three times as much
     // for a difference you cannot see under a canopy
+    // AO, half resolution, denoised — created here so its programs compile in
+    // the load warm-up like everything else, but DISABLED until asked for
+    this.gtao = new GTAOPass(scene, camera, Math.round(size.x / 2), Math.round(size.y / 2))
+    this.gtao.output = GTAOPass.OUTPUT.Default
+    this.gtao.blendIntensity = 0.85
+    this.gtao.updateGtaoMaterial({ radius: 1.8, distanceExponent: 1.6, thickness: 1.3, scale: 1.1, samples: 10 })
+    this.gtao.enabled = false
+    this.composer.addPass(this.gtao)
+
     // bloom: the threshold is in LINEAR HDR, not display space — at 0.92 the
     // midday sky (5-20 in linear) bloomed as one white sheet and the first
     // screenshot came back unreadable. 2.4 lets fire, the beacon and the sun's
@@ -222,6 +232,7 @@ export class Post {
     if (w === this.w && h === this.h) return
     this.w = w
     this.h = h
+    this.gtao.setSize(Math.round(w / 2), Math.round(h / 2))
     this.composer.setSize(w, h)
     const dt2 = (this.composer.renderTarget1 as THREE.WebGLRenderTarget).depthTexture
     if (dt2) { dt2.image.width = w; dt2.image.height = h; dt2.needsUpdate = true }
@@ -242,9 +253,17 @@ export class Post {
     this.bloom.threshold = threshold
   }
 
+  /** Ambient occlusion, off by default: it costs 5-7 ms (settings say so). */
+  setAo(on: boolean): void {
+    this.aoWanted = on
+    this.gtao.enabled = on && this.quality !== 'off'
+  }
+  private aoWanted = false
+
   /** off = the plain renderer path · basic = grade + FXAA · full = + bloom */
   setQuality(q: PostQuality): void {
     this.quality = q
+    this.gtao.enabled = this.aoWanted && q !== 'off'
     this.bloom.enabled = q === 'full'
     this.air.enabled = q !== 'off'
     this.grade.enabled = q !== 'off'
@@ -288,6 +307,9 @@ export class Post {
     u.saturation.value = THREE.MathUtils.lerp(1.07, 0.9, nightness)
     u.vignette.value = THREE.MathUtils.lerp(0.2, 0.34, nightness)
     u.lift.value = THREE.MathUtils.lerp(0, 0.02, nightness)
+    // AO is firmer in daylight and nearly gone under moonlight, where there is
+    // no key light for anything to occlude
+    this.gtao.blendIntensity = THREE.MathUtils.lerp(0.85, 0.3, nightness)
   }
 
   render(): void {

@@ -71,6 +71,15 @@ await click('Render scale', 'Auto'); await click('Grass', 'On'); await click('Dr
 await page.waitForTimeout(900)
 check((await g('!!window.__g.scene.getObjectByName("grass")')) === true, 'grass comes back on')
 
+// ambient occlusion is opt-in and costs frames: it must be OFF unless asked for
+check((await g('window.__g.game.aoOn()')) === false, 'ambient occlusion is off by default')
+check(await click('Ambient occlusion', 'On'), 'AO can be turned on')
+await page.waitForTimeout(800)
+check((await g('window.__g.game.aoOn()')) === true, 'and it takes effect')
+check(await click('Ambient occlusion', 'Off'), 'and off again')
+await page.waitForTimeout(600)
+check((await g('window.__g.game.aoOn()')) === false, 'back off')
+
 // the effects row drives the post stack
 check(await click('Effects', 'Off'), 'effects off is offered')
 await page.waitForTimeout(600)

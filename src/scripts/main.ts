@@ -385,6 +385,7 @@ async function boot(): Promise<void> {
     if (v.renderScale > 0) { adaptive = false; pixelRatio = v.renderScale; renderer.setPixelRatio(v.renderScale); renderer.setSize(innerWidth, innerHeight) }
     else adaptive = true
     post.setQuality(v.effects)
+    post.setAo(v.ao)
     { const s2 = renderer.getDrawingBufferSize(new THREE.Vector2()); post.setSize(s2.x, s2.y) }
     daynight.setShadowSize(v.shadowSize)
     grass.setEnabled(v.grass, scene)
@@ -1169,6 +1170,8 @@ async function boot(): Promise<void> {
       ecology: () => awake.filter((d) => d.state !== 'idle' && d.state !== 'wander').map((d) => ({ sp: d.species.id, state: d.state, hp: Math.round(d.hp), x: Math.round(d.object.position.x), z: Math.round(d.object.position.z), foe: d.currentFoe ? d.currentFoe.species.id : d.state === 'aggro' || d.state === 'hunt' ? 'player' : null })),
       /** QA: where dino #i stands */
       dinoPos: (i: number) => { const d = dinos[i]; return d ? { x: d.object.position.x, y: d.object.position.y, z: d.object.position.z } : null },
+      /** QA: is ambient occlusion running? (it is opt-in — it costs 5-15 ms) */
+      aoOn: () => settings.values.ao,
       /** QA: how many bodies have hit the ground (the thud fires with or without audio) */
       thuds: () => thudCount,
       /** QA: how far dino #i has rolled over (radians; the topple) */
@@ -1409,7 +1412,7 @@ async function boot(): Promise<void> {
     daynight.setShadowExtent(2100)
     renderer.shadowMap.needsUpdate = true
     renderer.render(scene, cam.camera)
-    daynight.setShadowExtent(85)
+    daynight.setShadowExtent(daynight.shadowReach)
     renderer.shadowMap.needsUpdate = true
     renderer.render(scene, cam.camera)
     // textures upload on first DRAW, not compile — anything frustum-culled in
@@ -1545,7 +1548,7 @@ async function boot(): Promise<void> {
         renderer.shadowMap.needsUpdate = true
         renderer.render(scene, cam.camera)
       }
-      daynight.setShadowExtent(85)
+      daynight.setShadowExtent(daynight.shadowReach)
       daynight.focusShadow(saved.x, saved.z)
       renderer.shadowMap.needsUpdate = true
       renderer.render(scene, cam.camera)

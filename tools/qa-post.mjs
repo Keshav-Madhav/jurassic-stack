@@ -16,7 +16,8 @@ for (const [x, z, yaw, name] of [[-286, 793, 1.35, 'wood-line'], [0, 1560, 0, 's
   for (const [label, fn] of [
     ['no post', () => window.__g.post().setQuality('off')],
     ['basic (grade+FXAA)', () => window.__g.post().setQuality('basic')],
-    ['full (+ bloom)', () => window.__g.post().setQuality('full')],
+    ['full (+ bloom)', () => { const p = window.__g.post(); p.setAo(false); p.setQuality('full') }],
+    ['+ AO (opt-in)', () => window.__g.post().setAo(true)],
   ]) {
     await page.evaluate(fn)
     // WAIT OUT THE RING. gpuMs() reports a percentile over the last 240 frames,

@@ -236,12 +236,25 @@ export class DayNight {
     c.updateProjectionMatrix()
   }
 
-  /** QA: resize the shadow map at runtime */
+  /** Resize the shadow map — and its REACH with it. A 1024 map over 85 m is
+   *  8 cm a texel; the same texel density buys 170 m at 2048, and the middle
+   *  distance stops looking flat (M44). Low trades reach for speed instead. */
   setShadowSize(size: number): void {
     const sc = this.sunLight.shadow
     sc.mapSize.set(size, size)
     sc.map?.dispose()
     sc.map = null
+    this.baseExtent = size >= 2048 ? 150 : size >= 1024 ? 100 : 70
+    this.setShadowExtent(this.baseExtent)
+    // the softening radius follows the texel size, or High comes out crunchy
+    sc.radius = size >= 2048 ? 3 : 2
+    sc.normalBias = (this.baseExtent / size) * 2.2
+  }
+  private baseExtent = 85
+
+  /** the reach the game plays at (the warm-up widens it temporarily) */
+  get shadowReach(): number {
+    return this.baseExtent
   }
 
   /** the current shadow focus (for a warm-up render that moves it and puts it back) */

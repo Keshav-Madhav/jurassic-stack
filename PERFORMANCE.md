@@ -162,12 +162,14 @@ threshold of 2.4 in LINEAR HDR so only fire, the beacon and the sun's disc bleed
 Basic is free because the composer's target drops the renderer's 4× MSAA and FXAA costs less than
 the resolve did. Full costs 1.1 ms. Both are in `settings.ts` (Effects: Off / Basic / Full).
 
-**Ambient occlusion was built, measured and cut.** GTAO looked right — real contact under rocks and
+**Ambient occlusion is opt-in (M44), and here is why it is not the default.** GTAO looked right — real contact under rocks and
 canopy, 40% of pixels moved — and cost **5 ms at half resolution and still 7-10 at quarter**, because
 its price is not the AO maths but the SECOND SCENE RENDER it does for normals: 350 draw calls and
 3 Mtri again, which no resolution change touches. Against a 12 ms contract that is the whole budget
-for an effect you have to look for. If AO returns it must read the depth buffer the main pass already
-wrote (a custom 8-tap pass) and never render geometry twice.
+for an effect you have to look for — so it lives in the settings, off by default, with the cost on
+the label (measured again at half res / 10 samples: **+2.3 ms** at the wood line). The cheap version,
+if anyone builds it, reads the depth buffer the main pass already wrote (a custom 8-tap pass) and
+never renders geometry twice — which is exactly what the M43 atmosphere pass does.
 
 ## Not doing
 

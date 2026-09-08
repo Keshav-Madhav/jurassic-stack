@@ -11,8 +11,10 @@
 export type EffectsLevel = 'off' | 'basic' | 'full'
 
 export interface SettingsValues {
-  /** post-processing: off · basic (grade + bloom) · full (+ ambient occlusion) */
+  /** post-processing: off · basic (grade + FXAA + air) · full (+ bloom) */
   effects: EffectsLevel
+  /** ambient occlusion — off by default, and it costs about 5 ms */
+  ao: boolean
   /** 0 = adaptive (the default: the game picks), else a fixed device pixel ratio */
   renderScale: number
   /** shadow map size; 0 = the smallest we offer, not "off" (off recompiles everything) */
@@ -27,6 +29,7 @@ export interface SettingsValues {
 
 export const DEFAULTS: SettingsValues = {
   effects: 'full',
+  ao: false,
   renderScale: 0,
   shadowSize: 1024,
   grass: true,
@@ -77,6 +80,12 @@ const ROWS: Row[] = [
     ],
   },
   {
+    key: 'ao',
+    label: 'Ambient occlusion',
+    hint: 'contact shadows where things meet — it redraws the scene for normals, so it costs 2-6 ms',
+    choices: [{ label: 'On', value: true }, { label: 'Off', value: false }],
+  },
+  {
     key: 'renderScale',
     label: 'Render scale',
     hint: 'the last resort, and the biggest lever on a weak machine',
@@ -90,6 +99,7 @@ const ROWS: Row[] = [
   {
     key: 'shadowSize',
     label: 'Shadows',
+    hint: 'map size AND how far they reach — 85 m of shadow is why the middle distance looks flat',
     choices: [
       { label: 'High', value: 2048 },
       { label: 'Normal', value: 1024 },
