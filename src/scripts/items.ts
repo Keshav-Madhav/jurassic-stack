@@ -2,7 +2,7 @@
 // file all read from here. Icons are emoji for now (legible, zero asset work).
 export type ItemId =
   | 'wood' | 'stone' | 'fiber' | 'flint' | 'berry' | 'rawmeat' | 'cookedmeat' | 'hide'
-  | 'hatchet' | 'spear'
+  | 'hatchet' | 'spear' | 'furcoat' | 'fur'
   | 'campfire' | 'torch' | 'foundation' | 'wall' | 'ceiling' | 'bedroll' | 'workbench' | 'chest'
   | 'fence' | 'canopy'
   | 'saddle'
@@ -24,6 +24,8 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   rawmeat: { id: 'rawmeat', name: 'Raw Meat', icon: '🥩' },
   cookedmeat: { id: 'cookedmeat', name: 'Cooked Meat', icon: '🍖' },
   hide: { id: 'hide', name: 'Hide', icon: '🟫' },
+  fur: { id: 'fur', name: 'Fur', icon: '🧶' },
+  furcoat: { id: 'furcoat', name: 'Fur Coat', icon: '🧥' },
   hatchet: { id: 'hatchet', name: 'Hatchet', icon: '🪓' },
   spear: { id: 'spear', name: 'Spear', icon: '🔱' },
   campfire: { id: 'campfire', name: 'Campfire', icon: '🔥', placeable: true },
@@ -55,7 +57,9 @@ export const RECIPES: Recipe[] = [
   { output: 'foundation', count: 1, cost: { wood: 8, fiber: 4 } },
   { output: 'wall', count: 1, cost: { wood: 5, fiber: 2 } },
   { output: 'ceiling', count: 1, cost: { wood: 6, fiber: 3 } },
-  { output: 'bedroll', count: 1, cost: { fiber: 16, hide: 3 } }, // NOT bench-gated: it is what death costs you, and you need it early
+  { output: 'bedroll', count: 1, cost: { fiber: 16, hide: 3 } },
+  // the ranges are cold: the coat is what lets you go up (PLAN beat 4)
+  { output: 'furcoat', count: 1, cost: { fur: 8, hide: 4, fiber: 10 }, bench: true }, // NOT bench-gated: it is what death costs you, and you need it early
   { output: 'workbench', count: 1, cost: { wood: 20, stone: 8, fiber: 6 } },
   { output: 'chest', count: 1, cost: { wood: 14, fiber: 6 }, bench: true },
   { output: 'fence', count: 3, cost: { wood: 6, fiber: 2 } }, // a rail run: pens for your tames, a line round the camp

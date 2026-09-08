@@ -3,6 +3,8 @@
 // species in code; if a behavior can't be expressed as a column, the brain
 // grows a column, not an if-statement.
 export interface SpeciesDef {
+  /** shaggy enough to yield fur when harvested — the cold gate's currency (M50) */
+  furry?: true
   id: string
   name: string
   model: string
@@ -259,6 +261,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
   },
   terrorbird: {
     id: 'terrorbird',
+    furry: true, // feathered, close enough to line a coat
     name: 'Terror Bird',
     model: 'models/dinos/TerrorBird.glb',
     // flocks on the plain and the dune edges: fast, nippy, tameable early
@@ -359,6 +362,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
   },
   mammoth: {
     id: 'mammoth',
+    furry: true, // the coat comes off the mammoth: the cold gate's own answer
     name: 'Mammoth',
     model: 'models/dinos/Mammoth.glb',
     // the highlands' herbivore: pines and the ranges' feet; trumpets when hit

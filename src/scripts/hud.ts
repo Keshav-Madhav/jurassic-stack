@@ -58,6 +58,7 @@ export class Hud {
         <div class="bar food"><i></i><b>🍖</b></div>
         <div class="bar water"><i></i><b>💧</b></div>
         <div class="bar stamina"><i></i><b>⚡</b></div>
+        <div class="bar warmth" hidden><i></i><b>🔥</b></div>
       </div>
       <div id="hud-hotbar"></div>
       <div id="hud-panel" hidden></div>
@@ -86,12 +87,12 @@ export class Hud {
     this.modeEl.hidden = !on
   }
 
-  private vitals = { hp: 0, food: 0, water: 0, stamina: 0 }
+  private vitals = { hp: 0, food: 0, water: 0, stamina: 0, warmth: 0 }
 
-  tick(dt: number, x: number, y: number, z: number, timeOfDay: number, hp: number, yawDeg?: number, stats?: { food: number; water: number; stamina: number; winded: boolean }): void {
+  tick(dt: number, x: number, y: number, z: number, timeOfDay: number, hp: number, yawDeg?: number, stats?: { food: number; water: number; stamina: number; winded: boolean; warmth: number; cold: boolean }): void {
     this.frames++
     // the vitals strip (every frame: the bars are cheap and stamina moves fast)
-    const set = (k: 'hp' | 'food' | 'water' | 'stamina', v: number, low: boolean) => {
+    const set = (k: 'hp' | 'food' | 'water' | 'stamina' | 'warmth', v: number, low: boolean) => {
       const r = Math.max(0, Math.min(100, v))
       if (Math.abs(this.vitals[k] - r) < 0.4) return
       this.vitals[k] = r
@@ -104,6 +105,12 @@ export class Hud {
       set('food', stats.food, stats.food < 20)
       set('water', stats.water, stats.water < 20)
       set('stamina', stats.stamina, stats.winded)
+      // the warmth bar only exists when the cold does — one more bar on a
+      // beach at noon is clutter, and on a ridge at night it is the game
+      const wb = this.root.querySelector('#hud-vitals .bar.warmth') as HTMLElement
+      const show = stats.warmth < 99.5
+      if (wb.hidden === show) wb.hidden = !show
+      if (show) set('warmth', stats.warmth, stats.cold)
     }
     this.accum += dt
     if (this.accum >= 0.5) {

@@ -697,3 +697,10 @@ Findings and fixes, each measured with the new jitter meter (`__g.frameStats()`,
 - [x] **Two corrections from screenshots**: at 0.1 m / 0.34 opacity the dust was invisible against the sand it came off (now 0.22-0.3 and 0.6-0.85), and the chip pool had no sprite — fine at splinter size, flying cardboard boxes at dust size. It uses the same soft round drop the blood learned to use in M19. Dust also hangs and drifts now (gravity 1.4 vs the chips' 16)
 - [x] **Gate (m4, +2)**: the camera kicks when you land a blow (0.025 m) and settles back to where it was (0.0001 m) — a shake that does not return is a drift bug waiting to happen
 - [x] Gates 11 files, all green
+
+### M50 — COLD ON THE RANGES (PLAN beat 4, the open one — the middle of the arc gets its pressure)
+- [x] **The island had no reason to stop you going anywhere.** Now the high ground does: **warmth**, a fifth vital, drains with altitude (bites above 120 m, hard above 200) and with the night, and empties into health loss. A fire beats it outright, moving keeps a little off, and the bar only appears when the cold is real — one more bar on a beach at noon is clutter, on a ridge at night it is the game
+- [x] **The fur coat is the licence to go up.** 8 fur + 4 hide + 10 fiber at a workbench, and **fur comes only off the shaggy megafauna** — the mammoth (2 a swing) and the terror bird. So the ranges are gated behind a hunt, which is exactly the shape PLAN beat 4 asked for: *"cold demands fur gear off megafauna"*
+- [x] **The first tuning was wrong and the test said so.** At `chill × 0.4` the coat merely slowed the loss — the 370 m crest still froze you to death while wearing it, which makes the craft pointless. It subtracts a flat 0.55 as well now. Measured curve: **beach 100 · range foot 96 · crest 5 (deadly) · crest with a coat 70 (survivable) · at a fire 100**
+- [x] **Gate (survival, +5)**: the beach is warm · the west crest is high ground (370 m) · it freezes you without a coat (9) · a coat makes it survivable (73) · a mammoth carcass yields fur. Plus the bar count, which was still asserting four
+- [x] Gates 11 files, all green

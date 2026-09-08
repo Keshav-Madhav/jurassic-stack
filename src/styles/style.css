@@ -91,6 +91,9 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #10150f; }
 #hud-vitals .bar.food i { background: linear-gradient(90deg, #b8742a, #e0a04a); }
 #hud-vitals .bar.water i { background: linear-gradient(90deg, #2d7bc8, #5ab0f0); }
 #hud-vitals .bar.stamina i { background: linear-gradient(90deg, #7fb83a, #b6e05a); }
+/* warmth: it reads as heat when you have it and ice when you are losing it */
+#hud-vitals .bar.warmth i { background: linear-gradient(90deg, #c85a22, #f0a050); }
+#hud-vitals .bar.warmth.low i { background: linear-gradient(90deg, #4f86c6, #9fd2f5); }
 #hud-vitals .bar.low { animation: vital-low 0.9s ease-in-out infinite; }
 #hud-vitals .bar.low i { filter: saturate(1.4) brightness(1.15); }
 @keyframes vital-low { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 90, 60, 0); } 50% { box-shadow: 0 0 8px 2px rgba(255, 90, 60, 0.6); } }

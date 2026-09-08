@@ -18,7 +18,10 @@ const g = (expr) => page.evaluate(expr)
 
 const s0 = await g('window.__g.game.survival()')
 check(s0.food > 95 && s0.water > 95 && s0.stamina > 95, `fresh spawn: food ${s0.food.toFixed(0)} water ${s0.water.toFixed(0)} stamina ${s0.stamina.toFixed(0)}`)
-check(await page.evaluate(() => { const b = document.queraySelectorAll?.('#hud-vitals .bar') ?? document.querySelectorAll('#hud-vitals .bar'); return b.length === 4 }), 'four vitals bars in the HUD')
+// five bars since M50: hp, food, water, stamina, and warmth (hidden until the
+// cold is real, so this counts the elements, not the visible ones)
+check(await page.evaluate(() => document.querySelectorAll('#hud-vitals .bar').length === 5), 'five vitals bars in the HUD')
+check(await page.evaluate(() => document.querySelector('#hud-vitals .bar.warmth').hidden), 'and warmth is hidden while you are warm')
 
 // drains while sprinting (creative off): 12 s of sprint
 await g('window.__g.game.setGod(true); window.__g.game.setCreative(false); window.__g.teleport(0, 1560); window.__g.setIntent(0, -9)')
@@ -153,6 +156,44 @@ await page.waitForTimeout(800)
 const p2 = await g('window.__g.player()')
 const dist = Math.hypot(p2.x - bed.x, p2.z - bed.z)
 check(dist < 6, `you wake at your bedroll, ${dist.toFixed(1)} m from it (not the beach)`)
+
+// --- M50: the cold on the ranges (PLAN beat 4) ---
+await g('window.__g.game.setCreative(false); window.__g.game.setGod(true); window.__g.setTime(0.5)')
+const warmthAt = async (x, z, secs) => {
+  await page.evaluate(([px, pz]) => window.__g.teleport(px, pz), [x, z])
+  await page.waitForTimeout(secs * 1000)
+  return page.evaluate(() => ({ w: window.__g.game.survival().warmth, y: window.__g.player().y }))
+}
+await g('window.__g.game.setSurvival({ warmth: 100 })')
+const low = await warmthAt(0, 1560, 4)
+check(low.w > 95, `the beach is warm (${low.w.toFixed(0)} at ${low.y.toFixed(0)} m)`)
+const high = await warmthAt(-1290, -160, 14)
+check(high.y > 300, `the west crest is high ground (${high.y.toFixed(0)} m)`)
+check(high.w < 30, `and it freezes you without a coat (warmth ${high.w.toFixed(0)})`)
+
+// the coat is a licence to be up here, not a discount on dying
+await g('window.__g.game.give("furcoat", 1); window.__g.game.setSurvival({ warmth: 100 })')
+const coated = await warmthAt(-1290, -160, 14)
+check(coated.w > 55, `a fur coat makes the crest survivable (warmth ${coated.w.toFixed(0)})`)
+
+// and fur comes off the shaggy animals, which is the only way to get one.
+// (Down on the plain: a mammoth spawned on a 370 m crest lands on a cliff
+// face and the butchering test measures the terrain, not the yield.)
+await g('window.__g.teleport(-250, 1040)')
+await page.waitForTimeout(2500)
+const mIdx = await page.evaluate(() => { const p = window.__g.player(); return window.__g.game.spawnDino('mammoth', p.x + 6, p.z - 6) })
+await page.waitForTimeout(2500)
+await page.evaluate((i) => window.__g.game.killDino(i), mIdx)
+await page.waitForTimeout(2200)
+const fur0 = await g('window.__g.game.count("fur")')
+await g('window.__g.game.give("hatchet", 1); window.__g.game.selectItem("hatchet")')
+for (let i = 0; i < 6; i++) {
+  await page.evaluate((k) => window.__g.game.gotoDinoIndex(k), mIdx)
+  await page.waitForTimeout(250)
+  await g('window.__g.game.swing()')
+  await page.waitForTimeout(400)
+}
+check((await g('window.__g.game.count("fur")')) > fur0, `a mammoth carcass yields fur (${await g('window.__g.game.count("fur")')})`)
 
 await browser.close()
 console.log(failed ? '\nGATE FAILED' : '\nGATE PASSED')

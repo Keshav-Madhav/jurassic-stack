@@ -18,6 +18,8 @@ export const ITEM_MODEL: Record<ItemId, string> = {
   rawmeat: 'kenney-meat-raw',
   cookedmeat: 'kenney-meat-cooked',
   hide: 'pp-AnimalHide',
+  fur: 'pp-AnimalHide',
+  furcoat: 'pp-AnimalHide',
   hatchet: 'pp-AxeStone',
   spear: 'pp-Spear',
   torch: 'pp-WoodenTorch',
@@ -44,6 +46,8 @@ const ICON_FRAME: Partial<Record<ItemId, { yaw?: number; pitch?: number; roll?: 
   wood: { roll: -0.5, yaw: 0.3, zoom: 1.15 },
   fiber: { pitch: 1.0, tint: 0xd6c08a, zoom: 1.1 }, // a coil of straw-coloured rope
   hide: { pitch: 0.5, zoom: 1.1 },
+  fur: { pitch: 0.5, zoom: 1.1, tint: 0x6b5a44 },
+  furcoat: { pitch: 0.35, zoom: 0.95, tint: 0x8a7358 },
   ceiling: { pitch: 0.6 },
   foundation: { pitch: 0.6 },
   wall: { yaw: 0.5 },

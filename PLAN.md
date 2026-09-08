@@ -346,7 +346,7 @@ and desert flora · M10g ground clutter · M10h boulders and outcrops.
 
 *Status 2026-09-07: beats 1–3 and 5 are built and live (the beach statue, twelve keystones / eight
 open the door, the caldera door in the Ravine's throat, the Gatekeeper alpha, the crater Beacon and
-credits). Beat 4 (cold, the aquatic tame, the three caves) is the open content. Survival (M21), the
+credits). Beat 4 is half-closed: **cold shipped M50**; the aquatic tame and the three caves remain. Survival (M21), the
 ecology (M19) and the first-minutes hints (M30) are in; see CHECKLIST.md M17–M30.*
 
 Sandbox first — no dialogue, no quest log, no obligation. For anyone who wants direction, five acts
@@ -391,7 +391,8 @@ polish / content:**
 2. ~~Ragdolls~~ **M41 did the honest version** — a directed, accelerating topple with a landing
    thud, not a jointed ragdoll (a body that is only ever seen lying still afterwards does not repay
    a per-species joint rig; revisit only if bodies start falling off cliffs) · **opaque grass + far terrain** (perf, B+E) · **the visual LUT + material
-   normalisation** (polish) · **cold on the ranges: fur off mammoths** (content, beat 4).
+   normalisation** (polish) · ~~cold on the ranges: fur off mammoths~~ **DONE M50** — warmth as a fifth vital, the fur coat off
+   the megafauna as the licence to climb; the crest is deadly without it and survivable with it.
 3. ~~Tames defend you~~ **DONE M36** · **hunger drive** (feel) · **depth pre-pass + occlusion
    queries** (perf, C+F — note the frame is already 3–5 ms; measure before building either) ·
    ~~settings menu~~ **DONE M40** (render scale, shadows, grass, draw distance, volume, sensitivity,

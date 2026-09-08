@@ -615,10 +615,11 @@ async function boot(): Promise<void> {
         if (got) {
           inventory.add('rawmeat', got.rawmeat)
           if (got.hide) inventory.add('hide', got.hide)
+          if (got.fur) inventory.add('fur', got.fur)
           const cp = carcass.object.position
           hitFx.burst(cp.x, cp.y + carcass.species.height * 0.3, cp.z, false)
           sfx.play('hit-flesh', { volume: 0.55, at: { x: cp.x, y: cp.y, z: cp.z } })
-          hud.toast(`${ITEMS.rawmeat.icon} +${got.rawmeat} raw meat${got.hide ? ` · ${ITEMS.hide.icon} +1 hide` : ''}${carcass.harvestLeft ? '' : ' — the carcass is spent'}`)
+          hud.toast(`${ITEMS.rawmeat.icon} +${got.rawmeat} raw meat${got.hide ? ` · ${ITEMS.hide.icon} +1 hide` : ''}${got.fur ? ` · ${ITEMS.fur.icon} +${got.fur} fur` : ''}${carcass.harvestLeft ? '' : ' — the carcass is spent'}`)
           return true
         }
       }
@@ -1409,7 +1410,7 @@ async function boot(): Promise<void> {
       beaconLit: () => beaconLit,
       alphaSlain: () => alphaSlain,
       survival: () => ({ ...survival.serialize(), winded: survival.winded }),
-      setSurvival: (s: { food?: number; water?: number; stamina?: number }) => { if (s.food !== undefined) survival.food = s.food; if (s.water !== undefined) survival.water = s.water; if (s.stamina !== undefined) survival.stamina = s.stamina },
+      setSurvival: (s: { food?: number; water?: number; stamina?: number; warmth?: number }) => { if (s.food !== undefined) survival.food = s.food; if (s.water !== undefined) survival.water = s.water; if (s.stamina !== undefined) survival.stamina = s.stamina; if (s.warmth !== undefined) survival.warmth = s.warmth },
       nearWater: () => nearWaterFor(feetPos()),
       nearFire: () => { const f = feetPos(); return building.nearFire(f.x, f.z) },
       hintsSeen: () => onboarding.serialize(),
@@ -1958,6 +1959,14 @@ async function boot(): Promise<void> {
     player.sprintAllowed = survival.canSprint
     survival.sprinting = !riding && player.sprinting
     survival.moving = riding ? Math.hypot(riding.mover?.intent.vx ?? 0, riding.mover?.intent.vz ?? 0) > 0.1 : player.moving
+    // the cold (M50): how high, how dark, and what is keeping it off you
+    {
+      const cf = feetPos()
+      survival.altitude = cf.y
+      survival.nightness = daynight.nightness
+      survival.nearFire = building.nearFire(cf.x, cf.z, 7) || (beaconLit && Math.hypot(cf.x - beaconSite.x, cf.z - beaconSite.z) < 30)
+      survival.hasCoat = inventory.count('furcoat') > 0
+    }
     const starve = survival.update(dt, creative)
     if (starve < 0) {
       playerHp = Math.max(0, playerHp + starve)
@@ -2003,6 +2012,7 @@ async function boot(): Promise<void> {
       if (!seen('hungry') && survival.food < 40) onboarding.hint('hungry')
       if (!seen('thirsty') && survival.water < 40) onboarding.hint('thirsty')
       if (!seen('stamina') && survival.winded) onboarding.hint('stamina')
+      if (!seen('cold') && survival.cold) onboarding.hint('cold')
       if (!seen('night') && daynight.nightness > 0.7) onboarding.hint('night')
       if (!seen('raptor') && nearestDino(30, (d) => d.species.id === 'raptor' && d.state !== 'tamed' && d.state !== 'dead')) onboarding.hint('raptor')
       if (!seen('carcass') && nearestDino(INTERACT_RANGE + 2, (d) => d.state === 'dead')) onboarding.hint('carcass')
@@ -2055,7 +2065,7 @@ async function boot(): Promise<void> {
       }
     }
     player.setHeldItem(riding ? null : inventory.held)
-    hud.tick(dt, focus.x, focus.y, focus.z, daynight.time, playerHp, (-cam.yaw * 180) / Math.PI, survival)
+    hud.tick(dt, focus.x, focus.y, focus.z, daynight.time, playerHp, (-cam.yaw * 180) / Math.PI, { ...survival.serialize(), winded: survival.winded, warmth: survival.warmth, cold: survival.cold })
     if (perfHud) perfTick(dt)
     frameCount++
     const tW = performance.now()

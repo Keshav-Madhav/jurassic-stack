@@ -1003,11 +1003,16 @@ export class Dino {
   harvestLeft = 0
 
   /** Harvest a carcass with a blade: one swing → meat (+ hide every other). Returns what came off, or null. */
-  harvest(): { rawmeat: number; hide: number } | null {
+  harvest(): { rawmeat: number; hide: number; fur: number } | null {
     if (this.state !== 'dead' || this.harvestLeft <= 0) return null
     this.harvestLeft--
     const big = this.species.height >= 3
-    const out = { rawmeat: big ? 2 : 1, hide: this.harvestLeft % 2 === 0 ? 1 : 0 }
+    const out = {
+      rawmeat: big ? 2 : 1,
+      hide: this.harvestLeft % 2 === 0 ? 1 : 0,
+      // a shaggy animal also gives fur — the only source of the coat (M50)
+      fur: this.species.furry ? (big ? 2 : 1) : 0,
+    }
     if (this.harvestLeft <= 0) { this.object.visible = false; this.deadT = 0 }
     return out
   }
