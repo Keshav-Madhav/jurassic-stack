@@ -98,6 +98,11 @@ Vercel. **No React, no framework.**
   frames, which is EIGHT SECONDS at 30 ms — wait out the ring before comparing two configurations,
   or three of them report the same number. Any new pass must be measured with `tools/qa-post.mjs`
   and switchable, and must never render the scene geometry a second time.
+- **`[hidden]` needs `!important` here** (M48): the global `[hidden] { display: none !important }` in
+  style.css exists because any `#id { display: flex }` rule silently beats the browser's own hidden
+  behaviour. Two HUD panels sat on screen as empty dark slabs for eight rounds before a user
+  screenshot caught them. New panels: hide with the attribute, and check a screenshot of the game
+  with nothing open.
 - **Sound: `sfx.ts` for events, `ambience.ts` for the bed** (M35). One AudioContext, opened by
   ambience on the first gesture; sfx hangs its own bus off it. Events call `sfx.play(id, { at })`
   with a WORLD POSITION and let the mixer do distance and pan — never gate on distance at the call

@@ -43,15 +43,21 @@ export interface ScatterNode {
   respawnAt: number
 }
 
-const NODE_DEFS: Record<NodeKind, { hp: number; yields: Partial<Record<ItemId, [number, number]>> }> = {
-  tree: { hp: 3, yields: { wood: [2, 4], fiber: [1, 2] } },
-  elder: { hp: 6, yields: { wood: [5, 9], fiber: [2, 4] } },
-  redwood: { hp: 8, yields: { wood: [7, 12], fiber: [1, 3] } },
-  pine: { hp: 3, yields: { wood: [2, 4], fiber: [1, 2] } },
-  deadtree: { hp: 2, yields: { wood: [2, 3] } },
-  palm: { hp: 3, yields: { wood: [2, 3], fiber: [1, 3] } },
-  willow: { hp: 3, yields: { wood: [2, 4] } },
-  rock: { hp: 3, yields: { stone: [2, 3], flint: [0, 2] } },
+/** things tall enough to topple when they are felled, instead of vanishing */
+const TREE_KINDS = new Set<NodeKind>(['tree', 'elder', 'redwood', 'pine', 'deadtree', 'palm', 'willow'])
+
+const NODE_DEFS: Record<NodeKind, { hp: number; yields: Partial<Record<ItemId, [number, number]>>; chip?: Partial<Record<ItemId, number>> }> = {
+  // hp is SWINGS, and every swing pays (see hit()): a tree that took three
+  // silent hits and then vanished felt like clicking a button, so trees take
+  // longer, chip wood as they go, and fall over at the end (M48)
+  tree: { hp: 6, yields: { wood: [3, 5], fiber: [1, 2] }, chip: { wood: 1 } },
+  elder: { hp: 10, yields: { wood: [6, 10], fiber: [2, 4] }, chip: { wood: 1 } },
+  redwood: { hp: 12, yields: { wood: [8, 14], fiber: [1, 3] }, chip: { wood: 1 } },
+  pine: { hp: 6, yields: { wood: [3, 5], fiber: [1, 2] }, chip: { wood: 1 } },
+  deadtree: { hp: 4, yields: { wood: [2, 3] }, chip: { wood: 1 } },
+  palm: { hp: 5, yields: { wood: [2, 3], fiber: [1, 3] }, chip: { wood: 1 } },
+  willow: { hp: 6, yields: { wood: [3, 5] }, chip: { wood: 1 } },
+  rock: { hp: 5, yields: { stone: [2, 3], flint: [0, 2] }, chip: { stone: 1 } },
   log: { hp: 1, yields: { wood: [1, 2] } },
   bush: { hp: 2, yields: { berry: [2, 4], fiber: [1, 3] } },
   fern: { hp: 1, yields: { fiber: [1, 2] } },
@@ -305,6 +311,9 @@ function toFloatGeometry(src: THREE.BufferGeometry): THREE.BufferGeometry {
 }
 
 /** One prop rendered as N InstancedMeshes (one per submesh), sharing matrices. */
+const _tiltAxis = new THREE.Vector3()
+const _tiltQ = new THREE.Quaternion()
+
 class InstancedProp {
   meshes: THREE.InstancedMesh[] = []
   /** the prop's meshes live in this holder; `show(false)` DETACHES it from the
@@ -499,6 +508,29 @@ class InstancedProp {
       m.setColorAt(i, c)
       m.count = Math.max(m.count, i + 1)
       if (mark) this.markInstance(m, i, true)
+    }
+  }
+
+  /** Same, but leaning `lean` radians about its own base — the wobble when
+   *  something is struck and the arc when a tree comes down (M48). The lean
+   *  pivots at the foot, not the centre, or a felled tree sinks through the
+   *  ground as it goes over. */
+  setInstanceTilted(i: number, x: number, y: number, z: number, scale: number, rotY: number, tint: number, lean: number): void {
+    this.dummy.position.set(x, y, z)
+    this.dummy.rotation.set(0, rotY, 0)
+    this.dummy.scale.setScalar(scale)
+    if (lean !== 0) {
+      const axis = _tiltAxis.set(Math.cos(rotY), 0, -Math.sin(rotY))
+      _tiltQ.setFromAxisAngle(axis, lean)
+      this.dummy.quaternion.premultiply(_tiltQ)
+    }
+    this.dummy.updateMatrix()
+    const c = new THREE.Color(tint, tint, tint)
+    for (const m of this.meshes) {
+      m.setMatrixAt(i, this.dummy.matrix)
+      m.setColorAt(i, c)
+      m.count = Math.max(m.count, i + 1)
+      this.markInstance(m, i, true)
     }
   }
 
@@ -1102,17 +1134,72 @@ export class Scatter {
   hit(node: ScatterNode): Partial<Record<ItemId, number>> | null {
     if (!node.alive) return null
     node.hp -= 1
-    if (node.hp > 0) return {}
+    // the thing you hit KNOWS it was hit: a wobble that decays over ~0.4 s
+    this.shakes.set(node.id, { node, t: 1, lean: (Math.random() - 0.5) * 0.12 })
+    if (node.hp > 0) {
+      // chips: every swing pays a little, so the bar moves while you work
+      const chip = NODE_DEFS[node.kind].chip
+      return chip ? { ...chip } : {}
+    }
     node.alive = false
     node.respawnAt = Date.now() + RESPAWN_MS
     this.dead.add(node.id)
-    this.setNodeVisible(node, false)
     this.pendingColliderDrops.push(node.id)
+    // a tree FALLS; a bush or a rock just goes
+    if (TREE_KINDS.has(node.kind)) {
+      this.shakes.delete(node.id)
+      this.falling.set(node.id, { node, t: 0, dir: Math.random() < 0.5 ? -1 : 1 })
+    } else {
+      this.setNodeVisible(node, false)
+    }
     const out: Partial<Record<ItemId, number>> = {}
     for (const [item, [lo, hi]] of Object.entries(NODE_DEFS[node.kind].yields)) {
       out[item as ItemId] = lo + Math.floor(Math.random() * (hi - lo + 1))
     }
     return out
+  }
+
+  /** things hit in the last moment (a wobble) and things falling (a felled
+   *  tree). Both animate ONE instance matrix each, for well under a frame. */
+  private shakes = new Map<number, { node: ScatterNode; t: number; lean: number }>()
+  private falling = new Map<number, { node: ScatterNode; t: number; dir: number }>()
+
+  /** Called every frame: play the wobble and the fall. */
+  updateHits(dt: number): void {
+    for (const [id, s2] of this.shakes) {
+      s2.t -= dt / 0.4
+      if (s2.t <= 0) { this.shakes.delete(id); this.poseNode(s2.node, 0, 0); continue }
+      // a damped shiver, strongest at the moment of the blow
+      const a = Math.sin(s2.t * 34) * s2.t * s2.t * s2.lean
+      this.poseNode(s2.node, a, 0)
+    }
+    for (const [id, f] of this.falling) {
+      f.t += dt
+      // a felled tree accelerates over about a second and a half, then goes
+      const k = Math.min(1, (f.t / 1.5) ** 2)
+      this.poseNode(f.node, k * 1.5 * f.dir, k * 0.35)
+      if (f.t > 1.7) {
+        this.falling.delete(id)
+        this.setNodeVisible(f.node, false)
+        this.poseNode(f.node, 0, 0)
+      }
+    }
+  }
+
+  /** QA: how many things are wobbling or coming down right now */
+  debugHits(): { shakes: number; falling: number } {
+    return { shakes: this.shakes.size, falling: this.falling.size }
+  }
+
+  /** tilt/sink one instance in place (the wobble and the fall both use it) */
+  private poseNode(node: ScatterNode, lean: number, sink: number): void {
+    const key = groupKeyOf(node.kind, node.variant, node.x, node.z)
+    const prop = this.props.get(key)
+    const ids = this.order.get(key)
+    if (!prop || !ids) return
+    const idx = ids.indexOf(node.id)
+    if (idx < 0) return
+    prop.setInstanceTilted(idx, node.x, node.y - sink * node.scale, node.z, node.scale, node.rotY, node.tint, lean)
   }
 
   flushColliderDrops(physics: Physics): void {

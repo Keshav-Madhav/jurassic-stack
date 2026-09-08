@@ -673,3 +673,11 @@ Findings and fixes, each measured with the new jitter meter (`__g.frameStats()`,
 - [x] **Strength 0.85 → 0.5**: it multiplies ALBEDO, not the ambient term alone (the honest compromise for something that has to be free), so at 0.85 the caldera floor went black at noon — and a crater floor at noon is not black, the sun is overhead
 - [x] **Fails safe**: no `skyview.bin` (an un-rebaked checkout) means `skyViewAt()` returns 1 and nothing changes
 - [x] Gates 11 files, all green
+
+### M48 — THE BAR ACROSS THE SCREEN, AND THE FEEL OF SWINGING AT SOMETHING
+- [x] **A dark bar has been across the middle of the view since M40 and I never saw it.** The user did, in one screenshot. `[hidden]` is a UA-stylesheet rule and ANY id selector that sets `display` beats it — so `#hud-settings { display: flex }` and `#hud-perf { display: flex }` left both panels on screen as empty dark slabs, one across the middle and one in the top-right corner, in every frame and every screenshot for eight rounds. `[hidden] { display: none !important }`, globally. I had looked at perhaps sixty screenshots containing it
+- [x] **Every swing pays now.** A tree took three silent hits and vanished. Trees are 6 swings (elder 10, redwood 12, rock 5), **each swing yields a chip** (+1 wood or stone) and the felling blow pays the rest — so the number moves while you work instead of once at the end
+- [x] **Things react to being hit**: a damped wobble about the base, strongest at the moment of the blow, decaying over 0.4 s — one instance matrix, no new draw calls
+- [x] **And trees FALL.** A felled tree leans, accelerates over about a second and a half, sinks and goes, instead of blinking out of existence. Rocks and bushes still just go — a boulder does not topple
+- [x] **The tool is in your hand.** The castaway mimed everything: you swung at a tree with an empty fist and the hatchet existed only in the hotbar. The kit model now hangs off the right wrist (`WristR`), counter-scaled out of the bone's own scale, posed per item — hatchet, spear and torch are all visibly held, and the spear reads through the whole throw animation
+- [x] Gates 11 files, all green

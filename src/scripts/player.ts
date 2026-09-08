@@ -20,6 +20,16 @@ const HEIGHT = 1.75
 
 type ClipSlot = 'idle' | 'walk' | 'run' | 'air' | 'sit' | 'punch' | 'chop' | 'throw'
 // Quaternius "Casual2" castaway — clip names carry an armature prefix, so match by suffix
+/** where each tool sits in the fist: metres and radians, tuned by screenshot */
+const HELD_POSE: Partial<Record<ItemId, { pos: [number, number, number]; rot: [number, number, number]; size: number }>> = {
+  hatchet: { pos: [0, 0.05, 0], rot: [0, 0, Math.PI / 2], size: 0.55 },
+  spear: { pos: [0, 0.1, 0], rot: [0, 0, Math.PI / 2], size: 2.1 },
+  torch: { pos: [0, 0.06, 0], rot: [0, 0, Math.PI / 2], size: 0.8 },
+}
+
+/** the size the kit model is normalised to, per item */
+export const HELD_SIZE: Partial<Record<ItemId, number>> = { hatchet: 0.55, spear: 2.1, torch: 0.8 }
+
 const CLIP_MATCH: Record<ClipSlot, RegExp> = {
   idle: /(^|\|)Idle_Neutral$/,
   walk: /(^|\|)Walk$/,
@@ -61,6 +71,12 @@ export class Player {
   /** leg bones for the procedural riding pose (rig has no sit clip).
    *  Casual2 ships FOUR duplicate armatures (one per body-part mesh) with
    *  identical bone names — every match must be posed, not just the first. */
+  /** the right wrist — where a held tool hangs (M48) */
+  private hand: THREE.Bone | null = null
+  private heldMount: THREE.Object3D | null = null
+  private heldId: ItemId | null = null
+  /** main.ts supplies the kit model for an item (player.ts must not know the kit) */
+  heldFactory: ((id: ItemId) => THREE.Object3D | null) | null = null
   private thighs: { bone: THREE.Bone; side: 1 | -1 }[] = []
   private shins: THREE.Bone[] = []
 
@@ -114,6 +130,7 @@ export class Player {
     model.traverse((o) => {
       if (!(o instanceof THREE.Bone)) return
       const n = o.name.replace(/\./g, '')
+      if (n === 'WristR') this.hand = o
       if (n === 'UpperLegL') this.thighs.push({ bone: o, side: -1 })
       if (n === 'UpperLegR') this.thighs.push({ bone: o, side: 1 })
       if (n === 'LowerLegL' || n === 'LowerLegR') this.shins.push(o)
@@ -145,8 +162,32 @@ export class Player {
     }
   }
 
-  /** No attachment props on the castaway rig (tools are implied by animation). */
-  setHeldItem(_id: ItemId | null): void {}
+  /** HOLD IT. The castaway used to mime every tool — you swung at a tree with
+   *  an empty fist and the hatchet existed only in the hotbar (user, M48).
+   *  The kit model now hangs off the right wrist, counter-scaled out of the
+   *  bone's own scale and posed per item so the handle sits in the fist. */
+  setHeldItem(id: ItemId | null): void {
+    if (id === this.heldId) return
+    this.heldId = id
+    if (this.heldMount) {
+      this.heldMount.parent?.remove(this.heldMount)
+      this.heldMount = null
+    }
+    if (!id || !this.hand || !this.heldFactory) return
+    const pose = HELD_POSE[id]
+    if (!pose) return
+    const model = this.heldFactory(id)
+    if (!model) return
+    const mount = new THREE.Group()
+    // the bone carries the rig's own scale; undo it so the tool is in metres
+    const ws = this.hand.getWorldScale(new THREE.Vector3())
+    mount.scale.setScalar(1 / Math.max(0.0001, ws.x))
+    model.position.set(pose.pos[0], pose.pos[1], pose.pos[2])
+    model.rotation.set(pose.rot[0], pose.rot[1], pose.rot[2])
+    mount.add(model)
+    this.hand.add(mount)
+    this.heldMount = mount
+  }
 
   /** One-shot swing animation, flavored by the held tool. */
   playSwing(held: ItemId | null): void {

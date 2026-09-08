@@ -12,7 +12,7 @@ import { ThirdPersonCamera } from './camera'
 import { DayNight, DAY_LENGTH_S } from './daynight'
 import { Dino, clipNamesByModel, type Senses } from './dinos'
 import { SPECIES } from './species'
-import { Scatter, setLodBands } from './scatter'
+import { Scatter, setLodBands, type ScatterNode } from './scatter'
 import { Building, type PieceKind } from './building'
 import { Ruins } from './ruins'
 import { Keystones } from './keystones'
@@ -21,7 +21,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import { WorldBorder } from './border'
 import { HitFx } from './hit-fx'
-import { Kit } from './kit'
+import { Kit, ITEM_MODEL } from './kit'
 import { loadStoneTexture } from './stone-material'
 import { DinoImpostors } from './dino-impostors'
 import { Survival, FOODS, type FoodId } from './survival'
@@ -30,6 +30,7 @@ import { Inventory } from './inventory'
 import { Chests } from './chests'
 import { ITEMS, RECIPES, type ItemId } from './items'
 import { Hud } from './hud'
+import { HELD_SIZE } from './player'
 import { saveGame, loadGame, SAVE_VERSION, type SaveFile } from './save'
 import { heightAt, loadHeightmap, worldMeta, SPAWN, skyViewAt } from './heightmap'
 import { loadNavmesh, findPath } from './navmesh'
@@ -374,6 +375,13 @@ async function boot(): Promise<void> {
     hud.toast(`Crafted ${ITEMS[id].name}`)
     sfx.play('craft', { volume: 0.5 })
     return true
+  }
+  // the tool in your hand is a real object now (M48)
+  player.heldFactory = (id) => {
+    const file = ITEM_MODEL[id]
+    const size = HELD_SIZE[id]
+    if (!file || !size) return null
+    try { return kit.instance(file, { height: size }) } catch { return null }
   }
   const hud = new Hud(document.getElementById('hud')!, inventory, (id) => { craftItem(id) }, kit.icons)
   // the inventory releases the mouse (the panel has buttons); Tab or Esc or a
@@ -1100,6 +1108,24 @@ async function boot(): Promise<void> {
           }
         })
       },
+      /** QA: hit the nearest node of a kind N times, from anywhere (so the
+       *  camera can stand back and watch a tree come down) */
+      hitNode: (kind: string, times = 1, atX?: number, atZ?: number) => {
+        const from = atX !== undefined && atZ !== undefined ? { x: atX, z: atZ } : feetPos()
+        let best: ScatterNode | null = null
+        let bd = Infinity
+        for (const n of scatter.nodes) {
+          if (!n.alive || n.kind !== kind) continue
+          const d = Math.hypot(n.x - from.x, n.z - from.z)
+          if (d < bd) { bd = d; best = n }
+        }
+        if (!best) return null
+        let got: Partial<Record<ItemId, number>> | null = null
+        for (let i = 0; i < times && best.alive; i++) got = scatter.hit(best) ?? got
+        scatter.flushColliderDrops(physics)
+        return { x: Math.round(best.x), z: Math.round(best.z), hp: best.hp, alive: best.alive, got }
+      },
+      hitsDebug: () => scatter.debugHits(),
       nearestNodeInfo: (kind: string) => {
         const from = feetPos()
         let best: { x: number; z: number; scale: number; d: number } | null = null
@@ -1808,6 +1834,7 @@ async function boot(): Promise<void> {
     let tS = performance.now()
     scatter.ensureCollidersAround(focus.x, focus.z, physics)
     scatter.pumpColliders(physics)
+    scatter.updateHits(dt) // the wobble when you hit something, and felled trees going over
     // LOD bands and cover culling re-evaluate when the viewer has moved 3 m
     // (12K prop groups a frame was 2 ms of the same answer)
     {
@@ -1953,6 +1980,7 @@ async function boot(): Promise<void> {
         if (bd < 22 * 22) sfx.crackle(best, dt)
       }
     }
+    player.setHeldItem(riding ? null : inventory.held)
     hud.tick(dt, focus.x, focus.y, focus.z, daynight.time, playerHp, (-cam.yaw * 180) / Math.PI, survival)
     if (perfHud) perfTick(dt)
     frameCount++

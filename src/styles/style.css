@@ -1,4 +1,11 @@
 * { box-sizing: border-box; }
+/* THE HIDDEN ATTRIBUTE MUST WIN. The browser's own `[hidden] { display: none }`
+   is beaten by any ID rule that sets display — so `#hud-perf { display: flex }`
+   and `#hud-settings { display: flex }` left both panels on screen as empty
+   dark bars, one across the middle of the view and one in the top-right
+   corner, in every frame and every screenshot from M40 to M47 until the user
+   pointed at one (M48). */
+[hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; overflow: hidden; background: #10150f; }
 
 #app { position: fixed; inset: 0; }
