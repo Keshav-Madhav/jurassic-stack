@@ -34,7 +34,7 @@ import { Hud } from './hud'
 import { HELD_SIZE } from './player'
 import { saveGame, loadGame, SAVE_VERSION, type SaveFile } from './save'
 import { heightAt, loadHeightmap, worldMeta, SPAWN, skyViewAt } from './heightmap'
-import { loadNavmesh, findPath } from './navmesh'
+import { loadNavmesh, findPath, beginNavFrame, navStats, setNavBudget } from './navmesh'
 import { WaterSystem } from './water'
 import { wildPopulation } from './population'
 import { GrassField } from './grass'
@@ -1332,6 +1332,11 @@ async function boot(): Promise<void> {
       rigAlbedos: () => { const out: Record<string, string[]> = {}; for (const d of dinos) { if (out[d.species.id]) continue; const r = d.albedoReport(); if (r.length) out[d.species.id] = r } return out },
       rigMaterials: () => { const out: Record<string, string[]> = {}; for (const d of dinos) { if (out[d.species.id]) continue; const r = d.materialReport(); if (r.length) out[d.species.id] = r } return out },
       /** QA: draw state of the nearest dino of a species */
+      /** QA: what the path queries cost (tools/qa-trek.mjs) */
+      nav: () => ({ ...navStats }),
+      /** QA: the most expensive single dino update since the last read */
+      worstDino: () => { const o = { ...dinoWorst }; dinoWorst.ms = 0; return o },
+      setNavBudget: (n: number) => setNavBudget(n),
       dinoInfo: (id: string) => { const d = nearestDino(Infinity, (x) => x.species.id === id); return d ? d.drawInfo() : null },
       /** QA: every loaded dino's rendered height vs its species height — offenders beyond ±15% */
       sizeAudit: (tolerance = 0.15) => {
@@ -1595,7 +1600,7 @@ async function boot(): Promise<void> {
     // extension and returns a promise, so the shaders build while the game
     // keeps running; only the shadow frame and the impostor capture — one
     // render each — still land on the main thread.
-    Dino.onFirstRig = (id, model) => {
+    Dino.onFirstRig = (id, model, dino) => {
       const t = performance.now()
       model.updateMatrixWorld(true)
       // THE RIG IS HIDDEN UNTIL ITS SHADERS EXIST. renderer.compile(root, cam,
@@ -1619,9 +1624,17 @@ async function boot(): Promise<void> {
         // (M24). So the shadow frame drew nothing and the depth program was
         // left to compile in play, the first time one woke near you: a 120 ms
         // freeze with no new material in sight (M33). Attach it for the frame.
-        const obj = model.parent
-        const parked = obj !== null && obj.parent === null && Dino.scene !== null
-        if (parked) Dino.scene!.add(obj!)
+        //
+        // The attach used to be `const obj = model.parent; if (obj.parent ===
+        // null) scene.add(obj)` — and by the time this promise resolved,
+        // `setRig` had ALREADY detached the model from a dormant dino, so
+        // `model.parent` was null, `obj` was null, and nothing was attached.
+        // The shadow frame then drew no rig at all and the depth program was
+        // left exactly where M33 thought it had removed it from: in play, at
+        // ~150 ms of render in the frame the animal's shadow first appears
+        // (M55, named by tools/qa-compile.mjs's onBeforeShadow hook).
+        // `attachForWarmup()` has handled precisely this case since M34.
+        const undoAttach = dino.attachForWarmup()
         const saved = daynight.shadowFocus()
         const p = new THREE.Vector3()
         model.getWorldPosition(p)
@@ -1629,7 +1642,7 @@ async function boot(): Promise<void> {
         renderer.shadowMap.needsUpdate = true
         renderer.render(scene, cam.camera) // compiles the skinned DEPTH variant
         daynight.focusShadow(saved.x, saved.z)
-        if (parked) obj!.parent?.remove(obj!)
+        undoAttach?.()
         uploadTextures(model)
         // and the species' cross-card impostor for the mid band — then compile
         // it too, or its first appearance is a new program mid-frame (M30 spin)
@@ -1761,7 +1774,9 @@ async function boot(): Promise<void> {
   const senses: Senses = { awake, onHit: (x, y, z, heavy) => hitFx.burst(x, y, z, heavy) }
   const perfSec = { dinos: 0, scatter: 0, grass: 0, terrain: 0, physics: 0 }
   /** this frame's raw section times + the worst frame since the last read (the hitch hunt) */
-  const frameSec = { dinos: 0, scatter: 0, grass: 0, terrain: 0, physics: 0, uploads: 0, update: 0, render: 0, newProgs: 0, newTex: 0 }
+  const frameSec = { dinos: 0, dinoWorst: 0, nav: 0, scatter: 0, grass: 0, terrain: 0, physics: 0, uploads: 0, update: 0, render: 0, newProgs: 0, newTex: 0 }
+  /** the single most expensive dino update since the last read (QA) */
+  const dinoWorst = { ms: 0, species: '', state: '', dist: 0, dormant: false }
   let worstFrame: { ms: number; sec: typeof frameSec; z: number } | null = null
   // frame-time histogram for the jitter hunt: max / p95 since the last read
   const frameTimes: number[] = []
@@ -1857,15 +1872,34 @@ async function boot(): Promise<void> {
       return p
     }
     const tD0 = performance.now()
-    // dormant dinos only check for waking every 8th frame (staggered): 1500
-    // distance tests a frame were a millisecond of nothing happening
+    // the frame's path-query allowance is handed out fresh (navmesh.ts)
+    beginNavFrame()
+    // WHICH ANIMAL COST THE FRAME. `dinos` spikes to 25-40 ms while walking
+    // (M55, tools/qa-trek.mjs) and the section timer cannot say whether that
+    // is one animal doing something expensive or forty doing a little. One
+    // clock per update answers it; 80 performance.now() calls a frame is
+    // nothing against the thing being measured.
+    let worstOne = 0
+    let worstWho: Dino | null = null
     for (const d of dinos) {
       if (d.dormant && ((frameCount + d.index) & 7) !== 0) continue
+      const t = performance.now()
       d.update(dt, pFeet, hurtPlayer, senses)
+      const ms = performance.now() - t
+      if (ms > worstOne) { worstOne = ms; worstWho = d }
+    }
+    if (worstOne > dinoWorst.ms) {
+      dinoWorst.ms = worstOne
+      dinoWorst.species = worstWho?.species.id ?? ''
+      dinoWorst.state = worstWho?.state ?? ''
+      dinoWorst.dist = Math.round(worstWho ? worstWho.object.position.distanceTo(pFeet) : 0)
+      dinoWorst.dormant = worstWho?.dormant ?? false
     }
     hitFx.update(dt)
     perfSec.dinos = perfSec.dinos * 0.95 + (performance.now() - tD0) * 0.05
     frameSec.dinos = performance.now() - tD0
+    frameSec.nav = navStats.frameMs
+    frameSec.dinoWorst = worstOne
     // the AWAKE set once per frame — the pair loops below are n² and 1500²
     // with a `continue` per dormant dino was still a million iterations
     awake.length = 0

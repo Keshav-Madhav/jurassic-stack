@@ -49,7 +49,18 @@ await page.addInitScript(() => {
     Proto.linkProgram = function (program) {
       const w = window
       w.__links = w.__links ?? []
-      w.__links.push({ t: performance.now(), name: pending[0]?.name ?? '(unnamed)', type: pending[0]?.type ?? '?', defs: pending[0]?.defs ?? [] })
+      const who = w.__drawing
+      w.__links.push({
+        t: performance.now(),
+        name: pending[0]?.name ?? '(unnamed)',
+        type: pending[0]?.type ?? '?',
+        defs: pending[0]?.defs ?? [],
+        // WHO WAS BEING DRAWN. three fires onBeforeRender / onBeforeShadow
+        // immediately before the draw that forces the compile, so the object
+        // recorded there is the owner — the thing six rounds of guessing at H8
+        // never had (M55).
+        owner: who ? `${who.pass}: ${who.obj} · ${who.mat}${who.parent ? ` under ${who.parent}` : ''}` : '',
+      })
       pending = []
       return link.call(this, program)
     }
@@ -61,6 +72,28 @@ await page.addInitScript(() => {
 await page.goto(url, { waitUntil: 'networkidle' })
 await page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 60000 })
 await page.waitForTimeout(30000) // the load's own compiles, uploads and streaming
+
+// NAME THE OWNER. three fires Object3D.onBeforeShadow / onBeforeRender right
+// before the draw call that forces a compile, so whatever those last recorded
+// is the object whose material is being linked. Reach the prototype through a
+// live object — three is bundled, there is no global THREE.
+await page.evaluate(() => {
+  let proto = Object.getPrototypeOf(window.__g.scene)
+  while (proto && !Object.prototype.hasOwnProperty.call(proto, 'onBeforeShadow')) proto = Object.getPrototypeOf(proto)
+  if (!proto) { console.warn('qa-compile: no Object3D prototype found — owners will be blank'); return }
+  const tag = (o) => o.name || o.type || '?'
+  const slot = { pass: '', obj: '', mat: '', parent: '' }
+  window.__drawing = null
+  proto.onBeforeShadow = function (r, object) {
+    const m = Array.isArray(object.material) ? object.material[0] : object.material
+    slot.pass = 'shadow'; slot.obj = tag(object); slot.mat = m ? (m.name || m.type) : '—'; slot.parent = object.parent ? tag(object.parent) : ''
+    window.__drawing = slot
+  }
+  proto.onBeforeRender = function (r, scene, camera, geometry, material) {
+    slot.pass = 'main'; slot.obj = tag(this); slot.mat = material ? (material.name || material.type) : '—'; slot.parent = this.parent ? tag(this.parent) : ''
+    window.__drawing = slot
+  }
+})
 
 const mark = () => page.evaluate(() => { const n = (window.__links ?? []).length; window.__mark = n; return n })
 const since = () => page.evaluate(() => {
@@ -122,6 +155,7 @@ for (const [x, z] of LAP) {
     // is 80 lines of three boilerplate
     const tell = f.defs.filter((d) => /DEPTH_PACKING|SHADOWMAP$|INSTANCING|SKINNING|MORPHTARGETS$|ALPHATEST|USE_MAP|USE_FOG|USE_ENVMAP|VERTEX_COLORS|USE_ALPHAMAP|FLAT_SHADED|DOUBLE_SIDED|USE_TRANSMISSION/.test(d))
     console.log(`         ${f.type} · ${f.name}  [${tell.join(' ')}]`)
+    if (f.owner) console.log(`            drawn by ${f.owner}`)
     // WAS THIS MATERIAL ALREADY COMPILED, IN A DIFFERENT SHAPE? If so the
     // interesting thing is not the material but the DEFINE THAT CHANGED —
     // that is the flag whose value the warm-up got wrong.

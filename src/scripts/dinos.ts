@@ -9,7 +9,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import { heightAt, normalAt, SEA_LEVEL } from './heightmap'
 import { nearestObstacle } from './obstacles'
-import { findPath, type PathPoint } from './navmesh'
+import { findPath, takePathBudget, type PathPoint } from './navmesh'
 import { Mover, type MoverConfig } from './mover'
 import type { Physics } from './physics'
 import type { SpeciesDef } from './species'
@@ -104,7 +104,7 @@ export class Dino {
    *  rig, to compile its shaders and upload its textures before the rig is
    *  ever drawn (the 1500 rigs load over ~6 s after the scene's warm-up;
    *  a species' first appearance was a 150 ms compile stall — M18) */
-  static onFirstRig: ((speciesId: string, model: THREE.Object3D) => void) | null = null
+  static onFirstRig: ((speciesId: string, model: THREE.Object3D, dino: Dino) => void) | null = null
   /** main.ts hangs the sound bank here: `voice` is what the animal did, not
    *  which file to play — the mapping to samples lives with the mixer (sfx.ts) */
   static onVoice: ((voice: 'call' | 'roar' | 'hurt' | 'die' | 'eat', d: Dino) => void) | null = null
@@ -342,7 +342,7 @@ export class Dino {
     }
     if (Dino.onFirstRig && !Dino.warmed.has(this.species.id)) {
       Dino.warmed.add(this.species.id)
-      Dino.onFirstRig(this.species.id, model)
+      Dino.onFirstRig(this.species.id, model, this)
     }
     if (this.dormant) this.object.remove(model)
   }
@@ -1053,7 +1053,12 @@ export class Dino {
   private seekVia(target: THREE.Vector3, dt: number, speed: number): void {
     const pos = this.object.position
     this.repathT -= dt
-    if (this.repathT <= 0) {
+    // A recast query is milliseconds, and a herd that all turns at once used to
+    // run every one of them in the same frame — 25-40 ms of `dinos` in a frame
+    // with nothing on screen to explain it (M55, tools/qa-trek.mjs). The frame
+    // has a budget; an animal refused a slot KEEPS THE ROUTE IT HAS and asks
+    // again next frame, which is invisible, where forgetting the route is not.
+    if (this.repathT <= 0 && takePathBudget()) {
       this.repathT = 0.9 + Math.random() * 0.4
       const path = findPath(pos.x, pos.y, pos.z, target.x, target.y, target.z)
       this.waypoints = path ?? []
