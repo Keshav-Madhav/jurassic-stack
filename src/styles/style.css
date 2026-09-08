@@ -24,10 +24,26 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #10150f; }
 #hud { top: 10px; left: 12px; right: 12px; pointer-events: none; }
 #hud-stats { display: flex; gap: 18px; font-size: 13px; }
 #hud-stats span { background: rgba(0, 0, 0, 0.35); padding: 3px 9px; border-radius: 6px; }
+/* The gear: the visible way into the settings. A keyboard-only route through a
+   one-letter hint on the help line is not a route (M53). */
+#hud-gear {
+  position: fixed; top: 10px; right: 12px;
+  width: 30px; height: 30px; padding: 0; line-height: 1;
+  font-size: 15px; font-family: inherit; color: #e8f0e2;
+  background: rgba(0, 0, 0, 0.35); border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px; cursor: pointer; pointer-events: auto;
+  transition: background 0.14s, transform 0.14s, border-color 0.14s, opacity 0.18s;
+}
+/* Captured mouse, no cursor: a button you cannot point at should not sit there
+   looking clickable. It comes back the moment Esc gives the cursor back. */
+body.locked #hud-gear { opacity: 0; pointer-events: none; }
+#hud-gear:hover { background: rgba(255, 255, 255, 0.16); border-color: rgba(255, 255, 255, 0.3); transform: rotate(35deg); }
+#hud-gear:active { transform: rotate(35deg) scale(0.94); }
+
 /* F3: the frame budget, live. Deliberately plain and screenshot-legible —
    a player on another machine sends us this picture (PERFORMANCE.md). */
 #hud-perf {
-  position: fixed; top: 44px; right: 12px; width: 246px;
+  position: fixed; top: 48px; right: 12px; width: 246px;
   display: flex; flex-direction: column; gap: 1px;
   font-size: 11.5px; line-height: 1.5; font-variant-numeric: tabular-nums;
   background: rgba(0, 0, 0, 0.62); border: 1px solid rgba(255, 255, 255, 0.14);
@@ -224,4 +240,11 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #10150f; }
 #hud-settings .opt.on { background: rgba(242, 196, 106, 0.22); border-color: rgba(242, 196, 106, 0.6); color: #f7e7c4; }
 #hud-settings input[type=range] { width: 150px; accent-color: #d8aa5c; }
 #hud-settings .opts i { font-style: normal; font-size: 12px; opacity: 0.7; min-width: 42px; text-align: right; }
-#hud-settings .foot { margin: 4px 0 0; font-size: 11px; opacity: 0.42; }
+#hud-settings .foot { margin: 4px 0 0; font-size: 11px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+#hud-settings .foot span { opacity: 0.42; }
+#hud-settings .reset {
+  background: none; border: 1px solid rgba(255, 255, 255, 0.18); color: inherit;
+  font: inherit; font-size: 11px; padding: 3px 8px; border-radius: 6px; cursor: pointer;
+  opacity: 0.7; white-space: nowrap;
+}
+#hud-settings .reset:hover { opacity: 1; background: rgba(255, 255, 255, 0.12); }

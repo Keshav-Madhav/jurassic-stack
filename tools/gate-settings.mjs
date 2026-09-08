@@ -14,9 +14,40 @@ const browser = await chromium.launch({ channel: 'chrome', headless: true, args:
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } })
 page.on('pageerror', (e) => { console.error('[err]', e.message.slice(0, 160)); failed = true })
 const ready = () => page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 90000 })
-await page.goto(url, { waitUntil: 'networkidle' })
-await ready()
 const g = (expr) => page.evaluate(expr)
+await page.goto(url, { waitUntil: 'domcontentloaded' })
+
+// THE BOOT GATE (M53). The settings panel sits at z-index 12 and the boot card
+// at 20, so a hotkey pressed while "waking the animals…" was still up opened
+// the panel BEHIND the card: the player saw nothing happen, pressed the key
+// again to close it, and reported that settings was broken. Nothing may
+// respond until the world is up.
+await page.waitForFunction('!!document.getElementById("hud-settings")', null, { timeout: 60000 })
+if (await g('!!document.getElementById("boot")')) {
+  await page.keyboard.press('KeyO')
+  await page.waitForTimeout(300)
+  check(await g('document.getElementById("hud-settings").hidden'), 'O during the boot card does nothing')
+} else {
+  console.log('SKIP the boot card was already gone — no boot-gate check this run')
+}
+await ready()
+await page.waitForTimeout(800)
+check(await g('document.getElementById("hud-settings").hidden'), 'and the panel is still shut once the world is up')
+
+// THE GEAR. A one-letter hint on the help line is not a discoverable route to
+// the settings; a button is. It only offers itself when there is a cursor to
+// click it with — under pointer lock the mouse belongs to the camera.
+check(await g('!!document.getElementById("hud-gear")'), 'a settings gear is on the HUD')
+check(await g('getComputedStyle(document.getElementById("hud-gear")).opacity === "1"'), 'the gear is visible while the cursor is free')
+await page.click('#hud-gear')
+await page.waitForTimeout(400)
+check(await g('!document.getElementById("hud-settings").hidden'), 'clicking the gear opens the settings')
+await page.click('#hud-settings .close')
+await page.waitForTimeout(500)
+check(await g('!!document.pointerLockElement'), 'closing it puts the mouse back on the camera')
+check(await g('getComputedStyle(document.getElementById("hud-gear")).opacity === "0"'), 'and the gear stands down while the mouse is captured')
+await page.evaluate(() => document.exitPointerLock())
+await page.waitForTimeout(300)
 // row-aware: "Off" belongs to both Effects and Grass, and clicking the first
 // match turned the grass check into an effects check (M42)
 const click = (row, label) => page.evaluate(([r, t]) => {
@@ -87,6 +118,37 @@ check((await g('window.__g.post().enabled')) === false, 'effects off drops the c
 check(await click('Effects', 'Full'), 'and back to full')
 await page.waitForTimeout(600)
 check((await g('window.__g.post().enabled')) === true, 'the composer is back')
+
+// THE SLIDER DRAG. `set()` re-rendered the whole panel on every `input` event,
+// which replaced the very <input> the mouse was holding: the drag died on the
+// first pixel of travel and the knob snapped back, so volume, mouse speed and
+// field of view could only be nudged one click of the track at a time (M53).
+// Only a REAL DRAG catches this — dispatching `input` by hand, as the fov check
+// above does, works fine either way.
+const fovBox = await page.locator('#hud-settings input[data-key=fov]').boundingBox()
+await page.mouse.move(fovBox.x + fovBox.width * 0.1, fovBox.y + fovBox.height / 2)
+await page.mouse.down()
+for (let i = 1; i <= 10; i++) {
+  await page.mouse.move(fovBox.x + fovBox.width * (0.1 + i * 0.08), fovBox.y + fovBox.height / 2)
+  await page.waitForTimeout(25)
+}
+await page.mouse.up()
+await page.waitForTimeout(400)
+check((await g('window.__g.cam.fov')) >= 90, `a slider follows a real drag (fov ${await g('window.__g.cam.fov')}°)`)
+
+// and there is a way back out of every knob you have moved
+check(await g('!!document.querySelector("#hud-settings .reset")'), 'a changed setting offers a reset')
+await page.click('#hud-settings .reset')
+await page.waitForTimeout(700)
+check((await g('window.__g.cam.fov')) === 55, `reset puts the defaults back (fov ${await g('window.__g.cam.fov')}°)`)
+check(await g('!document.querySelector("#hud-settings .reset")'), 'and stops offering itself once nothing is changed')
+
+check(await g('!!window.__g.scene.getObjectByName("grass")'), 'reset brought the grass back too')
+await page.keyboard.press('Escape')
+await page.waitForTimeout(400)
+check(await g('document.getElementById("hud-settings").hidden'), 'Escape closes the panel')
+await page.keyboard.press('KeyO')
+await page.waitForTimeout(400)
 
 // --- a frozen scene must render an IDENTICAL frame every time, in every
 // effects configuration. With AO on, the composer's buffer ping-pong left the

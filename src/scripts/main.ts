@@ -89,6 +89,8 @@ async function boot(): Promise<void> {
   // F3: real GPU milliseconds (the JS render timer measures submit, not draw)
   const gpuTimer = new GpuTimer(renderer.getContext() as WebGL2RenderingContext)
   let perfHud = false
+  /** the world is up and the boot card is gone — see the keydown handler */
+  let bootDone = false
   let speciesWarmed = 0
   let gpuProbe = false
   let paused = false
@@ -417,6 +419,12 @@ async function boot(): Promise<void> {
     cam.sensitivity = v.sensitivity
     if (cam.camera.fov !== v.fov) { cam.camera.fov = v.fov; cam.camera.updateProjectionMatrix() }
   }
+  /** one door into the settings, for the key and the gear alike */
+  const openSettings = (): void => {
+    if (hud.panelOpen) hud.togglePanel()
+    settings.toggle()
+  }
+  hud.onGear = openSettings
   settings.onApply = (v) => { applySettings(v); sfx.play('ui-click', { volume: 0.3 }) }
   settings.onToggle = (open) => {
     hud.root?.classList.toggle('panel-open', open || hud.panelOpen)
@@ -457,10 +465,17 @@ async function boot(): Promise<void> {
     else renderer.domElement.requestPointerLock()
   }
   addEventListener('keydown', (e) => { if (e.code === 'Escape' && hud.panelOpen) hud.togglePanel() })
+  /** the mouse is captured: there is no cursor on screen, so nothing is clickable */
+  const syncLockClass = (): void => {
+    document.body.classList.toggle('locked', !!document.pointerLockElement)
+  }
   document.addEventListener('pointerlockchange', () => {
     // Esc in pointer lock exits the lock: show the cursor, and close the panel if it was open
     if (!document.pointerLockElement && hud.panelOpen) { /* keep it open — the user pressed Tab */ }
+    // the gear only offers itself when there is a pointer to click it with
+    syncLockClass()
   })
+  syncLockClass()
   const vignette = document.createElement('div')
   vignette.id = 'hud-vignette'
   document.body.appendChild(vignette)
@@ -865,15 +880,24 @@ async function boot(): Promise<void> {
   }
   let lastSpaceAt = 0
   addEventListener('keydown', (e) => {
+    // NOTHING RESPONDS UNTIL THE WORLD IS UP. The boot card sits at z-index 20
+    // and the settings panel at 12, so a curious player who pressed O while
+    // "waking the animals…" was still on screen opened the panel BEHIND the
+    // card, saw nothing happen, pressed O again to close it, and concluded
+    // settings was broken (user-reported, reproduced M53). Swallowing input
+    // during load is also just correct: a key press at a loading screen should
+    // never quietly change state you cannot see.
+    if (!bootDone) return
     if (e.code === 'F3') {
       e.preventDefault()
       perfHud = !perfHud
       if (!perfHud) hud.setPerf(null)
       return
     }
-    if (e.code === 'KeyO') {
-      if (hud.panelOpen) hud.togglePanel()
-      settings.toggle()
+    // `code` is the physical key, so this also works on AZERTY; `key` covers
+    // layouts where the O-labelled key sits elsewhere (Dvorak)
+    if (e.code === 'KeyO' || e.key === 'o' || e.key === 'O') {
+      openSettings()
       return
     }
     if (settings.open) { if (e.code === 'Escape') settings.close(); return }
@@ -1618,7 +1642,6 @@ async function boot(): Promise<void> {
   // to reach the front of a 200-deep queue added five seconds to the load
   const speciesTotal = new Set(dinos.filter((d) => !d.species.alpha).map((d) => d.species.id)).size
   const bootDeadline = performance.now() + 12000
-  let bootDone = false
   const bootTick = (): void => {
     if (bootDone) return
     const done = speciesWarmed >= speciesTotal || performance.now() > bootDeadline

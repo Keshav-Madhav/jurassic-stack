@@ -79,7 +79,22 @@ if (node) {
 
 // --- the animals ---
 const idx = await page.evaluate(() => { const p = window.__g.player(); return window.__g.game.spawnDino('raptor', p.x + 3, p.z - 2) })
-await page.waitForTimeout(2500)
+// WAIT UNTIL THE ANIMAL IS THERE. A freshly spawned dino is not walkable-to
+// the instant it exists, and on a loaded machine 2.5 s was not always enough:
+// the gate then swung at empty air, and `hit-flesh` was satisfied by a wild
+// body hitting the ground somewhere else on the island (Dino.onThud plays the
+// same sample). The check passed, its neighbour failed, and neither was
+// measuring what it said. Reach the animal first, and count DELTAS (M53).
+let reached = false
+for (let i = 0; i < 24 && !reached; i++) {
+  reached = await page.evaluate((k) => window.__g.game.gotoDinoIndex(k), idx)
+  if (!reached) await page.waitForTimeout(250)
+}
+check(reached, 'the spawned raptor is there to be walked up to')
+await page.waitForTimeout(700)
+const preHit = (await sfx()).plays
+const fleshWas = preHit['hit-flesh'] ?? 0
+const hurtWas = preHit['dino-hurt'] ?? 0
 // step to the animal before EVERY swing: a raptor that wanders two metres
 // while you wind up turns this check into a coin toss
 for (let i = 0; i < 5; i++) {
@@ -89,8 +104,10 @@ for (let i = 0; i < 5; i++) {
   await page.waitForTimeout(450)
 }
 s = await sfx()
-check((s.plays['hit-flesh'] ?? 0) > 0, 'hitting an animal lands in hide, not wood')
-check((s.plays['dino-hurt'] ?? 0) > 0, 'the animal answers when it is hit')
+const flesh = (s.plays['hit-flesh'] ?? 0) - fleshWas
+const hurt = (s.plays['dino-hurt'] ?? 0) - hurtWas
+check(flesh >= 3, `hitting an animal lands in hide, not wood (${flesh} of 5 swings)`)
+check(hurt >= 1, `the animal answers when it is hit (${hurt})`)
 
 // --- the interface ---
 await page.keyboard.press('Tab')

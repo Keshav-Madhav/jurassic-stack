@@ -32,6 +32,10 @@ export class Hud {
   onPanelToggle: ((open: boolean) => void) | null = null
   /** main.ts hangs the interface sounds here */
   onUi: ((what: 'open' | 'close' | 'click') => void) | null = null
+  /** the gear button — a route to the settings that is not a keyboard shortcut
+   *  nobody can see (M53: a player reported settings "wasn't opening" and the
+   *  only way in was one letter on a help line) */
+  onGear: (() => void) | null = null
   /** What the pack should show BESIDE the pack, asked for at render time:
    *  whether a workbench is in reach (the homestead recipes want one) and what
    *  the chest you are standing at holds (M39). */
@@ -49,6 +53,7 @@ export class Hud {
         <span id="hud-compass"></span>
         <span id="hud-mode" hidden>CREATIVE</span>
       </div>
+      <button id="hud-gear" title="Settings (O)" aria-label="Settings">⚙</button>
       <div id="hud-crosshair">·</div>
       <div id="hud-prompt"></div>
       <div id="hud-toast"></div>
@@ -81,6 +86,7 @@ export class Hud {
       if (this.panelOpen) this.renderPanel()
     }
     this.renderHotbar()
+    root.querySelector<HTMLButtonElement>('#hud-gear')!.addEventListener('click', () => this.onGear?.())
   }
 
   setCreative(on: boolean): void {

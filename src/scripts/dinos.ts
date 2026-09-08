@@ -539,6 +539,9 @@ export class Dino {
       return
     }
     if (this.torpor >= this.species.torporMax) {
+      // the blow that drops it is still a blow: an animal that goes down in
+      // silence reads as a bug, not a knockout (M53)
+      this.say('hurt')
       this.state = 'ko'
       this.foe = null
       this.playKo()

@@ -149,10 +149,20 @@ export class SettingsPanel {
     if (this.open) this.toggle()
   }
 
-  private set<K extends keyof SettingsValues>(key: K, value: SettingsValues[K]): void {
+  /** `rerender: false` for a slider mid-drag — see the listener for why */
+  private set<K extends keyof SettingsValues>(key: K, value: SettingsValues[K], rerender = true): void {
     this.values[key] = value
     save(this.values)
     this.onApply?.(this.values, key)
+    if (rerender) this.render()
+  }
+
+  /** Put everything back, and tell the game about every knob that moved. */
+  private resetAll(): void {
+    const moved = (Object.keys(DEFAULTS) as (keyof SettingsValues)[]).filter((k) => this.values[k] !== DEFAULTS[k])
+    Object.assign(this.values, DEFAULTS)
+    save(this.values)
+    for (const k of moved) this.onApply?.(this.values, k)
     this.render()
   }
 
@@ -170,9 +180,10 @@ export class SettingsPanel {
         <input type="range" data-key="${r.key}" min="${g.min}" max="${g.max}" step="${g.step}" value="${cur as number}">
         <i>${g.format(cur as number)}</i></div></div>`
     }).join('')
-    this.el.innerHTML = `<div class="panel-head"><h3>Settings</h3><button class="close" title="close (O)">✕</button></div>
+    const dirty = (Object.keys(DEFAULTS) as (keyof SettingsValues)[]).some((k) => this.values[k] !== DEFAULTS[k])
+    this.el.innerHTML = `<div class="panel-head"><h3>Settings</h3><button class="close" title="close (Esc or O)">✕</button></div>
       ${rows}
-      <p class="foot">F3 shows the frame budget · settings are remembered on this machine</p>`
+      <p class="foot"><span>F3 shows the frame budget · remembered on this machine</span>${dirty ? '<button class="reset">Reset to defaults</button>' : ''}</p>`
     this.el.querySelectorAll<HTMLButtonElement>('.opt').forEach((b) =>
       b.addEventListener('click', () => {
         const raw = b.dataset.value!
@@ -180,9 +191,25 @@ export class SettingsPanel {
         this.set(b.dataset.key as keyof SettingsValues, value as never)
       }),
     )
-    this.el.querySelectorAll<HTMLInputElement>('input[type=range]').forEach((i) =>
-      i.addEventListener('input', () => this.set(i.dataset.key as keyof SettingsValues, Number(i.value) as never)),
-    )
+    this.el.querySelectorAll<HTMLInputElement>('input[type=range]').forEach((i) => {
+      const key = i.dataset.key as keyof SettingsValues
+      const fmt = ROWS.find((r) => r.key === key)!.range!.format
+      const out = i.parentElement!.querySelector('i')!
+      i.addEventListener('input', () => {
+        const v = Number(i.value)
+        out.textContent = fmt(v)
+        // NEVER re-render on a drag. `render()` replaces the panel's innerHTML,
+        // which destroys the very slider the mouse is holding: the drag died on
+        // the first pixel of travel and the knob snapped back, so volume, mouse
+        // speed and field of view could only be nudged one step at a time by
+        // clicking the track (M53). Update the readout in place instead.
+        this.set(key, v as never, false)
+      })
+      // `change` lands on mouse-up: one full render then, to pick up anything
+      // the panel draws from the whole value set (the reset button)
+      i.addEventListener('change', () => this.render())
+    })
     this.el.querySelector<HTMLButtonElement>('.close')!.addEventListener('click', () => this.toggle())
+    this.el.querySelector<HTMLButtonElement>('.reset')?.addEventListener('click', () => this.resetAll())
   }
 }
