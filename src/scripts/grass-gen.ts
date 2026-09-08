@@ -22,6 +22,17 @@ const _q = new THREE.Quaternion()
 const _s = new THREE.Vector3()
 const _up = new THREE.Vector3(0, 1, 0)
 
+/** What colour the blade is, per biome — the plains and the wood keep exactly
+ *  the numbers they had; the dry and cold country stops pretending to be a
+ *  meadow (M56). Multiplied by the shade term, so these are ratios, not levels. */
+const TINT_DEFAULT: readonly [number, number, number] = [0.95, 1, 0.85]
+const TINT: Record<number, readonly [number, number, number]> = {
+  [BIOME.PLAINS]: [1.05, 1, 0.85],
+  [BIOME.DESERT]: [3.0, 1.15, 1.9], // straw. The card's TEXTURE is green, and instanceColor only multiplies it — cutting blue to 'dry' it just made acid green, because the texture has almost no blue to cut. Straw is made by lifting red AND blue against the green (M56).
+  [BIOME.ALPINE]: [1.3, 1.0, 1.35], // sage, and short
+  [BIOME.SWAMP]: [0.84, 1, 0.72], // deep olive
+}
+
 function underWater(x: number, z: number, h: number): boolean {
   const meta = worldMeta
   if (!meta) return false
@@ -88,7 +99,13 @@ export function buildGrassTile(tx: number, tz: number, spacing: number): { matri
       if (f > 0.2 && r3 > 0.45) continue
       if (normalAt(x, z, _n).y < 0.7) continue
       if (nearWater && underWater(x, z, h)) continue
-      const scale = 0.55 + r4 * 0.6
+      // A DUNE TUFT IS NOT A LAWN. Everything below used to grow the same
+      // lush green blade everywhere and only darken it by biome, so the
+      // desert read as a meadow that happened to be standing on sand (M56,
+      // from the walk shots). Dry country grows shorter, straw-coloured
+      // grass; the alpine's is short and sage; the swamp's is a deep olive.
+      const grow = biome === BIOME.DESERT ? 0.68 : biome === BIOME.ALPINE ? 0.82 : 1
+      const scale = (0.55 + r4 * 0.6) * grow
       _p.set(x, h - 0.04, z)
       _q.setFromAxisAngle(_up, r2 * Math.PI)
       _s.set(scale, scale * (0.8 + r1 * 0.5), scale)
@@ -97,10 +114,12 @@ export function buildGrassTile(tx: number, tz: number, spacing: number): { matri
       // plains lighter and yellower, woods darker
       if (caveAt(x, z, 4)) continue // no grass under a roof (M51)
       // the baked sky view again: grass in a hollow is grass in shade (M47)
-      const k = (biome === BIOME.PLAINS ? 0.85 + r4 * 0.25 : 0.55 + r4 * 0.35) * ambientAt(x, z)
-      colors[count * 3] = k * (biome === BIOME.PLAINS ? 1.05 : 0.95)
-      colors[count * 3 + 1] = k
-      colors[count * 3 + 2] = k * 0.85
+      const dry = biome === BIOME.DESERT
+      const tint = TINT[biome] ?? TINT_DEFAULT
+      const k = (dry ? 0.78 + r4 * 0.3 : biome === BIOME.PLAINS ? 0.85 + r4 * 0.25 : 0.55 + r4 * 0.35) * ambientAt(x, z)
+      colors[count * 3] = k * tint[0]
+      colors[count * 3 + 1] = k * tint[1]
+      colors[count * 3 + 2] = k * tint[2]
       count++
     }
   }

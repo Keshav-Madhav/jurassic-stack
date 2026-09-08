@@ -153,6 +153,39 @@ check(await g('window.__g.game.beaconLit()'), 'lit beacon survives reload')
   check(ks.some((k) => k.tag.startsWith('cave-')), `a cave holds a keystone (${ks.filter((k) => k.tag.startsWith('cave-')).map((k) => k.tag).join()})`)
 }
 
+// GRASS THAT KNOWS WHAT IT IS GROWING IN (M56). The dunes used to grow the
+// same lush meadow blade as the spawn valley — the loudest thing wrong in the
+// walk shots. Read the tint the field actually wrote to the GPU rather than
+// judging a screenshot: `instanceColor` multiplies a green card texture, so a
+// dry tuft is one whose red and blue are lifted well clear of its green.
+const tuftTint = async (x, z) => {
+  await page.evaluate(([px, pz]) => { window.__g.game.setGod(true); window.__g.teleport(px, pz) }, [x, z])
+  await page.waitForTimeout(5000)
+  return page.evaluate(([px, pz]) => {
+    const grass = window.__g.scene.getObjectByName('grass')
+    if (!grass) return null
+    let n = 0, r = 0, g = 0, b = 0
+    grass.traverse((o) => {
+      if (!o.isInstancedMesh || !o.instanceColor || !o.visible) return
+      const c = o.instanceColor.array, m = o.instanceMatrix.array
+      for (let i = 0; i < o.count; i++) {
+        if (Math.hypot(m[i * 16 + 12] - px, m[i * 16 + 14] - pz) > 40) continue
+        r += c[i * 3]; g += c[i * 3 + 1]; b += c[i * 3 + 2]; n++
+      }
+    })
+    return n ? { n, r: r / n, g: g / n, b: b / n } : null
+  }, [x, z])
+}
+const dune = await tuftTint(-900, 1250)
+const meadow = await tuftTint(-250, 1040)
+check(!!dune && dune.n > 50, `the dunes grow some grass at all (${dune?.n ?? 0} tufts)`)
+check(!!meadow && meadow.n > 500, `the plain grows a lot of it (${meadow?.n ?? 0} tufts)`)
+if (dune && meadow) {
+  check(dune.r / dune.g > 2, `a dune tuft is straw, not meadow (red/green ${(dune.r / dune.g).toFixed(2)})`)
+  check(dune.b / dune.g > 1.2, `and desaturated, not acid (blue/green ${(dune.b / dune.g).toFixed(2)})`)
+  check(meadow.r / meadow.g < 1.2 && meadow.b / meadow.g < 1, `the plain is still green (red/green ${(meadow.r / meadow.g).toFixed(2)}, blue/green ${(meadow.b / meadow.g).toFixed(2)})`)
+}
+
 await browser.close()
 console.log(failed ? '\nGATE FAILED' : '\nGATE PASSED')
 process.exit(failed ? 1 : 0)
