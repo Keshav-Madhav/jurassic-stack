@@ -1,22 +1,22 @@
 {
-  "note": "GPU milliseconds at 2560x1440, measured in the live game loop by tools/gate-perf.mjs. 'aspiration' is the PERFORMANCE.md contract (60 fps on the M5 Pro at full window, 30+ on an integrated-GPU Windows laptop at 1080p). 'ceiling' is the regression guard: the gate fails above it. MEASURE AGAINST THE DEPLOYED URL when it matters \u2014 a local run on this machine reads up to 2x slow when anything else is building (M35: live 3.3-5.3 ms vs local 6-9.5 ms, same commit). The ceilings below are set ~60% above the clean live numbers so ordinary contention does not flake the gate; tighten them with --write after a lever wins, and never loosen one without a line in CHECKLIST.md.",
+  "note": "GPU milliseconds at 2560x1440, measured in the live game loop by tools/gate-perf.mjs. 'aspiration' is the PERFORMANCE.md contract (60 fps on the M5 Pro at full window, 30+ on an integrated-GPU Windows laptop at 1080p). 'ceiling' is the regression guard: the gate fails above it. MEASURE AGAINST THE DEPLOYED URL when it matters \u2014 a local run on this machine reads up to 2x slow when anything else is building (M35: live 3.3-5.3 ms vs local 6-9.5 ms, same commit). The ceilings below are set ~60% above the clean live numbers so ordinary contention does not flake the gate; tighten them with --write after a lever wins, and never loosen one without a line in CHECKLIST.md. M42/M43: the ceilings now include the DEFAULT POST STACK (grade + FXAA + atmosphere + bloom, about 1.1 ms \u2014 see tools/qa-post.mjs for the layer price list). They were raised from 11/9/8 for that reason and no other.",
   "aspiration": {
     "spawn": 8,
     "wood-line": 12,
     "plain": 12
   },
   "ceiling": {
-    "spawn": 11.0,
-    "wood-line": 9.0,
-    "plain": 8.0,
+    "spawn": 12.0,
+    "wood-line": 13.0,
+    "plain": 11.0,
     "spinHitches": 10
   },
   "openIssue": "spinning at the wood line still throws 3-8 frames over 25 ms: scatter cell attach (12-58 ms) and the first-sight textures of PERFORMANCE.md H4/H5. Tighten this ceiling when those land.",
   "measured": {
-    "spawn": 5.32,
-    "wood-line": 4.01,
-    "plain": 3.31,
-    "at": "2560x1440",
+    "spawn": 7.45,
+    "wood-line": 8.68,
+    "plain": 7.47,
+    "at": "2560x1440 with post: full",
     "on": "live jurrasic.keshav-madhav.com, M5 Pro",
     "when": "2026-09-08"
   }

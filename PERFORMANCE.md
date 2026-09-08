@@ -149,8 +149,9 @@ The worst frame on the island is 31 ms of scatter CPU — the next thing to budg
 
 The budget was met, so the rule that said "not until it is" was satisfied and the look got its pass:
 a **grade** (split-tone warm shadows / cool highlights, saturation, vignette, all riding the day's
-curve), **FXAA**, and **bloom** on a threshold of 2.4 in LINEAR HDR so only fire, the beacon and the
-sun's disc bleed. Price list at 2560×1440 (`tools/qa-post.mjs`):
+curve), **FXAA**, **atmosphere** (height fog reconstructed from the depth the scene already wrote —
+thick in the hollows, thinning with altitude, brightening toward the sun) and **bloom** on a
+threshold of 2.4 in LINEAR HDR so only fire, the beacon and the sun's disc bleed. Price list at 2560×1440 (`tools/qa-post.mjs`):
 
 | | wood line | spawn |
 |---|---|---|

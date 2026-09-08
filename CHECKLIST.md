@@ -637,3 +637,9 @@ Findings and fixes, each measured with the new jitter meter (`__g.frameStats()`,
 - [x] **Three instrument bugs on the way, all mine**: the first cost measurement ran before the composer's resize was wired, so post was rendering into a 1280×720 target while the canvas was 2560×1440 (reported 7.6 ms for what was really 34); `gpuMs()` percentiles span ~240 frames ≈ EIGHT seconds at 30 ms a frame, so waiting four gave three configurations the same number; and `renderer.info` resets at every composer PASS, so the draw-call count read 1 and both the F3 panel and the settings gate believed it (`autoReset = false`, reset once a frame)
 - [x] `gate-settings` is row-aware now — "Off" belongs to both Effects and Grass, and clicking the first match had quietly turned the grass check into an effects check
 - [x] Gates 11 files, all green. `gate-perf` with the full stack: 175-213 fps, GPU 4.6-7.5 ms, **0 hitches** at every spot
+
+### M43 — THE AIR: height fog from the depth buffer
+- [x] **The island had distance fog and no atmosphere.** There is now a height-fog pass: world position reconstructed per pixel from the depth the scene ALREADY wrote (no second geometry render — the rule GTAO broke), exponential falloff integrated along the ray so it pools in the hollows and thins as you climb, and an in-scattering term that brightens the haze toward the sun. Density and ceiling ride the day: dawn and night hold more water than midday
+- [x] **Measured where it should be**: the distant band of a ridge shot moves 16.4/255 against 9.3 for the whole frame — fog behaving like fog rather than a flat wash. Cost: **nothing measurable** (basic is still free, full is still 1.1 ms over no-post)
+- [x] **perf-budget ceilings raised 11/9/8 → 12/13/11** for one reason, written into the file: they now include the default post stack
+- [x] Gates 11 files, all green

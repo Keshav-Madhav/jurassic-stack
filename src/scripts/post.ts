@@ -7,6 +7,9 @@
 //
 //  · BLOOM, on a high threshold, so the fires, the beacon and the sun bleed
 //    light and nothing else does.
+//  · ATMOSPHERE — height fog that pools in the hollows, thins as you climb and
+//    glows toward the sun, reconstructed from the depth the scene already
+//    wrote. No second geometry pass, which is the rule the AO broke.
 //  · A GRADE — a warm-shadow / cool-highlight split, a little saturation, and
 //    a vignette — that runs on a curve with the time of day, so noon, dusk and
 //    a moonlit night are one family rather than three exposures.
@@ -77,10 +80,88 @@ const GradeShader = {
     }`,
 }
 
+/** Height fog, from the depth buffer. World position is reconstructed per
+ *  pixel from depth and the inverse view-projection; the fog thickens with
+ *  distance and with how low the ground is, and picks up the sun's colour
+ *  where you are looking toward it — the cheap half of aerial perspective, and
+ *  the half that reads. */
+const AirShader = {
+  uniforms: {
+    tDiffuse: { value: null as THREE.Texture | null },
+    tDepth: { value: null as THREE.Texture | null },
+    invViewProj: { value: new THREE.Matrix4() },
+    camPos: { value: new THREE.Vector3() },
+    sunDir: { value: new THREE.Vector3(0, 1, 0) },
+    fogColor: { value: new THREE.Color(0.55, 0.66, 0.78) },
+    sunColor: { value: new THREE.Color(1, 0.86, 0.62) },
+    density: { value: 0.0016 },
+    heightFalloff: { value: 0.028 },
+    baseHeight: { value: 2.0 },
+    maxFog: { value: 0.82 },
+    near: { value: 0.6 },
+    far: { value: 1600 },
+  },
+  vertexShader: /* glsl */ `
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+    }`,
+  fragmentShader: /* glsl */ `
+    uniform sampler2D tDiffuse;
+    uniform sampler2D tDepth;
+    uniform mat4 invViewProj;
+    uniform vec3 camPos;
+    uniform vec3 sunDir;
+    uniform vec3 fogColor;
+    uniform vec3 sunColor;
+    uniform float density;
+    uniform float heightFalloff;
+    uniform float baseHeight;
+    uniform float maxFog;
+    uniform float near;
+    uniform float far;
+    varying vec2 vUv;
+
+    void main() {
+      vec4 src = texture2D( tDiffuse, vUv );
+      float d = texture2D( tDepth, vUv ).x;
+      // the sky (depth 1) keeps its own colour: the fog belongs to the land
+      if ( d >= 0.9999 ) { gl_FragColor = src; return; }
+
+      vec4 clip = vec4( vUv * 2.0 - 1.0, d * 2.0 - 1.0, 1.0 );
+      vec4 world = invViewProj * clip;
+      vec3 pos = world.xyz / world.w;
+
+      vec3 toPixel = pos - camPos;
+      float dist = length( toPixel );
+      vec3 dir = toPixel / max( dist, 0.0001 );
+
+      // exponential height fog, integrated along the ray (the standard closed
+      // form): thick in the hollows, thin on the ridges
+      float hCam = max( camPos.y - baseHeight, -50.0 );
+      float hDir = dir.y;
+      float fogAmount;
+      if ( abs( hDir ) < 0.0001 ) {
+        fogAmount = density * dist * exp( -heightFalloff * hCam );
+      } else {
+        fogAmount = ( density / heightFalloff ) * exp( -heightFalloff * hCam ) * ( 1.0 - exp( -heightFalloff * hDir * dist ) ) / hDir;
+      }
+      float f = clamp( 1.0 - exp( -max( fogAmount, 0.0 ) ), 0.0, maxFog );
+
+      // looking toward the sun, the haze glows: in-scattering, approximated
+      float sunAmount = max( dot( dir, sunDir ), 0.0 );
+      vec3 air = mix( fogColor, sunColor, pow( sunAmount, 6.0 ) * 0.65 );
+
+      gl_FragColor = vec4( mix( src.rgb, air, f ), src.a );
+    }`,
+}
+
 export class Post {
   readonly composer: EffectComposer
   private renderPass: RenderPass
   private bloom: UnrealBloomPass
+  private air: ShaderPass
   private grade: ShaderPass
   private fxaa: ShaderPass
   private output: OutputPass
@@ -97,6 +178,9 @@ export class Post {
     // edges are handled by FXAA at the end instead, for about 0.3 (M42 price
     // list, tools/qa-post.mjs). Half-float is kept: bloom needs the HDR.
     const target = new THREE.WebGLRenderTarget(size.x, size.y, { type: THREE.HalfFloatType })
+    // the depth the scene already wrote, kept for the atmosphere pass — no
+    // second geometry render, which is the rule GTAO broke (M42)
+    target.depthTexture = new THREE.DepthTexture(size.x, size.y, THREE.UnsignedIntType)
     this.composer = new EffectComposer(renderer, target)
     this.renderPass = new RenderPass(scene, camera)
     this.composer.addPass(this.renderPass)
@@ -112,6 +196,13 @@ export class Post {
 
     this.output = new OutputPass()
     this.composer.addPass(this.output)
+
+    // ATMOSPHERE. Height fog that pools in the low ground and thins as you
+    // climb, brightening toward the sun — the depth buffer the scene already
+    // wrote is all it needs (M43).
+    this.air = new ShaderPass(AirShader)
+    this.air.material.uniforms.tDepth.value = target.depthTexture
+    this.composer.addPass(this.air)
 
     this.grade = new ShaderPass(GradeShader)
     this.composer.addPass(this.grade)
@@ -132,6 +223,8 @@ export class Post {
     this.w = w
     this.h = h
     this.composer.setSize(w, h)
+    const dt2 = (this.composer.renderTarget1 as THREE.WebGLRenderTarget).depthTexture
+    if (dt2) { dt2.image.width = w; dt2.image.height = h; dt2.needsUpdate = true }
     this.bloom.setSize(w, h)
     this.setFxaaSize(w, h)
   }
@@ -153,12 +246,32 @@ export class Post {
   setQuality(q: PostQuality): void {
     this.quality = q
     this.bloom.enabled = q === 'full'
+    this.air.enabled = q !== 'off'
     this.grade.enabled = q !== 'off'
     this.fxaa.enabled = q !== 'off'
   }
 
   get enabled(): boolean {
     return this.quality !== 'off'
+  }
+
+  /** Feed the atmosphere pass the camera it is reconstructing from, and the
+   *  day's colours. Called once a frame, before render(). */
+  air_update(camera: THREE.PerspectiveCamera, sunDir: THREE.Vector3, fog: THREE.Color, sun: THREE.Color, nightness: number): void {
+    const u = this.air.material.uniforms
+    camera.updateMatrixWorld()
+    ;(u.invViewProj.value as THREE.Matrix4)
+      .multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
+      .invert()
+    ;(u.camPos.value as THREE.Vector3).copy(camera.position)
+    ;(u.sunDir.value as THREE.Vector3).copy(sunDir).normalize()
+    ;(u.fogColor.value as THREE.Color).copy(fog)
+    ;(u.sunColor.value as THREE.Color).copy(sun)
+    u.near.value = camera.near
+    u.far.value = camera.far
+    // dawn and night hold more water in the air than midday does
+    u.density.value = THREE.MathUtils.lerp(0.0013, 0.0026, nightness)
+    u.maxFog.value = THREE.MathUtils.lerp(0.8, 0.62, nightness)
   }
 
   /** The grade rides the day: warm and open at noon, amber at dusk, cool and

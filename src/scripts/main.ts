@@ -1958,6 +1958,7 @@ async function boot(): Promise<void> {
     if (perfHud || gpuProbe) { gpuTimer.poll(); gpuTimer.begin() }
     if (post.enabled) {
       post.gradeFor(daynight.nightness, daynight.keyColor)
+      post.air_update(cam.camera, daynight.keyDir, (scene.fog as THREE.Fog).color, daynight.keyColor, daynight.nightness)
       post.render()
     } else {
       renderer.render(scene, cam.camera)
