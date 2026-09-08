@@ -68,9 +68,14 @@ const GradeShader = {
     void main() {
       vec4 c = texture2D( tDiffuse, vUv );
       float lum = dot( c.rgb, vec3( 0.2126, 0.7152, 0.0722 ) );
-      // split tone: shadows one way, highlights the other, hinged on luminance
+      // split tone: shadows one way, highlights the other, hinged on luminance.
+      // The tint is NORMALISED to its own luminance first, so this shifts hue
+      // and nothing else — the first cut multiplied by tint*2 and quietly
+      // brightened every highlight 18%, which on a noon beach was a whiteout
+      // (M45).
       vec3 tint = mix( shadowTint, highlightTint, smoothstep( 0.15, 0.75, lum ) );
-      c.rgb = mix( c.rgb, c.rgb * tint * 2.0, strength );
+      tint /= max( dot( tint, vec3( 0.2126, 0.7152, 0.0722 ) ), 0.0001 );
+      c.rgb = mix( c.rgb, c.rgb * tint, strength );
       c.rgb = mix( vec3( lum ), c.rgb, saturation );
       c.rgb += lift * ( 1.0 - lum );            // a little air in the darks
       // vignette: darken the corners, never the middle
@@ -201,11 +206,17 @@ export class Post {
     // midday sky (5-20 in linear) bloomed as one white sheet and the first
     // screenshot came back unreadable. 2.4 lets fire, the beacon and the sun's
     // own disc through and nothing else (M42)
-    this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.32, 0.65, 2.4)
-    this.composer.addPass(this.bloom)
-
     this.output = new OutputPass()
     this.composer.addPass(this.output)
+
+    // BLOOM AFTER TONE MAPPING, on purpose. In linear HDR the threshold has no
+    // stable meaning — a sunlit beach sits far above any value that still
+    // catches a campfire, and at 2.4 and even 3.6 the whole shore bloomed
+    // white (M45). In display space "bright" means what it looks like: 0.86
+    // catches fire cores, the beacon and the sun's disc, and leaves lit sand
+    // alone.
+    this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.5, 0.5, 0.95)
+    this.composer.addPass(this.bloom)
 
     // ATMOSPHERE. Height fog that pools in the low ground and thins as you
     // climb, brightening toward the sun — the depth buffer the scene already
@@ -241,9 +252,11 @@ export class Post {
   }
 
   /** QA: drive one layer at a time while tuning (tools/_post.mjs) */
-  debugSet(layer: 'bloom' | 'grade', on: boolean): void {
+  debugSet(layer: 'bloom' | 'grade' | 'air' | 'fxaa', on: boolean): void {
     if (layer === 'bloom') this.bloom.enabled = on
     if (layer === 'grade') this.grade.enabled = on
+    if (layer === 'air') this.air.enabled = on
+    if (layer === 'fxaa') this.fxaa.enabled = on
   }
 
   /** QA: bloom knobs, for tuning against HDR values rather than guesses */
@@ -288,9 +301,13 @@ export class Post {
     ;(u.sunColor.value as THREE.Color).copy(sun)
     u.near.value = camera.near
     u.far.value = camera.far
-    // dawn and night hold more water in the air than midday does
-    u.density.value = THREE.MathUtils.lerp(0.0013, 0.0026, nightness)
-    u.maxFog.value = THREE.MathUtils.lerp(0.8, 0.62, nightness)
+    // dawn and night hold more water in the air than midday does.
+    // KEPT LOW ON PURPOSE: the materials already carry three's distance fog,
+    // and this pass only adds the HEIGHT gradient and the sun glow on top. At
+    // 0.0013 the two together turned a noon sea — a flat surface at eye level,
+    // which is "infinitely far" everywhere — into one white sheet (M45).
+    u.density.value = THREE.MathUtils.lerp(0.0006, 0.0014, nightness)
+    u.maxFog.value = THREE.MathUtils.lerp(0.6, 0.5, nightness)
   }
 
   /** The grade rides the day: warm and open at noon, amber at dusk, cool and
@@ -307,6 +324,9 @@ export class Post {
     u.saturation.value = THREE.MathUtils.lerp(1.07, 0.9, nightness)
     u.vignette.value = THREE.MathUtils.lerp(0.2, 0.34, nightness)
     u.lift.value = THREE.MathUtils.lerp(0, 0.02, nightness)
+    // bloom belongs to the night (see the constructor)
+    this.bloom.strength = THREE.MathUtils.lerp(0.1, 0.62, nightness)
+    this.bloom.threshold = THREE.MathUtils.lerp(0.985, 0.8, nightness)
     // AO is firmer in daylight and nearly gone under moonlight, where there is
     // no key light for anything to occlude
     this.gtao.blendIntensity = THREE.MathUtils.lerp(0.85, 0.3, nightness)

@@ -85,6 +85,13 @@ Vercel. **No React, no framework.**
   `--disable-gpu-vsync --disable-frame-rate-limit` or every frame reads 16.7 ms. And nothing is warm
   for 30 seconds: spawn reads 11 ms until then and 6.5 ms after. `tools/qa-gpu.mjs`,
   `tools/gate-perf.mjs` and `tools/qa-hitch.mjs` all do this; see PERFORMANCE.md.
+- **Bake it, then blend it** (M45): the environment map is eight PMREMs baked at load and mixed two at
+  a time, because a PMREM is a packed 2D texture and blending two of them needs no re-filtering. That
+  is the pattern for anything that changes slowly and costs a lot to compute — precompute a few
+  states, interpolate between them, never recompute per frame.
+- **This game's noon sky is ~0.95 in display space**, so any fixed bloom threshold blooms the sky and
+  washes the frame. Bloom rides `nightness`. Check any new full-screen effect at NOON ON THE BEACH —
+  it is the brightest frame in the game and it has caught three separate mistakes.
 - **The frame goes through the composer** (M42, `post.ts`): grade + FXAA + bloom, switchable in
   settings. Two traps it cost to learn: `renderer.info` resets at every PASS, so read it once a frame
   with `autoReset = false` (or the draw-call count is 1); and `gpuMs()` percentiles cover ~240

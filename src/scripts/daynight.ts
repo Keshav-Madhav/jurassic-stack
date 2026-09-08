@@ -10,6 +10,7 @@
 // PMREM environment map whenever the sun has moved enough to matter.
 import * as THREE from 'three'
 import { Sky } from 'three/addons/objects/Sky.js'
+import { SkyEnvironment } from './sky-env'
 
 export const DAY_LENGTH_S = 600 // one full day-night in 10 real minutes
 
@@ -143,8 +144,8 @@ export class DayNight {
   private rimLight = new THREE.DirectionalLight(0xff5588)
   private hemi = new THREE.HemisphereLight()
   private sunDir = new THREE.Vector3()
-  private pmrem: THREE.PMREMGenerator
-  private envTarget: THREE.WebGLRenderTarget | null = null
+  /** eight skies baked at load, blended through the day (M45) */
+  readonly env: SkyEnvironment
   /** THE SKY IS BAKED, NOT SHADED (PERFORMANCE.md lever D). The Sky addon is
    *  per-pixel Rayleigh/Mie scattering — ~1.1 ms of a 6.5 ms frame at
    *  2560×1440 (the M31 profile) for a sun that moves a quarter of a degree a
@@ -205,7 +206,7 @@ export class DayNight {
     // to pastel. IBL is a subtle fill here, the direct lights carry the look.
     scene.environmentIntensity = 0.13
     renderer.toneMapping = THREE.ACESFilmicToneMapping
-    this.pmrem = new THREE.PMREMGenerator(renderer)
+    this.env = new SkyEnvironment(renderer)
   }
 
   advance(dt: number): void {
@@ -282,6 +283,34 @@ export class DayNight {
   /** Sun elevation in degrees (negative at night). */
   get sunElevationDeg(): number {
     return Math.sin((this.time - 0.25) * Math.PI * 2) * 78
+  }
+
+  /** The sky's own parameters at a time of day — the live sky and the eight
+   *  baked environments read the same curve, so a reflection and the sky it
+   *  reflects can never disagree (M45). */
+  skyParamsAt(time: number): { sunPosition: THREE.Vector3; turbidity: number; rayleigh: number } {
+    const elev = Math.sin((time - 0.25) * Math.PI * 2) * 78
+    const azimuth = (time - 0.25) * Math.PI * 2 * 0.5 + Math.PI * 0.15
+    let grade: Grade
+    if (elev >= 30) grade = lerpGrade(NOON, NOON, 0, scratch)
+    else if (elev >= 2) grade = lerpGrade(GOLDEN, NOON, (elev - 2) / 28, scratch)
+    else grade = lerpGrade(GOLDEN, NIGHT, THREE.MathUtils.clamp((2 - elev) / 12, 0, 1), scratch)
+    const nightness = THREE.MathUtils.clamp((2 - elev) / 12, 0, 1)
+    const skyElev = elev >= 2
+      ? elev + 3.5 * (1 - THREE.MathUtils.smoothstep(elev, 2, 30))
+      : THREE.MathUtils.lerp(5.5, -1.5, THREE.MathUtils.smoothstep(nightness, 0.35, 1))
+    const e = THREE.MathUtils.degToRad(skyElev)
+    return {
+      sunPosition: new THREE.Vector3(Math.cos(e) * Math.sin(azimuth), Math.sin(e), Math.cos(e) * Math.cos(azimuth)),
+      turbidity: grade.turbidity,
+      rayleigh: grade.rayleigh,
+    }
+  }
+
+  /** Bake the day's environments (once, at load, behind the boot card). */
+  bakeEnvironments(): void {
+    this.env.bake((t) => this.skyParamsAt(t))
+    if (this.env.texture) this.scene.environment = this.env.texture
   }
 
   private apply(): void {
@@ -367,23 +396,12 @@ export class DayNight {
       this.renderer.setRenderTarget(prevTarget)
     }
 
-    // the environment map is baked ONCE, from a mid-morning sky, and only its
-    // intensity follows the day. It used to re-bake every 3° of sun — every
-    // ~5 s of the 10-minute day — and each bake was both a 20–40 ms stall and
-    // a visible jump in every reflection (the water most of all): the
-    // "flashing" (user, M19). The sun light itself still carries the colour.
-    if (!this.envTarget) {
-      const skyOnly = new THREE.Scene()
-      const skyClone = this.sky.clone()
-      const su = (skyClone.material as THREE.ShaderMaterial).uniforms
-      su.sunPosition.value.set(0.55, 0.62, 0.55)
-      su.turbidity.value = 3
-      su.rayleigh.value = 1.2
-      skyOnly.add(skyClone)
-      this.envTarget = this.pmrem.fromScene(skyOnly as unknown as THREE.Scene, 0, 0.1, 1000)
-      this.scene.environment = this.envTarget.texture
-      skyOnly.remove(skyClone)
-    }
+    // THE ENVIRONMENT FOLLOWS THE DAY (M45). Eight skies are baked at load and
+    // the two either side of now are blended — a full-screen mix of two 2D
+    // images, because a PMREM is a packed 2D texture and not a live cubemap,
+    // so nothing is re-filtered. M19's re-bake cost 20-40 ms and jumped; this
+    // costs one quad and moves continuously.
+    this.env.update(this.time)
     this.scene.environmentIntensity = THREE.MathUtils.lerp(0.13, 0.025, this.nightness)
   }
 }

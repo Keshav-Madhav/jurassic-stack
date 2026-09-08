@@ -996,6 +996,8 @@ async function boot(): Promise<void> {
     },
     /** QA: the post stack, one layer at a time */
     post: () => post,
+    /** QA: the day's baked environments and where the blend sits */
+    envDebug: () => daynight.env.debug(),
     setPixelRatio: (r: number) => { adaptive = false; pixelRatio = r; renderer.setPixelRatio(r); renderer.setSize(innerWidth, innerHeight); const s2 = renderer.getDrawingBufferSize(new THREE.Vector2()); post.setSize(s2.x, s2.y) },
     pixelRatio: () => pixelRatio,
     setAdaptive: (on: boolean) => { adaptive = on },
@@ -1379,6 +1381,9 @@ async function boot(): Promise<void> {
   // compile pass + one shadow-mapped frame for the depth variants.
   {
     const t0 = performance.now()
+    // the day's eight environment maps, baked here so the first frame already
+    // has the right sky in every reflection (M45)
+    daynight.bakeEnvironments()
     // THE SCENE MUST BE IN ITS FINAL LIGHTING STATE BEFORE ANYTHING COMPILES.
     // `scene.environment` is part of every material's program cache key, and
     // DayNight only sets it on its first apply() — which happened in the first
