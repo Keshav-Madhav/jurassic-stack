@@ -4,6 +4,13 @@
 import { ITEMS, RECIPES, type ItemId } from './items'
 import type { Inventory } from './inventory'
 
+/** chest rows: same shape as the pack's, but they move the other way */
+function chest_rows(items: [ItemId, number][], icon: (id: ItemId, cls: string) => string): string {
+  return items
+    .map(([id, n]) => `<span class="res movable" data-move="${id}" title="click to take · shift-click for all">${icon(id, 'sm')}<span>${ITEMS[id].name}</span><i>× ${n}</i></span>`)
+    .join('')
+}
+
 export class Hud {
   private fpsEl: HTMLElement
   private posEl: HTMLElement
@@ -25,6 +32,12 @@ export class Hud {
   onPanelToggle: ((open: boolean) => void) | null = null
   /** main.ts hangs the interface sounds here */
   onUi: ((what: 'open' | 'close' | 'click') => void) | null = null
+  /** What the pack should show BESIDE the pack, asked for at render time:
+   *  whether a workbench is in reach (the homestead recipes want one) and what
+   *  the chest you are standing at holds (M39). */
+  panelContext: (() => { bench: boolean; chest: [ItemId, number][] | null }) | null = null
+  /** move one item (or the whole pile, with shift) between pack and chest */
+  onChestMove: ((id: ItemId, dir: 'in' | 'out', all: boolean) => void) | null = null
 
   constructor(private root: HTMLElement, private inv: Inventory, private onCraft: (id: ItemId) => void, private icons: Map<ItemId, string> = new Map()) {
     root.innerHTML = `
@@ -211,23 +224,44 @@ export class Hud {
   }
 
   private renderPanel(): void {
+    const ctx = this.panelContext?.() ?? { bench: false, chest: null }
     const rows = (Object.keys(ITEMS) as ItemId[])
       .filter((id) => this.inv.count(id) > 0)
-      .map((id) => `<span class="res" title="${ITEMS[id].name}">${this.icon(id, 'sm')}<span>${ITEMS[id].name}</span><i>× ${this.inv.count(id)}</i></span>`)
+      .map((id) => `<span class="res${ctx.chest ? ' movable' : ''}" data-move="${id}" title="${ctx.chest ? 'click to store · shift-click for all' : ITEMS[id].name}">${this.icon(id, 'sm')}<span>${ITEMS[id].name}</span><i>× ${this.inv.count(id)}</i></span>`)
       .join('')
     const recipes = RECIPES.map((r) => {
-      const ok = this.inv.canCraft(r)
+      const locked = r.bench === true && !ctx.bench
+      const ok = this.inv.canCraft(r) && !locked
       const cost = Object.entries(r.cost)
         .map(([id, n]) => `<span class="cost ${this.inv.count(id as ItemId) >= (n ?? 0) ? '' : 'short'}" title="${ITEMS[id as ItemId].name}">${this.icon(id as ItemId, 'xs')}${n}</span>`)
         .join('')
-      return `<button class="recipe" data-id="${r.output}" ${ok ? '' : 'disabled'}>
-        ${this.icon(r.output)}<span class="name">${ITEMS[r.output].name}${r.count > 1 ? ` ×${r.count}` : ''}</span><small>${cost}</small></button>`
+      return `<button class="recipe${locked ? ' locked' : ''}" data-id="${r.output}" ${ok ? '' : 'disabled'} title="${locked ? 'needs a workbench in reach' : ITEMS[r.output].name}">
+        ${this.icon(r.output)}<span class="name">${ITEMS[r.output].name}${r.count > 1 ? ` ×${r.count}` : ''}</span><small>${locked ? '<span class="cost short">🛠️ workbench</span>' : cost}</small></button>`
     }).join('')
+    const chest = ctx.chest
+      ? `<h3>Chest</h3><div class="resources chest">${
+          chest_rows(ctx.chest, (id, cls) => this.icon(id, cls)) || '<span class="res"><span>empty</span></span>'
+        }</div>`
+      : ''
     this.panelEl.innerHTML = `<div class="panel-head"><h3>Inventory</h3><button class="close" title="close (Tab / Esc)">✕</button></div><div class="resources">${rows || '<span class="res"><span>empty-handed</span></span>'}</div>
+      ${chest}
       <h3>Craft</h3><div class="recipes">${recipes}</div>`
     this.panelEl.querySelectorAll<HTMLButtonElement>('.recipe').forEach((b) =>
       b.addEventListener('click', () => { this.onUi?.('click'); this.onCraft(b.dataset.id as ItemId) }),
     )
+    if (ctx.chest) {
+      this.panelEl.querySelectorAll<HTMLElement>('.resources:not(.chest) [data-move]').forEach((el) =>
+        el.addEventListener('click', (e) => { this.onUi?.('click'); this.onChestMove?.(el.dataset.move as ItemId, 'in', (e as MouseEvent).shiftKey) }),
+      )
+      this.panelEl.querySelectorAll<HTMLElement>('.resources.chest [data-move]').forEach((el) =>
+        el.addEventListener('click', (e) => { this.onUi?.('click'); this.onChestMove?.(el.dataset.move as ItemId, 'out', (e as MouseEvent).shiftKey) }),
+      )
+    }
     this.panelEl.querySelector<HTMLButtonElement>('.close')!.addEventListener('click', () => this.togglePanel())
+  }
+
+  /** the panel is open and something changed under it (a chest transfer) */
+  refreshPanel(): void {
+    if (this.panelOpen) this.renderPanel()
   }
 }

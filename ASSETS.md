@@ -120,7 +120,12 @@ icon is the thing.
 
 | Kit file | Source | Licence | Used as |
 |---|---|---|---|
-| kenney-campfire-pit / floor / fence-fortified / structure / structure-floor / structure-roof / fence / tool-axe / tree-log / resource-wood / resource-stone / resource-planks / workbench / chest / bedroll / tent | Kenney Survival Kit 2.0 (kenney.nl/assets/survival-kit) | CC0 | campfire · foundation + ceiling (floor planks) · wall (fortified fence) · wood (tree-log) · stone · saddle (bedroll, stand-in) · rest held for later buildables |
+| kenney-campfire-pit / floor / fence-fortified / structure / structure-floor / structure-roof / fence / tool-axe / tree-log / resource-wood / resource-stone / resource-planks / workbench / chest / bedroll / tent | Kenney Survival Kit 2.0 (kenney.nl/assets/survival-kit) | CC0 | campfire · foundation + ceiling (floor planks) · wall (fortified fence) · wood (tree-log) · stone · **bedroll** (M37) · **workbench + chest** (M39) · tent, fence and roof still held for later |
+
+**The kit's colour** (M39): Kenney's colormap is a saturated toy palette and reads as orange plastic
+beside this island's greens. The multiply tint that used to fight it could not win — a saturated red
+times grey is still a saturated red — so `kit.ts::weathered()` pulls the ATLAS 66% toward its own
+luminance and darkens it 14%, once per image, cached across every model that shares it.
 | kenney-meat-raw / meat-cooked / meat-ribs / grapes | Kenney Food Kit (kenney.nl/assets/food-kit) | CC0 | raw meat · cooked meat · berries (grapes) |
 | pp-Saddle | **Saddle** by *Poly by Google*, poly.pizza/m/dSMm_V4sKNr | **CC-BY 3.0** (attribution required) | the saddle. It used to borrow the Kenney bedroll; when the bedroll became a real item (M37) the two icons were the same picture, so the saddle got a real model (M38). Intake: `gltf-transform copy` → `meshopt --level medium` → `resize 512` → `webp -q 82`, 1.64 MB → 74 KB |
 | pp-Spear, pp-Torch, pp-WoodenTorch, pp-AxeStone | Quaternius via poly.pizza (fH1zmvjPNx, Gq38E7hFZw, pNsfJzhXiD, XnqO64KhYx) | CC0 | spear · torch (wooden) · hatchet + flint (the head) |

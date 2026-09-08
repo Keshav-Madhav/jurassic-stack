@@ -27,6 +27,8 @@ export const ITEM_MODEL: Record<ItemId, string> = {
   ceiling: 'kenney-floor', // planks: a flat ceiling you can stand on (the kit's roof piece is a whole frame on posts)
   saddle: 'pp-Saddle', // a real saddle (poly.pizza, CC-BY): it shared the bedroll model, and once the bedroll became a real item the two icons were the same picture (M38)
   bedroll: 'kenney-bedroll',
+  workbench: 'kenney-workbench',
+  chest: 'kenney-chest',
 }
 
 /** per-icon framing tweaks: yaw/pitch, zoom, and a vertical offset (fraction of the model's extent) */
@@ -44,9 +46,44 @@ const ICON_FRAME: Partial<Record<ItemId, { yaw?: number; pitch?: number; roll?: 
   foundation: { pitch: 0.6 },
   wall: { yaw: 0.5 },
   bedroll: { pitch: 0.55, zoom: 1.05 },
+  workbench: { yaw: 0.6, pitch: 0.2 },
+  chest: { yaw: 0.5, pitch: 0.25, zoom: 1.1 },
   saddle: { yaw: -0.5, pitch: 0.15, zoom: 1.15, lift: 1.6 }, // dark leather: lift it or the icon is a silhouette (the M29 lesson)
   stone: { zoom: 1.1 },
   berry: { zoom: 1.05 },
+}
+
+/** desaturate + darken a colormap once, keyed by its image (all the Kenney kit
+ *  models carry a copy of the same atlas, so this runs a handful of times) */
+const weatheredCache = new Map<unknown, THREE.Texture>()
+function weathered(tex: THREE.Texture, sat = 0.34, gain = 0.86): THREE.Texture {
+  const img = tex.image as HTMLImageElement | ImageBitmap | undefined
+  if (!img) return tex
+  const cached = weatheredCache.get(img)
+  if (cached) return cached
+  const w = (img as HTMLImageElement).width, h = (img as HTMLImageElement).height
+  if (!w || !h) return tex
+  const c = document.createElement('canvas')
+  c.width = w; c.height = h
+  const ctx = c.getContext('2d')!
+  ctx.drawImage(img as CanvasImageSource, 0, 0)
+  const data = ctx.getImageData(0, 0, w, h)
+  const d = data.data
+  for (let i = 0; i < d.length; i += 4) {
+    const lum = d[i] * 0.2126 + d[i + 1] * 0.7152 + d[i + 2] * 0.0722
+    d[i] = Math.min(255, (d[i] * sat + lum * (1 - sat)) * gain)
+    d[i + 1] = Math.min(255, (d[i + 1] * sat + lum * (1 - sat)) * gain)
+    d[i + 2] = Math.min(255, (d[i + 2] * sat + lum * (1 - sat)) * gain)
+  }
+  ctx.putImageData(data, 0, 0)
+  const out = new THREE.CanvasTexture(c)
+  out.colorSpace = tex.colorSpace
+  out.flipY = tex.flipY
+  out.wrapS = tex.wrapS
+  out.wrapT = tex.wrapT
+  out.needsUpdate = true
+  weatheredCache.set(img, out)
+  return out
 }
 
 export class Kit {
@@ -67,10 +104,16 @@ export class Kit {
             const mm = m as THREE.MeshStandardMaterial
             mm.roughness = Math.max(mm.roughness, 0.8)
             mm.metalness = 0
-            // Kenney's colormap is saturated toy-orange; under the island's warm
-            // 2.9 sun a hut glowed like a traffic cone. Pull the map toward a
-            // weathered timber: darker, less red (the tint multiplies the map)
-            if (f.startsWith('kenney-')) mm.color.setRGB(0.62, 0.58, 0.55)
+            // Kenney's colormap is a saturated toy palette — under the island's
+            // warm 2.9 sun a workbench and a chest read as orange plastic
+            // (M39 screenshot). A multiply tint could not fix it: multiplying a
+            // saturated red by grey leaves a saturated red. The MAP itself is
+            // pulled toward its own luminance instead (once per image, cached),
+            // which is what "weathered" means, and then darkened a little.
+            if (f.startsWith('kenney-')) {
+              if (mm.map) mm.map = weathered(mm.map)
+              mm.color.setRGB(0.86, 0.84, 0.8)
+            }
           }
         }
       })

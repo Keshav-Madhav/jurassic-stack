@@ -15,7 +15,7 @@ import type { Emitter, LightRig } from './lights'
 export const CELL = 3
 const WALL_H = 3
 
-export type PieceKind = 'foundation' | 'wall' | 'ceiling' | 'campfire' | 'torch' | 'bedroll'
+export type PieceKind = 'foundation' | 'wall' | 'ceiling' | 'campfire' | 'torch' | 'bedroll' | 'workbench' | 'chest'
 
 export interface Piece {
   kind: PieceKind
@@ -61,6 +61,9 @@ function flameTexture(): THREE.CanvasTexture {
   return t
 }
 
+/** things that stand on the floor and cannot share a cell with each other */
+const FURNITURE = new Set<PieceKind>(['campfire', 'torch', 'bedroll', 'workbench', 'chest'])
+
 const GHOST_OK = new THREE.Color(0x4dc06a)
 const GHOST_BAD = new THREE.Color(0xd0483e)
 
@@ -98,15 +101,19 @@ export class Building {
     const gx = Math.round(aim.x / CELL)
     const gz = Math.round(aim.z / CELL)
 
-    if (kind === 'foundation' || kind === 'campfire' || kind === 'torch' || kind === 'bedroll') {
+    if (kind === 'foundation' || kind === 'campfire' || kind === 'torch' || kind === 'bedroll' || kind === 'workbench' || kind === 'chest') {
       const cx = gx * CELL
       const cz = gz * CELL
       // a fire or torch on a foundation/ceiling sits on it, else on the ground
       const under = this.pieceAt('ceiling', gx, gz, 0) ?? this.pieceAt('foundation', gx, gz, 0)
       const ground = under ? under.baseY + (under.kind === 'foundation' ? 0.35 : 0.25) : heightAt(cx, cz)
       const p: Piece = { kind, gx, gz, level: 0, edge: 0, baseY: ground }
-      if (kind === 'campfire' || kind === 'torch' || kind === 'bedroll') {
-        return { piece: p, valid: !this.keys.has(this.key(p)) }
+      if (kind === 'campfire' || kind === 'torch' || kind === 'bedroll' || kind === 'workbench' || kind === 'chest') {
+        // ONE piece of furniture to a cell. The key is per KIND, so a chest
+        // could be dropped inside a workbench and a bedroll through a campfire
+        // (M39 screenshot: the bench and the chest in the same square metre).
+        const taken = this.pieces.some((q) => FURNITURE.has(q.kind) && q.gx === gx && q.gz === gz && q.level === 0)
+        return { piece: p, valid: !taken }
       }
       // foundation: flat-enough ground, or edge-adjacent to an existing one
       const corners = [
@@ -204,6 +211,8 @@ export class Building {
       case 'campfire': return this.kit!.instance(file, { width: 1.3 })
       case 'torch': return this.kit!.instance(file, { height: 1.6 })
       case 'bedroll': return this.kit!.instance(file, { width: 1.9 })
+      case 'workbench': return this.kit!.instance(file, { width: 2.0 })
+      case 'chest': return this.kit!.instance(file, { width: 1.1 })
     }
     void size
     return this.kit!.instance(file, {})
@@ -272,6 +281,10 @@ export class Building {
         return { pos: new THREE.Vector3(cx, p.baseY + 0.8, cz), size: new THREE.Vector3(0.2, 1.6, 0.2) }
       case 'bedroll':
         return { pos: new THREE.Vector3(cx, p.baseY + 0.12, cz), size: new THREE.Vector3(1.9, 0.25, 0.9) }
+      case 'workbench':
+        return { pos: new THREE.Vector3(cx, p.baseY + 0.5, cz), size: new THREE.Vector3(2, 1, 1.1) }
+      case 'chest':
+        return { pos: new THREE.Vector3(cx, p.baseY + 0.35, cz), size: new THREE.Vector3(1.1, 0.7, 0.8) }
       case 'wall': {
         const off = CELL / 2
         const horiz = p.edge === 0 || p.edge === 2
@@ -313,6 +326,21 @@ export class Building {
 
   count(): number {
     return this.pieces.length
+  }
+
+  /** Is there a workbench within `r`? The homestead tier of recipes wants one
+   *  in reach — a saddle is not something you make in your hands (M39). */
+  nearBench(x: number, z: number, r = 4.5): boolean {
+    return this.pieces.some((p) => p.kind === 'workbench' && Math.hypot(p.gx * CELL - x, p.gz * CELL - z) < r)
+  }
+
+  /** The chest you are standing at, if any — its grid key doubles as its id. */
+  chestNear(x: number, z: number, r = 3): Piece | null {
+    for (const p of this.pieces) {
+      if (p.kind !== 'chest') continue
+      if (Math.hypot(p.gx * CELL - x, p.gz * CELL - z) < r) return p
+    }
+    return null
   }
 
   /** The bedroll you are standing at, if any (the rest verb). */

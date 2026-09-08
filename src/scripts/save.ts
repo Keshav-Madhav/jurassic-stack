@@ -31,6 +31,8 @@ export interface SaveFile {
   days?: number
   inventory: unknown
   pieces: unknown
+  /** what each chest holds, keyed by its grid cell (M39) */
+  chests?: unknown
   deadNodes: unknown
   dinos: unknown
 }

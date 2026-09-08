@@ -27,7 +27,8 @@ import { DinoImpostors } from './dino-impostors'
 import { Survival, FOODS, type FoodId } from './survival'
 import { Onboarding } from './onboarding'
 import { Inventory } from './inventory'
-import { ITEMS, type ItemId } from './items'
+import { Chests } from './chests'
+import { ITEMS, RECIPES, type ItemId } from './items'
 import { Hud } from './hud'
 import { saveGame, loadGame, SAVE_VERSION, type SaveFile } from './save'
 import { heightAt, loadHeightmap, worldMeta, SPAWN } from './heightmap'
@@ -293,6 +294,8 @@ async function boot(): Promise<void> {
   bootStage('packing the kit…', 56)
   await kit.load()
   kit.captureIcons(renderer)
+  const chests = new Chests()
+  if (save) chests.restore(save.chests as Parameters<Chests['restore']>[0])
   const building = new Building(physics, kit, lights)
   scene.add(building.group)
   building.group.name = 'building'
@@ -334,14 +337,54 @@ async function boot(): Promise<void> {
   const gateSiteForAlpha = worldMeta!.ruinSites.find((r) => r.tag === 'caldera-gate')!
   const gatekeeper: Dino | null = alphaSlain ? null : spawnDino('alpharex', gateSiteForAlpha.x + 3, gateSiteForAlpha.z + 44)
 
-  const hud = new Hud(document.getElementById('hud')!, inventory, (id) => {
-    if (inventory.craftById(id)) hud.toast(`Crafted ${ITEMS[id].name}`)
-  }, kit.icons)
+  /** Craft, checking the homestead tier: a saddle or a chest wants a workbench
+   *  in reach. The panel greys those out, but the gate belongs here — the debug
+   *  API and any future hotkey come through this door too (M39). */
+  const craftItem = (id: ItemId): boolean => {
+    const r = RECIPES.find((x) => x.output === id)
+    if (!r) return false
+    const f = feetPos()
+    if (r.bench && !building.nearBench(f.x, f.z)) {
+      hud.toast(`${ITEMS[id].name} needs a workbench in reach.`)
+      sfx.play('ui-error', { volume: 0.4 })
+      return false
+    }
+    if (!inventory.craftById(id)) return false
+    hud.toast(`Crafted ${ITEMS[id].name}`)
+    sfx.play('craft', { volume: 0.5 })
+    return true
+  }
+  const hud = new Hud(document.getElementById('hud')!, inventory, (id) => { craftItem(id) }, kit.icons)
   // the inventory releases the mouse (the panel has buttons); Tab or Esc or a
   // click on the world closes it and re-locks the pointer (user: "inventory
   // not closeable, mouse doesn't appear")
   onboarding.show = (text) => hud.hint(text)
   onboarding.hint('wake')
+  hud.panelContext = () => {
+    const f = feetPos()
+    const chest = building.chestNear(f.x, f.z)
+    return {
+      bench: building.nearBench(f.x, f.z),
+      chest: chest ? chests.contents(Chests.key(chest.gx, chest.gz)) : null,
+    }
+  }
+  hud.onChestMove = (id, dir, all) => {
+    const f = feetPos()
+    const chest = building.chestNear(f.x, f.z)
+    if (!chest) return
+    const key = Chests.key(chest.gx, chest.gz)
+    if (dir === 'in') {
+      const want = all ? inventory.count(id) : 1
+      const fits = chests.put(key, id, want)
+      if (!fits) { hud.toast('The chest is full.'); return }
+      inventory.remove(id, fits)
+    } else {
+      const want = all ? Infinity : 1
+      const got = chests.take(key, id, want === Infinity ? 9999 : want)
+      if (got) inventory.add(id, got)
+    }
+    hud.refreshPanel()
+  }
   hud.onUi = (what) => sfx.play(what === 'open' ? 'ui-open' : what === 'close' ? 'ui-close' : 'ui-click', { volume: what === 'click' ? 0.3 : 0.45 })
   hud.onPanelToggle = (open) => {
     if (open) document.exitPointerLock()
@@ -794,6 +837,7 @@ async function boot(): Promise<void> {
     inventory: inventory.serialize(),
     pieces: building.serialize(),
     deadNodes: scatter.serialize(),
+    chests: chests.serialize(),
     dinos: dinos.map((d) => d.serialize()),
     keystones: keystones.serialize(),
     doorOpen,
@@ -1048,7 +1092,7 @@ async function boot(): Promise<void> {
       riverFlowAt: (x: number, z: number) => water.riverFlowAt(x, z),
       swing,
       interact,
-      craft: (id: ItemId) => inventory.craftById(id),
+      craft: (id: ItemId) => craftItem(id),
       select: (i: number) => hud.selectSlot(i),
       selectItem: (id: ItemId) => {
         const slot = inventory.hotbar.indexOf(id)
@@ -1215,6 +1259,19 @@ async function boot(): Promise<void> {
       hintsSeen: () => onboarding.serialize(),
       /** QA: take damage (the death/respawn path) */
       hurt: (n: number) => hurtPlayer(n),
+      /** QA: every placed piece, kind and where (pieces land where you AIM,
+       *  which is a few metres ahead of your feet — QA has to walk to them) */
+      pieceList: () => building.serialize().map((p) => ({ kind: p.kind, x: p.gx * 3, z: p.gz * 3, y: p.baseY })),
+      /** QA: what the chest you are standing at holds (null = no chest here) */
+      chestAt: () => {
+        const f = feetPos()
+        const c = building.chestNear(f.x, f.z)
+        return c ? chests.contents(Chests.key(c.gx, c.gz)) : null
+      },
+      /** QA: move something between the pack and that chest */
+      chestMove: (id: ItemId, dir: 'in' | 'out', all = false) => hud.onChestMove?.(id, dir, all),
+      /** QA: is a workbench in reach? */
+      nearBench: () => { const f = feetPos(); return building.nearBench(f.x, f.z) },
       /** QA: where the bedroll is, and where the player would wake */
       bedroll: () => building.lastBedroll(),
       /** QA: what the mixer has actually played, and anything that failed to load */
@@ -1769,11 +1826,13 @@ async function boot(): Promise<void> {
       if (!seen('bush') && scatter.nodesNear(fk.x, fk.z, 5).bush) onboarding.hint('bush')
     }
     const atBed = building.bedrollNear(fk.x, fk.z) !== null
+    const atChest = building.chestNear(fk.x, fk.z) !== null
     const canCook = inventory.count('rawmeat') > 0 && building.nearFire(fk.x, fk.z)
     const canDrink = !riding && nearWaterFor(fk) && survival.water < 99
     if (riding) hud.prompt('E — dismount')
     // the prompt must match what E actually does: by day the bedroll is not a verb
     else if (atBed && daynight.nightness >= 0.3) hud.prompt('E — sleep until dawn')
+    else if (atChest) hud.prompt('TAB — the chest')
     else if (canCook) hud.prompt('E — cook the meat')
     else if (canDrink) hud.prompt('E — drink')
     else if (nearBeacon) hud.prompt(keystones.enough ? 'E — light the beacon' : 'the brazier is cold')

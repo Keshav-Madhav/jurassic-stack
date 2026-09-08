@@ -3,7 +3,7 @@
 export type ItemId =
   | 'wood' | 'stone' | 'fiber' | 'flint' | 'berry' | 'rawmeat' | 'cookedmeat' | 'hide'
   | 'hatchet' | 'spear'
-  | 'campfire' | 'torch' | 'foundation' | 'wall' | 'ceiling' | 'bedroll'
+  | 'campfire' | 'torch' | 'foundation' | 'wall' | 'ceiling' | 'bedroll' | 'workbench' | 'chest'
   | 'saddle'
 
 export interface ItemDef {
@@ -31,6 +31,8 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   wall: { id: 'wall', name: 'Wall', icon: '🧱', placeable: true },
   ceiling: { id: 'ceiling', name: 'Ceiling', icon: '⬛', placeable: true },
   bedroll: { id: 'bedroll', name: 'Bedroll', icon: '🛏️', placeable: true },
+  workbench: { id: 'workbench', name: 'Workbench', icon: '🛠️', placeable: true },
+  chest: { id: 'chest', name: 'Chest', icon: '🧰', placeable: true },
   saddle: { id: 'saddle', name: 'Saddle', icon: '🪑' },
 }
 
@@ -38,6 +40,8 @@ export interface Recipe {
   output: ItemId
   count: number
   cost: Partial<Record<ItemId, number>>
+  /** needs a workbench within reach — the homestead tier (M39) */
+  bench?: true
 }
 
 export const RECIPES: Recipe[] = [
@@ -48,6 +52,8 @@ export const RECIPES: Recipe[] = [
   { output: 'foundation', count: 1, cost: { wood: 8, fiber: 4 } },
   { output: 'wall', count: 1, cost: { wood: 5, fiber: 2 } },
   { output: 'ceiling', count: 1, cost: { wood: 6, fiber: 3 } },
-  { output: 'bedroll', count: 1, cost: { fiber: 16, hide: 3 } }, // straw and skins: where you wake up (M37)
-  { output: 'saddle', count: 1, cost: { fiber: 12, hide: 6, wood: 4 } }, // hide off a carcass: the hunt feeds the saddle (M21)
+  { output: 'bedroll', count: 1, cost: { fiber: 16, hide: 3 } }, // NOT bench-gated: it is what death costs you, and you need it early
+  { output: 'workbench', count: 1, cost: { wood: 20, stone: 8, fiber: 6 } },
+  { output: 'chest', count: 1, cost: { wood: 14, fiber: 6 }, bench: true }, // straw and skins: where you wake up (M37)
+  { output: 'saddle', count: 1, cost: { fiber: 12, hide: 6, wood: 4 }, bench: true }, // hide off a carcass: the hunt feeds the saddle (M21)
 ]

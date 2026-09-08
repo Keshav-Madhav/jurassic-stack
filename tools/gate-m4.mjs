@@ -53,11 +53,21 @@ check(fiber >= 2, `gathered fiber (${fiber})`)
 
 // ---------- craft (top up mats so the whole chain is testable in one run) ----------
 // (hide since M21: the saddle is fiber + hide + wood — the hunt feeds the saddle)
-await g('window.__g.game.give("wood", 40); window.__g.game.give("stone", 12); window.__g.game.give("fiber", 60); window.__g.game.give("flint", 6); window.__g.game.give("berry", 14); window.__g.game.give("hide", 6)')
-for (const item of ['hatchet', 'spear', 'foundation', 'wall', 'ceiling', 'saddle', 'campfire']) {
+await g('window.__g.game.give("wood", 70); window.__g.game.give("stone", 24); window.__g.game.give("fiber", 80); window.__g.game.give("flint", 6); window.__g.game.give("berry", 14); window.__g.game.give("hide", 6)')
+for (const item of ['hatchet', 'spear', 'foundation', 'wall', 'ceiling', 'campfire', 'workbench']) {
   const ok = await page.evaluate((i) => window.__g.game.craft(i), item)
   check(ok, `crafted ${item}`)
 }
+// the saddle is a homestead recipe since M39: it wants a bench in reach, so
+// the loop is now gather → craft → BUILD A BENCH → saddle → tame → ride
+check((await page.evaluate(() => window.__g.game.craft('saddle'))) === false, 'the saddle refuses without a workbench')
+await g('window.__g.game.selectItem("workbench"); window.__g.game.swing()')
+await page.waitForTimeout(600)
+const benchPiece = (await g('window.__g.game.pieceList()')).find((p) => p.kind === 'workbench')
+check(benchPiece !== undefined, 'the workbench is placed')
+await page.evaluate(([x, z]) => window.__g.teleport(x, z + 1.5), [benchPiece.x, benchPiece.z])
+await page.waitForTimeout(800)
+check(await page.evaluate(() => window.__g.game.craft('saddle')), 'crafted saddle at the bench')
 
 // ---------- build a hut: foundation, wall, ceiling, campfire ----------
 await g('window.__g.setIntent(0,0)')
