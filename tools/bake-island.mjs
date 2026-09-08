@@ -959,6 +959,53 @@ const meta = {
 writeFileSync('public/world/world-meta.json', JSON.stringify(meta, null, 2))
 writeFileSync('public/world/forest.bin', Buffer.from(forest.buffer))
 
+// ---------- sky view: the island's own ambient occlusion, baked ----------
+// Screen-space AO costs 2-6 ms a frame and redraws the scene for normals
+// (M42/M44). The LANDSCAPE's share of it does not change, ever — a gorge is
+// always a gorge — so it is computed here instead, once, and costs nothing at
+// runtime: every vertex colour and every prop tint is multiplied by it as the
+// world is built (M47).
+//
+// For each cell, march sixteen directions out to 240 m, keep the highest
+// horizon angle each way, and average the sky each direction still shows. Deep
+// valleys and cliff feet come out dark, ridges and the open plain stay bright.
+{
+  const SV_SIDE = 1024
+  const SV_STEP = (HALF * 2) / SV_SIDE
+  const DIRS = 16
+  const REACH = 240
+  const STEPS = 24
+  const sv = new Uint8Array(SV_SIDE * SV_SIDE)
+  const cos = [], sin = []
+  for (let d = 0; d < DIRS; d++) { const a = (d / DIRS) * Math.PI * 2; cos.push(Math.cos(a)); sin.push(Math.sin(a)) }
+  const t0 = Date.now()
+  for (let j = 0; j < SV_SIDE; j++) {
+    const z = -HALF + (j + 0.5) * SV_STEP
+    for (let i = 0; i < SV_SIDE; i++) {
+      const x = -HALF + (i + 0.5) * SV_STEP
+      const h0 = hAt(x, z)
+      let open = 0
+      for (let d = 0; d < DIRS; d++) {
+        let maxSlope = 0
+        // geometric steps: fine detail close in, coarse far out
+        for (let k = 1; k <= STEPS; k++) {
+          const dist = REACH * Math.pow(k / STEPS, 2)
+          const hx = hAt(x + cos[d] * dist, z + sin[d] * dist)
+          const slope = (hx - h0) / dist
+          if (slope > maxSlope) maxSlope = slope
+        }
+        // the sky this direction still shows: 1 at a flat horizon, 0 at a wall
+        open += 1 / Math.sqrt(1 + maxSlope * maxSlope)
+      }
+      sv[j * SV_SIDE + i] = Math.round(Math.max(0, Math.min(1, open / DIRS)) * 255)
+    }
+  }
+  writeFileSync('public/world/skyview.bin', Buffer.from(sv.buffer))
+  let min = 255, max = 0, sum = 0
+  for (const v of sv) { if (v < min) min = v; if (v > max) max = v; sum += v }
+  console.log(`skyview: ${SV_SIDE}² in ${((Date.now() - t0) / 1000).toFixed(1)}s — min ${min}, max ${max}, mean ${Math.round(sum / sv.length)}`)
+}
+
 // biome map: the traced polygons (alpine is altitude)
 {
   const biomes = new Uint8Array(SIDE * SIDE)

@@ -85,15 +85,17 @@ let scale = 0.01
 export let worldMeta: WorldMeta | null = null
 
 export async function loadHeightmap(base = ''): Promise<void> {
-  const [metaRes, binRes, bioRes, forRes] = await Promise.all([
+  const [metaRes, binRes, bioRes, forRes, svRes] = await Promise.all([
     fetch(`${base}world/world-meta.json`),
     fetch(`${base}world/heightmap.bin`),
     fetch(`${base}world/biomes.bin`),
     fetch(`${base}world/forest.bin`),
+    fetch(`${base}world/skyview.bin`),
   ])
   if (!metaRes.ok || !binRes.ok) throw new Error('world data missing — run tools/bake-island.mjs')
   if (bioRes.ok) biomes = new Uint8Array(await bioRes.arrayBuffer())
   if (forRes.ok) forest = new Uint8Array(await forRes.arrayBuffer())
+  if (svRes.ok) skyview = new Uint8Array(await svRes.arrayBuffer())
   worldMeta = (await metaRes.json()) as WorldMeta
   side = worldMeta.side
   res = worldMeta.res
@@ -111,6 +113,45 @@ export async function loadHeightmap(base = ''): Promise<void> {
   SPAWN.z = worldMeta.spawn.z
   VOLCANO.x = worldMeta.volcano.x
   VOLCANO.z = worldMeta.volcano.z
+}
+
+/** SKY VIEW: how much sky each patch of ground can see, baked by
+ *  tools/bake-island.mjs (sixteen horizon rays out to 240 m, 1024² over the
+ *  island). This is the landscape's share of ambient occlusion, and since a
+ *  gorge is always a gorge it is computed ONCE rather than 60 times a second:
+ *  the terrain's vertex colours and every prop and grass tint are multiplied
+ *  by it as the world is built, so it costs nothing at all to draw (M47). */
+let skyview: Uint8Array | null = null
+const SV_SIDE = 1024
+
+/** 0 (a slot at the bottom of a cliff) to 1 (open plain), bilinear. */
+export function skyViewAt(x: number, z: number): number {
+  if (!skyview) return 1
+  const half = HALF_SIZE
+  const fx = ((x + half) / (half * 2)) * SV_SIDE - 0.5
+  const fz = ((z + half) / (half * 2)) * SV_SIDE - 0.5
+  const x0 = Math.max(0, Math.min(SV_SIDE - 1, Math.floor(fx)))
+  const z0 = Math.max(0, Math.min(SV_SIDE - 1, Math.floor(fz)))
+  const x1 = Math.min(SV_SIDE - 1, x0 + 1)
+  const z1 = Math.min(SV_SIDE - 1, z0 + 1)
+  const tx = Math.max(0, Math.min(1, fx - x0))
+  const tz = Math.max(0, Math.min(1, fz - z0))
+  const a = skyview[z0 * SV_SIDE + x0], b = skyview[z0 * SV_SIDE + x1]
+  const c = skyview[z1 * SV_SIDE + x0], d = skyview[z1 * SV_SIDE + x1]
+  return ((a + (b - a) * tx) + ((c + (d - c) * tx) - (a + (b - a) * tx)) * tz) / 255
+}
+
+/** How hard the baked occlusion bites (0 = off). It multiplies ALBEDO, not the
+ *  ambient term alone — which is the honest compromise for something that has
+ *  to be free — so it has to stay gentle: at 0.85 the caldera floor went black
+ *  at noon, and a crater floor at noon is not black, the sun is overhead. 0.5
+ *  darkens the deepest hollow by about a fifth and leaves the open ground
+ *  untouched (M47). */
+export const SKY_VIEW_STRENGTH = 0.5
+
+/** the multiplier to fold into a vertex colour or an instance tint */
+export function ambientAt(x: number, z: number): number {
+  return 1 - (1 - skyViewAt(x, z)) * SKY_VIEW_STRENGTH
 }
 
 /** The heightmap as a GPU texture (R16F, 2048², linear-filtered), built once

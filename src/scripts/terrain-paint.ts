@@ -3,7 +3,7 @@
 // meshes) and by terrain-worker.ts (which builds LOD upgrades off the main
 // thread so a gallop across chunk borders never hitches the frame).
 import * as THREE from 'three'
-import { heightAt, normalAt, forestMaskAt, biomeAt, shoreDist, BIOME, VOLCANO, worldMeta, HALF_SIZE, SEA_LEVEL } from './heightmap'
+import { heightAt, normalAt, forestMaskAt, biomeAt, shoreDist, BIOME, VOLCANO, worldMeta, HALF_SIZE, SEA_LEVEL, ambientAt } from './heightmap'
 
 export const CHUNK_SIZE = 128
 export const CHUNKS_PER_SIDE = (HALF_SIZE * 2) / CHUNK_SIZE // 32
@@ -272,6 +272,9 @@ export function buildChunkArrays(originX: number, originZ: number, quads: number
       normalAt(x, z, n)
       nor[o] = n.x; nor[o + 1] = n.y; nor[o + 2] = n.z
       groundColorAt(x, z, h, n.y, c)
+      // the island's baked ambient occlusion, folded straight into the vertex
+      // colour — a gorge is always a gorge, so it costs nothing at runtime (M47)
+      c.multiplyScalar(ambientAt(x, z))
       col[o] = c.r; col[o + 1] = c.g; col[o + 2] = c.b
       splatAt(x, z, h, n.y, s4)
       const o4 = (iz * side + ix) * 4

@@ -666,3 +666,10 @@ Findings and fixes, each measured with the new jitter meter (`__g.frameStats()`,
 - [x] **Memory: verified, not suspected.** Three laps of the island: heap 493 → 1059 → 1007 → 1051 MB, geometries 3721 → 4491 → 4491 → 4492. It plateaus — that is a streamed island's working set, not a leak
 - [x] **The 404 every visitor got**: `/favicon.ico`. There is a favicon now (an SVG of the island under a low sun), plus a description and a theme colour, because the page had none of them
 - [x] Gates 11 files, all green (settings now 20 checks)
+
+### M47 — SKY VIEW: the island's own ambient occlusion, baked
+- [x] **The landscape's share of AO never changes, so it is computed once.** `tools/bake-island.mjs` now marches sixteen horizon rays out to 240 m from every cell of a 1024² grid and writes how much sky each patch of ground can still see → `public/world/skyview.bin` (1 MB, 2.5 s to bake). `heightmap.ts` serves it as `skyViewAt()` / `ambientAt()`, and the terrain's vertex colours, every prop tint and every grass tuft are multiplied by it **as the world is built** — so it costs exactly nothing to draw, which is the opposite of the 2-6 ms GTAO
+- [x] **Honest about its reach.** The distribution over the island: **74.5% of it sees essentially full sky**, 15% is 0.9-0.97, and only **4% is below 0.8** — the caldera (0.63), the ravine (0.92), the feet of cliffs. So this is not a transformation, it is the right shading in the few places that have any: the endgame's crater now reads as somewhere you are INSIDE. An island of open coast and plain has little to occlude, and pretending otherwise would have meant faking it
+- [x] **Strength 0.85 → 0.5**: it multiplies ALBEDO, not the ambient term alone (the honest compromise for something that has to be free), so at 0.85 the caldera floor went black at noon — and a crater floor at noon is not black, the sun is overhead
+- [x] **Fails safe**: no `skyview.bin` (an un-rebaked checkout) means `skyViewAt()` returns 1 and nothing changes
+- [x] Gates 11 files, all green

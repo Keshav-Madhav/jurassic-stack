@@ -1,7 +1,7 @@
 // Grass tile generation — pure data (matrices + colours) from the baked
 // grids, so it can run in the terrain worker. grass.ts owns the meshes.
 import * as THREE from 'three'
-import { heightAt, normalAt, biomeAt, forestMaskAt, BIOME, VOLCANO, worldMeta } from './heightmap'
+import { heightAt, normalAt, biomeAt, forestMaskAt, BIOME, VOLCANO, worldMeta, ambientAt } from './heightmap'
 
 export const GRASS_TILE = 64
 
@@ -95,7 +95,8 @@ export function buildGrassTile(tx: number, tz: number, spacing: number): { matri
       _m.compose(_p, _q, _s)
       _m.toArray(matrices, count * 16)
       // plains lighter and yellower, woods darker
-      const k = biome === BIOME.PLAINS ? 0.85 + r4 * 0.25 : 0.55 + r4 * 0.35
+      // the baked sky view again: grass in a hollow is grass in shade (M47)
+      const k = (biome === BIOME.PLAINS ? 0.85 + r4 * 0.25 : 0.55 + r4 * 0.35) * ambientAt(x, z)
       colors[count * 3] = k * (biome === BIOME.PLAINS ? 1.05 : 0.95)
       colors[count * 3 + 1] = k
       colors[count * 3 + 2] = k * 0.85

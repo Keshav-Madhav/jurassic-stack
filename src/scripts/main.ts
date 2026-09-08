@@ -31,7 +31,7 @@ import { Chests } from './chests'
 import { ITEMS, RECIPES, type ItemId } from './items'
 import { Hud } from './hud'
 import { saveGame, loadGame, SAVE_VERSION, type SaveFile } from './save'
-import { heightAt, loadHeightmap, worldMeta, SPAWN } from './heightmap'
+import { heightAt, loadHeightmap, worldMeta, SPAWN, skyViewAt } from './heightmap'
 import { loadNavmesh, findPath } from './navmesh'
 import { WaterSystem } from './water'
 import { wildPopulation } from './population'
@@ -998,6 +998,8 @@ async function boot(): Promise<void> {
     post: () => post,
     /** QA: the day's baked environments and where the blend sits */
     envDebug: () => daynight.env.debug(),
+    /** QA: the baked sky-view at a point (1 = open sky, 0 = a slot in a cliff) */
+    skyView: (x: number, z: number) => skyViewAt(x, z),
     setPixelRatio: (r: number) => { adaptive = false; pixelRatio = r; renderer.setPixelRatio(r); renderer.setSize(innerWidth, innerHeight); const s2 = renderer.getDrawingBufferSize(new THREE.Vector2()); post.setSize(s2.x, s2.y) },
     pixelRatio: () => pixelRatio,
     setAdaptive: (on: boolean) => { adaptive = on },

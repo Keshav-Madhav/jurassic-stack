@@ -171,6 +171,22 @@ the label (measured again at half res / 10 samples: **+2.3 ms** at the wood line
 if anyone builds it, reads the depth buffer the main pass already wrote (a custom 8-tap pass) and
 never renders geometry twice — which is exactly what the M43 atmosphere pass does.
 
+## Precompute, don't recompute (the pattern, M45/M47)
+
+Two things this project used to do per frame are now baked and read:
+
+- **The environment map**: eight PMREM skies baked at load, the two either side of now blended as a
+  plain 2D mix (a PMREM is a packed 2D texture — nothing needs re-filtering). Was 20-40 ms a re-bake
+  and a visible jump; is one quad.
+- **Sky view (ambient occlusion of the LANDSCAPE)**: sixteen horizon rays per cell of a 1024² grid,
+  in the bake tool, written to `world/skyview.bin` and folded into vertex colours and instance tints
+  as the world is built. Zero runtime cost. Its reach is honest: 74.5% of the island sees full sky,
+  4% is below 0.8 — the caldera, the ravine and cliff feet, which are exactly the places that should
+  feel enclosed.
+
+The test for anything else: does it change slowly, and does it cost a lot to compute? Then compute a
+few states offline or at load and interpolate — never per frame.
+
 ## Not doing
 
 - N8AO / anything that renders the scene a second time — see the GTAO measurement above.

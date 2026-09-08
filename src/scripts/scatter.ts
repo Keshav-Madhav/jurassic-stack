@@ -13,7 +13,7 @@ import RAPIER from '@dimforge/rapier3d-compat'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
-import { heightAt, lodFloorAt, normalAt, forestMaskAt, forestKindAt, biomeAt, shoreDist, BIOME, FOREST_KIND, SEA_LEVEL, HALF_SIZE, SPAWN, VOLCANO, worldMeta } from './heightmap'
+import { heightAt, lodFloorAt, normalAt, forestMaskAt, forestKindAt, biomeAt, shoreDist, BIOME, FOREST_KIND, SEA_LEVEL, HALF_SIZE, SPAWN, VOLCANO, worldMeta, ambientAt } from './heightmap'
 import { buildCanopyTree, buildElderTree, buildMushroom, buildRedwood, buildMangrove, buildDriedBush, buildCactus, buildReeds, buildPebbles, buildStones, buildSticks, buildOutcrop, buildGrassCard, buildFarPine, buildLog } from './trees'
 import { captureImpostor } from './impostor'
 import { CHUNK_SIZE, CHUNKS_PER_SIDE } from './terrain'
@@ -1052,7 +1052,9 @@ export class Scatter {
           // sink was lost in the M6a rewrite — props had ZERO embed since.
           y: h - (kind === 'rock' ? 0.05 * scale + 0.04 : GROUND_COVER.has(kind) ? 0.06 : 0.14)
             - Math.min(2.5, Math.max(0, h - lodFloorAt(x, z))),
-          z, scale: scale * scaleMul, rotY, tint,
+          // ...times the island's baked sky view: a tree at the foot of a
+          // cliff stands in the cliff's shade for good (M47)
+          z, scale: scale * scaleMul, rotY, tint: tint * ambientAt(x, z),
           hp: NODE_DEFS[kind].hp,
           alive: true,
           respawnAt: 0,
