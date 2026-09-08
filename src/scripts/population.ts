@@ -53,6 +53,19 @@ interface Habitat {
   minSpawnDist: number
 }
 
+/** within 60 m of a river's centre line — the spino's whole world (M52) */
+function nearRiver(x: number, z: number): boolean {
+  for (const path of worldMeta?.rivers ?? []) {
+    for (let i = 0; i < path.length - 1; i++) {
+      const ax = path[i].x, az = path[i].z, bx = path[i + 1].x, bz = path[i + 1].z
+      const dx = bx - ax, dz = bz - az
+      const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz || 1)))
+      if (Math.hypot(x - (ax + dx * t), z - (az + dz * t)) < 60) return true
+    }
+  }
+  return false
+}
+
 const HABITATS: Habitat[] = [
   // carnivores
   { species: 'raptor', groups: 84, size: [3, 4], minSpawnDist: 220, likes: (_x, _z, f, b) => f > -0.5 && b !== BIOME.DESERT },
@@ -60,12 +73,19 @@ const HABITATS: Habitat[] = [
   { species: 'allo', groups: 34, size: [1, 1], minSpawnDist: 800, likes: (_x, z, f) => z < -100 && f < 0.5 },
   { species: 'trex', groups: 40, size: [1, 1], minSpawnDist: 900, likes: (_x, z, f) => z < -200 && f < 0.3 },
   { species: 'terrorbird', groups: 36, size: [3, 4], minSpawnDist: 380, likes: (_x, _z, f, b) => f < -0.2 && b !== BIOME.SWAMP },
+  // M52's three, each with a home rather than scattered as filler:
+  // the dilo ambushes from inside the woods, in pairs
+  { species: 'dilo', groups: 44, size: [2, 3], minSpawnDist: 260, likes: (_x, _z, f, b) => f > 0.1 && b !== BIOME.DESERT },
+  // the spino walks the rivers and the swamp, and only there
+  { species: 'spino', groups: 14, size: [1, 1], minSpawnDist: 900, likes: (x, z, _f, b) => b === BIOME.SWAMP || nearRiver(x, z) },
   // herbivores
   { species: 'trike', groups: 48, size: [3, 5], minSpawnDist: 160, likes: (_x, _z, f, b) => f < 0.2 && b !== BIOME.SWAMP },
   { species: 'stego', groups: 60, size: [2, 2], minSpawnDist: 160, likes: (_x, _z, f) => f < 0.5 },
   { species: 'pachy', groups: 50, size: [2, 4], minSpawnDist: 200, likes: (_x, _z, f, b) => f < 0.6 && b !== BIOME.DESERT },
   { species: 'parasaur', groups: 40, size: [4, 6], minSpawnDist: 150, likes: (_x, _z, f, b) => f < 0 && b !== BIOME.DESERT && b !== BIOME.SWAMP },
   { species: 'apato', groups: 28, size: [1, 2], minSpawnDist: 400, likes: (_x, _z, f, b) => f < -0.2 && b !== BIOME.DESERT },
+  // the sauropelta grazes the foothills, between the plain and the ranges
+  { species: 'sauropelta', groups: 30, size: [2, 3], minSpawnDist: 300, likes: (x, z, f, b) => b !== BIOME.SWAMP && b !== BIOME.DESERT && f < 0.4 && heightAt(x, z) > 45 && heightAt(x, z) < 150 },
   { species: 'mammoth', groups: 28, size: [2, 3], minSpawnDist: 700, likes: (x, z, f, b) => (z < -400 || heightAt(x, z) > 60) && f < 0.6 && b !== BIOME.DESERT },
 ]
 

@@ -18,7 +18,10 @@ export interface SpeciesDef {
   /** torpor drained per second while KO'd */
   torporDrain: number
   /** item that fills the tame bar, and how much per feed */
-  tameFood: 'berry'
+  /** what it takes to tame one. Every species tamed on BERRIES until M52 —
+   *  including the carnivores, which was never right; all three uses of this
+   *  field are generic over the item, so a meat-eater can want meat. */
+  tameFood: 'berry' | 'rawmeat'
   tamePerFeed: number
   /** unprovoked aggro when the player comes this close (0 = only when hit) */
   aggroRange: number
@@ -41,6 +44,13 @@ export interface SpeciesDef {
   alpha?: boolean
   /** regex per animation slot, matched against clip names */
   clips: { idle: RegExp; walk: RegExp; run: RegExp; attack: RegExp; ko: RegExp }
+  /** ONE-CLIP SPECIES (M52). Three of the downloaded rigs — Dilophosaurus,
+   *  Sauropelta, Spinosaurus — ship a single unnamed animation and nothing
+   *  else, which is why they were never in the game (PLAN item 5 called it
+   *  "no clips"; the truth was one apiece). A body with one cycle is still a
+   *  body: the same clip fills every slot at a different RATE, and M41's
+   *  procedural topple covers the death it has no clip for. */
+  oneClip?: { idle: number; walk: number; run: number; attack: number }
   /** optional flavor one-shots played randomly while idle */
   flavorClips?: RegExp[]
 }
@@ -385,5 +395,83 @@ export const SPECIES: Record<string, SpeciesDef> = {
     seat: { x: 0, y: 2.6, z: -0.4 },
     clips: { idle: /Mammoth_Idle$/, walk: /Mammoth_WalkCycle$/, run: /Mammoth_WalkCycle$/, attack: /Mammoth_Trumpet$/, ko: /Mammoth_Idle$/ },
     flavorClips: [/Mammoth_Trumpet$/],
+  },
+
+  // ---- THE ONE-CLIP THREE (M52) — each placed where it earns its keep ----
+  dilo: {
+    id: 'dilo',
+    name: 'Dilophosaurus',
+    model: 'models/dinos/Dilophosaurus.glb',
+    // the wood's ambusher: quick, fragile, hunts in twos
+    height: 1.7,
+    walkSpeed: 2.4,
+    runSpeed: 9.5,
+    turnRate: 3.4,
+    hp: 105,
+    torporMax: 130,
+    torporDrain: 3.4,
+    tameFood: 'rawmeat',
+    tamePerFeed: 12,
+    temperament: 'aggressive',
+    diet: 'carnivore',
+    aggroRange: 22,
+    packRange: 40,
+    attackDamage: 13,
+    attackRange: 2.0,
+    rideable: false,
+    seat: { x: 0, y: 1.1, z: 0 },
+    clips: { idle: /$^/, walk: /$^/, run: /$^/, attack: /$^/, ko: /$^/ },
+    oneClip: { idle: 0.35, walk: 1, run: 1.75, attack: 2.1 },
+  },
+  sauropelta: {
+    id: 'sauropelta',
+    name: 'Sauropelta',
+    model: 'models/dinos/Sauropelta.glb',
+    // the armoured grazer of the foothills: slow, stubborn, hits back hard
+    height: 2.1,
+    walkSpeed: 1.9,
+    runSpeed: 5.2,
+    turnRate: 1.5,
+    hp: 520,
+    torporMax: 560,
+    torporDrain: 2.2,
+    tameFood: 'berry',
+    tamePerFeed: 8,
+    temperament: 'defensive',
+    diet: 'herbivore',
+    aggroRange: 0,
+    packRange: 26,
+    attackDamage: 30,
+    attackRange: 2.8,
+    rideable: false,
+    seat: { x: 0, y: 1.7, z: 0 },
+    clips: { idle: /$^/, walk: /$^/, run: /$^/, attack: /$^/, ko: /$^/ },
+    oneClip: { idle: 0.3, walk: 1, run: 1.6, attack: 1.9 },
+  },
+  spino: {
+    id: 'spino',
+    name: 'Spinosaurus',
+    model: 'models/dinos/Spinosaurus.glb',
+    // the river's apex: it walks the banks and the swamp's edge, and nothing
+    // there argues with it
+    height: 4.6,
+    walkSpeed: 2.8,
+    runSpeed: 9,
+    turnRate: 1.9,
+    hp: 900,
+    torporMax: 900,
+    torporDrain: 2.0,
+    tameFood: 'rawmeat',
+    tamePerFeed: 16,
+    temperament: 'aggressive',
+    diet: 'carnivore',
+    aggroRange: 30,
+    packRange: 0,
+    attackDamage: 58,
+    attackRange: 4.0,
+    rideable: false,
+    seat: { x: 0, y: 3.1, z: -0.3 },
+    clips: { idle: /$^/, walk: /$^/, run: /$^/, attack: /$^/, ko: /$^/ },
+    oneClip: { idle: 0.28, walk: 1, run: 1.7, attack: 2 },
   },
 }

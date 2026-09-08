@@ -261,9 +261,25 @@ export class Dino {
     this.object.add(model)
 
     this.mixer = new THREE.AnimationMixer(model)
-    for (const slot of ['idle', 'walk', 'run', 'attack', 'ko'] as const) {
-      const clip = animations.find((a) => this.species.clips[slot].test(a.name))
-      if (clip) this.actions[slot] = this.mixer.clipAction(clip)
+    const oc = this.species.oneClip
+    if (oc) {
+      // ONE animation, ONE action, a changing RATE. The first cut gave each
+      // slot its own action on a clone of the same clip; `animate()` then
+      // cross-faded three of them, and averaging one pose against itself at
+      // three different times collapsed the Sauropelta into a flat lump
+      // (M52). A single action, re-timed by state, is what a one-clip rig
+      // actually wants — the pose is never blended with anything.
+      const clip = animations.filter((a) => a.duration > 0.5).sort((a, b) => b.tracks.length - a.tracks.length)[0]
+      if (clip) {
+        const act = this.mixer.clipAction(clip)
+        act.timeScale = oc.idle
+        this.actions.idle = act
+      }
+    } else {
+      for (const slot of ['idle', 'walk', 'run', 'attack', 'ko'] as const) {
+        const clip = animations.find((a) => this.species.clips[slot].test(a.name))
+        if (clip) this.actions[slot] = this.mixer.clipAction(clip)
+      }
     }
     for (const re of this.species.flavorClips ?? []) {
       const clip = animations.find((a) => re.test(a.name))
@@ -1079,6 +1095,29 @@ export class Dino {
 
   private animate(dt: number, moveT: number, running: boolean): void {
     const target = THREE.MathUtils.clamp(moveT, 0, 1)
+    const oc = this.species.oneClip
+    if (oc) {
+      // the single cycle, re-timed: still → idle rate, moving → walk, fast → run
+      const act = this.actions.idle
+      if (act) {
+        this.moveWeight = THREE.MathUtils.lerp(this.moveWeight, target, 1 - Math.exp(-dt * 8))
+        this.runBlend = THREE.MathUtils.lerp(this.runBlend, running ? 1 : 0, 1 - Math.exp(-dt * 6))
+        const moving = THREE.MathUtils.lerp(oc.walk, oc.run, this.runBlend)
+        act.weight = 1
+        act.timeScale = THREE.MathUtils.lerp(oc.idle, moving, this.moveWeight)
+      }
+      const d0 = this.distToPlayer
+      const every0 = d0 > 260 ? 8 : d0 > 120 ? 3 : 1
+      this.mixerSkip += 1
+      this.mixerAccum += dt
+      if (this.model && !this.model.parent) return
+      if (this.mixerSkip >= every0) {
+        this.mixer?.update(this.mixerAccum)
+        this.mixerSkip = 0
+        this.mixerAccum = 0
+      }
+      return
+    }
     this.moveWeight = THREE.MathUtils.lerp(this.moveWeight, target, 1 - Math.exp(-dt * 8))
     this.runBlend = THREE.MathUtils.lerp(this.runBlend, running ? 1 : 0, 1 - Math.exp(-dt * 6))
     const { idle, walk, run } = this.actions

@@ -1270,6 +1270,7 @@ async function boot(): Promise<void> {
       /** QA: the awake ecology — who is doing what to whom */
       ecology: () => awake.filter((d) => d.state !== 'idle' && d.state !== 'wander').map((d) => ({ sp: d.species.id, state: d.state, hp: Math.round(d.hp), x: Math.round(d.object.position.x), z: Math.round(d.object.position.z), foe: d.currentFoe ? d.currentFoe.species.id : d.state === 'aggro' || d.state === 'hunt' ? 'player' : null })),
       /** QA: where dino #i stands */
+      dinoHeight: (i: number) => dinos[i]?.measuredHeight() ?? null,
       dinoPos: (i: number) => { const d = dinos[i]; return d ? { x: d.object.position.x, y: d.object.position.y, z: d.object.position.z } : null },
       /** QA: light the beacon where it stands (the finale's showpiece) */
       lightBeacon: () => { beacon.light(true); beaconLit = true },

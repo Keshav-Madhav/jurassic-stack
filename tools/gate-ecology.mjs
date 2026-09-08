@@ -14,9 +14,33 @@ await page.waitForFunction('Object.keys(window.__g.game.animAudit()).length >= 1
 const audit = await page.evaluate(() => window.__g.game.animAudit())
 const species = Object.keys(audit)
 check(species.length >= 11, `${species.length} species loaded`)
+// A ONE-CLIP species (M52: dilo, sauropelta, spino) deliberately has one
+// action doing every job at different rates — it has no walk/run/attack clips
+// to resolve, and its death is M41's procedural topple. What matters for those
+// is that the single action EXISTS.
+const ONE_CLIP = new Set(['dilo', 'sauropelta', 'spino'])
 for (const [id, a] of Object.entries(audit)) {
+  if (ONE_CLIP.has(id)) {
+    check(a.slots.idle !== null, `${id}: its one clip resolved (${a.slots.idle})`)
+    continue
+  }
   const missing = Object.entries(a.slots).filter(([, v]) => v === null).map(([k]) => k)
   check(missing.length === 0, `${id}: every clip slot resolved${missing.length ? ' — missing ' + missing.join(',') : ''}`)
+}
+check(Object.keys(audit).length >= 14, `the roster is ${Object.keys(audit).length} species with working rigs`)
+
+// the three of them are real animals: they spawn, they are sized, they bleed
+for (const sp of ONE_CLIP) {
+  const idx = await page.evaluate((s2) => { const p = window.__g.player(); return window.__g.game.spawnDino(s2, p.x + 7, p.z - 7) }, sp)
+  await page.waitForTimeout(2200)
+  const st = await page.evaluate((k) => window.__g.game.dinoStates()[k], idx)
+  const size = await page.evaluate((k) => window.__g.game.dinoHeight ? window.__g.game.dinoHeight(k) : null, idx)
+  check(st && st.hp > 0, `${sp} spawns with ${st?.hp} hp`)
+  check(size === null || size > 0.8, `${sp} is a real size (${size === null ? 'n/a' : size.toFixed(1) + ' m'})`)
+  await page.evaluate((k) => window.__g.game.killDino(k), idx)
+  await page.waitForTimeout(1800)
+  const dead = await page.evaluate((k) => window.__g.game.dinoStates()[k], idx)
+  check(dead.state === 'dead', `${sp} can be killed (topple covers its missing death clip)`)
 }
 // every rig draws opaque: a BLEND material (the Carnotaurus shipped one) has no
 // depth write, so the water sheets painted over it (user screenshot 24)

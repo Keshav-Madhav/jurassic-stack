@@ -400,8 +400,8 @@ polish / content:**
 4. **The Wayfinder item + corpse bag death** (feel) · **shadow caching + KTX2** (perf, G+H) · **playtest
    ritual: F8 report dump + the 10-item first-ten-minutes checklist** (polish) · ~~caves~~ **DONE M51** — three carved bowls with stone roofs, dark enough that a
    torch matters, one of them behind the cold and holding a keystone.
-5. **Roster honesty**: Dilophosaurus / Sauropelta / Spinosaurus have no clips — budget the Blender
-   authoring or drop them from the "15+" line; the flyer and the aquatic are movement modes (decision
+5. ~~Roster honesty~~ **DONE M52** — the claim was wrong: they had ONE clip each, not none, and
+   one clip at four rates is a working animal. Fourteen species with rigs now. the flyer and the aquatic are movement modes (decision
    7) and come after.
 6. **Co-op** last, as decided.
 
