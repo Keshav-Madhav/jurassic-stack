@@ -122,6 +122,7 @@ icon is the thing.
 |---|---|---|---|
 | kenney-campfire-pit / floor / fence-fortified / structure / structure-floor / structure-roof / fence / tool-axe / tree-log / resource-wood / resource-stone / resource-planks / workbench / chest / bedroll / tent | Kenney Survival Kit 2.0 (kenney.nl/assets/survival-kit) | CC0 | campfire · foundation + ceiling (floor planks) · wall (fortified fence) · wood (tree-log) · stone · saddle (bedroll, stand-in) · rest held for later buildables |
 | kenney-meat-raw / meat-cooked / meat-ribs / grapes | Kenney Food Kit (kenney.nl/assets/food-kit) | CC0 | raw meat · cooked meat · berries (grapes) |
+| pp-Saddle | **Saddle** by *Poly by Google*, poly.pizza/m/dSMm_V4sKNr | **CC-BY 3.0** (attribution required) | the saddle. It used to borrow the Kenney bedroll; when the bedroll became a real item (M37) the two icons were the same picture, so the saddle got a real model (M38). Intake: `gltf-transform copy` → `meshopt --level medium` → `resize 512` → `webp -q 82`, 1.64 MB → 74 KB |
 | pp-Spear, pp-Torch, pp-WoodenTorch, pp-AxeStone | Quaternius via poly.pizza (fH1zmvjPNx, Gq38E7hFZw, pNsfJzhXiD, XnqO64KhYx) | CC0 | spear · torch (wooden) · hatchet + flint (the head) |
 | pp-AnimalHide | Zsky via poly.pizza GaurgMNrWC | CC-BY 3.0 — credit Zsky | hide |
 | pp-Rope | J-Toastie via poly.pizza dkNzi6oDQj | CC-BY 3.0 — credit J-Toastie | fiber |

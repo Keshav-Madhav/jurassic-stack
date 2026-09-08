@@ -25,7 +25,7 @@ export const ITEM_MODEL: Record<ItemId, string> = {
   foundation: 'kenney-floor',
   wall: 'kenney-fence-fortified',
   ceiling: 'kenney-floor', // planks: a flat ceiling you can stand on (the kit's roof piece is a whole frame on posts)
-  saddle: 'kenney-bedroll',
+  saddle: 'pp-Saddle', // a real saddle (poly.pizza, CC-BY): it shared the bedroll model, and once the bedroll became a real item the two icons were the same picture (M38)
   bedroll: 'kenney-bedroll',
 }
 
@@ -44,6 +44,7 @@ const ICON_FRAME: Partial<Record<ItemId, { yaw?: number; pitch?: number; roll?: 
   foundation: { pitch: 0.6 },
   wall: { yaw: 0.5 },
   bedroll: { pitch: 0.55, zoom: 1.05 },
+  saddle: { yaw: -0.5, pitch: 0.15, zoom: 1.15, lift: 1.6 }, // dark leather: lift it or the icon is a silhouette (the M29 lesson)
   stone: { zoom: 1.1 },
   berry: { zoom: 1.05 },
 }

@@ -172,7 +172,13 @@ export class Sfx {
     }
     this.voices++
     this.plays[id] = (this.plays[id] ?? 0) + 1
-    src.onended = () => { this.voices-- }
+    // release the voice on `ended` OR on a timer: a context suspended by a
+    // backgrounded tab never fires `ended`, and sixteen leaked voices would
+    // mute the game for the rest of the session with no way to notice
+    let freed = false
+    const free = () => { if (!freed) { freed = true; this.voices-- } }
+    src.onended = free
+    setTimeout(free, (buf.duration / Math.max(0.2, src.playbackRate.value)) * 1000 + 600)
     src.start()
   }
 

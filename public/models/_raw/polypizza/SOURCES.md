@@ -9,3 +9,4 @@
 | AnimalHide.glb | GaurgMNrWC | Animal Hide | Zsky | CC-BY 3.0 (credit: Zsky) |
 | Rope.glb | dkNzi6oDQj | Rope | J-Toastie | CC-BY 3.0 (credit: J-Toastie) |
 | CampfireRocks.glb | 5sjLUck886 | Camp Fire Rocks | reyshapes | CC0 |
+| Saddle.glb | dSMm_V4sKNr | Saddle | Poly by Google | CC-BY 3.0 (credit: Poly by Google) |

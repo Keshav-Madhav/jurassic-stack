@@ -561,7 +561,10 @@ async function boot(): Promise<void> {
     const f = feetPos()
     const bed = building.bedrollNear(f.x, f.z)
     if (!bed) return false
-    if (daynight.nightness < 0.3) { hud.toast('It is not dark yet.'); return true }
+    // BY DAY THIS VERB DOES NOT EXIST. Returning true here swallowed the E
+    // press, so a bedroll laid beside a campfire meant you could not cook,
+    // drink, take a keystone or mount while standing on it (M38 review).
+    if (daynight.nightness < 0.3) return false
     const hostile = nearestDino(45, (d) => d.state === 'aggro' || d.state === 'hunt')
     if (hostile) { hud.toast(`You cannot sleep — a ${hostile.species.name} is close.`); return true }
     const DAWN = 0.27
@@ -612,6 +615,10 @@ async function boot(): Promise<void> {
           alphaSlain ? 'the Gatekeeper slain on its causeway' : 'the Gatekeeper still walks its causeway',
           `${tamed} dino${tamed === 1 ? '' : 's'} tamed · ${building.count()} pieces built`,
           `${Math.round(daynight.elapsedDays * 10) / 10} island days lived (one is ${Math.round(DAY_LENGTH_S / 60)} real minutes)`,
+          // CC-BY asks for attribution where the work is used, and the repo's
+          // ASSETS.md is not where a player is (M38 review). The CC0 packs are
+          // named too, because they earned it.
+          'models Kenney · Quaternius · KayKit · Poly by Google · Zsky · J-Toastie — sound Kenney · opengameart CC0 creature SFX',
         ]), 2800)
         return true
       }
@@ -1765,7 +1772,8 @@ async function boot(): Promise<void> {
     const canCook = inventory.count('rawmeat') > 0 && building.nearFire(fk.x, fk.z)
     const canDrink = !riding && nearWaterFor(fk) && survival.water < 99
     if (riding) hud.prompt('E — dismount')
-    else if (atBed) hud.prompt(daynight.nightness < 0.3 ? 'your bedroll — you will wake here' : 'E — sleep until dawn')
+    // the prompt must match what E actually does: by day the bedroll is not a verb
+    else if (atBed && daynight.nightness >= 0.3) hud.prompt('E — sleep until dawn')
     else if (canCook) hud.prompt('E — cook the meat')
     else if (canDrink) hud.prompt('E — drink')
     else if (nearBeacon) hud.prompt(keystones.enough ? 'E — light the beacon' : 'the brazier is cold')
@@ -1881,7 +1889,7 @@ async function boot(): Promise<void> {
       ['draw calls', String(renderer.info.render.calls)],
       ['triangles', `${(renderer.info.render.triangles / 1e6).toFixed(2)} M`],
       ['pixels', `${px.x}×${px.y} @${pixelRatio.toFixed(2)} (${(px.x * px.y / 1e6).toFixed(1)} Mpx)`],
-      ['point lights', `${lights.slots} of ${lights.emitterCount} fires`],
+      ['lights lit/slots', `${lights.debug().filter((l) => l.intensity > 0).length} lit · ${lights.slots} slots · ${lights.emitterCount} sources`],
       ['dinos awake / cards', `${awake.length} / ${cards}`],
       ['', ''],
       ['gpu', GpuTimer.rendererName(renderer.getContext() as WebGL2RenderingContext)],
