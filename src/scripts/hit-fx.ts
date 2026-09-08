@@ -1,4 +1,9 @@
-// Hit feedback: a spray of blood at every landed blow — the player's swing on
+// Hit feedback: a spray of blood at every landed blow, and a burst of CHIPS
+// when you strike wood or stone (M48b) — the debris pool below is the same
+// machinery as the blood, tinted per material and thrown flatter, because a
+// chip flies off a trunk sideways where blood sprays up.
+//
+// Original note: a spray of blood at every landed blow — the player's swing on
 // a dino, a dino's bite on the player or on its prey. A small pool of Points
 // bursts (dark red, gravity, 0.7 s), plus a few drops that stay on the ground
 // as flat dark decals for half a minute. Cheap, and the difference between
@@ -10,6 +15,18 @@ const BURSTS = 12
 const PER_BURST = 26
 const LIFE = 0.7
 const DECALS = 40
+/** chips: their own pool, so a felling blow cannot starve the blood */
+const CHIP_BURSTS = 8
+const PER_CHIP = 14
+const CHIP_LIFE = 0.9
+
+/** what each material throws off, and what colour it is */
+export const CHIP_LOOK = {
+  wood: { color: 0x7a5326, size: 0.14 },
+  stone: { color: 0x8d8880, size: 0.12 },
+  leaf: { color: 0x3f6a24, size: 0.16 },
+} as const
+export type ChipKind = keyof typeof CHIP_LOOK
 
 interface Burst { points: THREE.Points; vel: Float32Array; t: number; alive: boolean }
 
@@ -37,7 +54,19 @@ export class HitFx {
   private mat = new THREE.PointsMaterial({ color: 0x8c1016, size: 0.16, map: dropTexture(), alphaTest: 0.2, transparent: true, opacity: 1, depthWrite: false, sizeAttenuation: true })
   private decalMat = new THREE.MeshBasicMaterial({ color: 0x4a0a0c, transparent: true, opacity: 0.85, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 })
 
+  private chips: (Burst & { kind: ChipKind })[] = []
+
   constructor() {
+    for (let i = 0; i < CHIP_BURSTS; i++) {
+      const geo = new THREE.BufferGeometry()
+      geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(PER_CHIP * 3), 3))
+      // chips are little flakes, not drops: square points read as splinters
+      const points = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0x7a5326, size: 0.14, transparent: true, opacity: 1, depthWrite: false, sizeAttenuation: true }))
+      points.visible = false
+      points.frustumCulled = false
+      this.group.add(points)
+      this.chips.push({ points, vel: new Float32Array(PER_CHIP * 3), t: 0, alive: false, kind: 'wood' })
+    }
     for (let i = 0; i < BURSTS; i++) {
       const geo = new THREE.BufferGeometry()
       geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(PER_BURST * 3), 3))
@@ -92,7 +121,73 @@ export class HitFx {
     }
   }
 
+  /** A burst of chips off whatever was struck. `dirX/dirZ` is the direction
+   *  the blow came FROM, so the debris flies back at the swinger — which is
+   *  what makes it read as coming off the trunk rather than out of the ground.
+   *  @param heavy a felling blow: twice the chips, thrown harder */
+  chip(kind: ChipKind, x: number, y: number, z: number, dirX = 0, dirZ = 0, heavy = false): void {
+    let b = this.chips.find((q) => !q.alive)
+    if (!b) b = this.chips.reduce((p, q) => (q.t > p.t ? q : p))
+    b.kind = kind
+    const look = CHIP_LOOK[kind]
+    const pos = b.points.geometry.getAttribute('position') as THREE.BufferAttribute
+    const arr = pos.array as Float32Array
+    const n = heavy ? PER_CHIP : Math.round(PER_CHIP * 0.65)
+    const len = Math.hypot(dirX, dirZ) || 1
+    const bx = dirX / len, bz = dirZ / len
+    for (let i = 0; i < PER_CHIP; i++) {
+      const on = i < n
+      arr[i * 3] = x; arr[i * 3 + 1] = on ? y : -999; arr[i * 3 + 2] = z
+      // a cone back along the blow, flatter than blood and a little upward
+      const spread = 0.9
+      const a = (Math.random() - 0.5) * spread
+      const ca = Math.cos(a), sa = Math.sin(a)
+      const ox = bx * ca - bz * sa, oz = bx * sa + bz * ca
+      const speed = (2.2 + Math.random() * 3.4) * (heavy ? 1.5 : 1)
+      b.vel[i * 3] = ox * speed
+      b.vel[i * 3 + 1] = 1.2 + Math.random() * (heavy ? 3.4 : 2.2)
+      b.vel[i * 3 + 2] = oz * speed
+    }
+    pos.needsUpdate = true
+    const mat = b.points.material as THREE.PointsMaterial
+    mat.color.setHex(look.color)
+    mat.size = look.size * (heavy ? 1.35 : 1)
+    mat.opacity = 1
+    b.points.visible = true
+    b.t = 0
+    b.alive = true
+  }
+
   update(dt: number): void {
+    for (const b of this.chips) {
+      if (!b.alive) continue
+      b.t += dt
+      if (b.t > CHIP_LIFE) { b.alive = false; b.points.visible = false; continue }
+      const pos = b.points.geometry.getAttribute('position') as THREE.BufferAttribute
+      const arr = pos.array as Float32Array
+      for (let i = 0; i < PER_CHIP; i++) {
+        if (arr[i * 3 + 1] < -900) continue
+        b.vel[i * 3 + 1] -= 16 * dt
+        arr[i * 3] += b.vel[i * 3] * dt
+        arr[i * 3 + 1] += b.vel[i * 3 + 1] * dt
+        arr[i * 3 + 2] += b.vel[i * 3 + 2] * dt
+        const gy = heightAt(arr[i * 3], arr[i * 3 + 2]) + 0.04
+        if (arr[i * 3 + 1] < gy) {
+          // chips bounce once, then lie there — stone especially
+          if (b.vel[i * 3 + 1] < -2.2) {
+            arr[i * 3 + 1] = gy
+            b.vel[i * 3 + 1] *= -0.28
+            b.vel[i * 3] *= 0.5
+            b.vel[i * 3 + 2] *= 0.5
+          } else {
+            arr[i * 3 + 1] = gy
+            b.vel[i * 3] = 0; b.vel[i * 3 + 1] = 0; b.vel[i * 3 + 2] = 0
+          }
+        }
+      }
+      pos.needsUpdate = true
+      ;(b.points.material as THREE.PointsMaterial).opacity = 1 - Math.pow(b.t / CHIP_LIFE, 3)
+    }
     for (const b of this.bursts) {
       if (!b.alive) continue
       b.t += dt

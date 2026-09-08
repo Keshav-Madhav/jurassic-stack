@@ -681,3 +681,11 @@ Findings and fixes, each measured with the new jitter meter (`__g.frameStats()`,
 - [x] **And trees FALL.** A felled tree leans, accelerates over about a second and a half, sinks and goes, instead of blinking out of existence. Rocks and bushes still just go — a boulder does not topple
 - [x] **The tool is in your hand.** The castaway mimed everything: you swung at a tree with an empty fist and the hatchet existed only in the hotbar. The kit model now hangs off the right wrist (`WristR`), counter-scaled out of the bone's own scale, posed per item — hatchet, spear and torch are all visibly held, and the spear reads through the whole throw animation
 - [x] Gates 11 files, all green
+
+### M48b — CHIPS, WOUNDS, AND THE TOOL'S OWN ARC (the second pass on feel)
+- [x] **Chips fly, tinted by what you hit.** A second pool in `hit-fx.ts` — the blood machinery, thrown flatter and BACK ALONG THE BLOW so the debris comes off the trunk toward the swinger rather than out of the ground. Wood (0x7a5326), stone (0x8d8880) and leaf (0x3f6a24); stone bounces once before it lies still; a felling blow throws twice as many, harder
+- [x] **A half-chopped tree looks half-chopped.** Every node remembers `maxHp`, so damage is a fraction: a struck trunk darkens toward cut wood (tint **1.015 → 0.71** over six hits, measured) and takes a permanent list that grows with the wound. You can see across a clearing which trees you have already been at, and a respawned one is clean again
+- [x] **The tool swings itself.** The rig's clips move the arm and a tool parented to the wrist just rode along stiffly. There is now a second rotation layered on the mount — a 0.28 s wind-up, a fast strike through 2.45 rad, then a settle — over the top of whatever the arm is doing, so it works with the chop, the throw and the punch alike
+- [x] **Gate (m4, +6 checks)**: a tree takes six swings not three · a struck tree darkens · the swing already paid a chip · the felling blow kills it · **it is FALLING, not gone** · the fall finishes and clears itself
+- [x] **A harness bug caught by its own gate**: `hitNode` (the QA hook that lets the camera stand back and watch) yielded items without crediting the pack, so "did the chip land?" was testing the harness rather than the game. It runs the inventory path now
+- [x] Gates 11 files, all green

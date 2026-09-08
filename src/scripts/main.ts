@@ -20,7 +20,7 @@ import { Beacon } from './beacon'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import { WorldBorder } from './border'
-import { HitFx } from './hit-fx'
+import { HitFx, type ChipKind } from './hit-fx'
 import { Kit, ITEM_MODEL } from './kit'
 import { loadStoneTexture } from './stone-material'
 import { DinoImpostors } from './dino-impostors'
@@ -46,6 +46,9 @@ import { Post } from './post'
 import { groundKindAt } from './terrain-paint'
 import { warmRoots } from './uploads'
 import { LightRig } from './lights'
+
+/** kinds that throw wood chips rather than leaves */
+const WOODY = new Set(['tree', 'elder', 'redwood', 'pine', 'deadtree', 'palm', 'willow', 'log', 'sticks'])
 
 const SWING_COOLDOWN = 0.45
 const REACH = 3.2
@@ -620,6 +623,14 @@ async function boot(): Promise<void> {
       sfx.play(isWood ? (held === 'hatchet' ? 'chop' : 'hit-wood') : stone ? 'hit-stone' : 'pick', {
         volume: 0.7, at: { x: node.x, y: node.y + 1, z: node.z },
       })
+      // CHIPS off the thing you hit, thrown back toward you (M48b)
+      {
+        const f = feetPos()
+        const chipKind: ChipKind = stone ? 'stone' : WOODY.has(node.kind) ? 'wood' : 'leaf'
+        // strike height: a trunk is hit at chest height, cover at the ground
+        const hy = node.y + (WOODY.has(node.kind) || stone ? Math.min(1.6, node.scale * 0.12) : 0.3)
+        hitFx.chip(chipKind, node.x, hy, node.z, f.x - node.x, f.z - node.z, node.hp <= 1)
+      }
       const hits = creative ? 99 : held === 'hatchet' && isWood ? 2 : 1
       let yielded: Partial<Record<ItemId, number>> | null = null
       for (let i = 0; i < hits && node.alive; i++) yielded = scatter.hit(node) ?? yielded
@@ -1120,12 +1131,32 @@ async function boot(): Promise<void> {
           if (d < bd) { bd = d; best = n }
         }
         if (!best) return null
+        // credit the yield exactly as a real swing does, or a gate checking
+        // "did the chip land in the pack?" is testing the harness, not the game
         let got: Partial<Record<ItemId, number>> | null = null
-        for (let i = 0; i < times && best.alive; i++) got = scatter.hit(best) ?? got
+        for (let i = 0; i < times && best.alive; i++) {
+          const y = scatter.hit(best)
+          if (y) {
+            for (const [id, n] of Object.entries(y)) inventory.add(id as ItemId, n)
+            got = y
+          }
+        }
         scatter.flushColliderDrops(physics)
         return { x: Math.round(best.x), z: Math.round(best.z), hp: best.hp, alive: best.alive, got }
       },
       hitsDebug: () => scatter.debugHits(),
+      /** QA: a node's damage state — hp, and the tint the wound paints it */
+      nodeState: (kind: string, x: number, z: number) => {
+        let best = null as null | { hp: number; maxHp: number; tint: number; alive: boolean; d: number }
+        for (const n of scatter.nodes) {
+          if (n.kind !== kind) continue
+          const d = Math.hypot(n.x - x, n.z - z)
+          if (!best || d < best.d) best = { hp: n.hp, maxHp: n.maxHp, tint: +n.tint.toFixed(3), alive: n.alive, d }
+        }
+        if (!best) return null
+        const wound = best.maxHp > 1 ? 1 - best.hp / best.maxHp : 0
+        return { hp: best.hp, maxHp: best.maxHp, alive: best.alive, wound: +wound.toFixed(2), drawnTint: +(best.tint * (1 - wound * 0.3)).toFixed(3) }
+      },
       nearestNodeInfo: (kind: string) => {
         const from = feetPos()
         let best: { x: number; z: number; scale: number; d: number } | null = null

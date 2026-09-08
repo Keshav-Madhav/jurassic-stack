@@ -68,6 +68,11 @@ export class Player {
   private airBlend = 0
   private sitBlend = 0
   private oneShotT = 0
+  /** THE TOOL'S OWN ARC. The rig's clips move the arm, and a tool parented to
+   *  the wrist just rode along stiffly — an axe should cock back, whip through
+   *  and settle. This is a second rotation on the mount, over the top of
+   *  whatever the arm is doing: -1 = not swinging, 0..1 = through the arc. */
+  private swingT = -1
   /** leg bones for the procedural riding pose (rig has no sit clip).
    *  Casual2 ships FOUR duplicate armatures (one per body-part mesh) with
    *  identical bone names — every match must be posed, not just the first. */
@@ -152,6 +157,25 @@ export class Player {
     }
   }
 
+  /** The held tool's arc, layered on the mount so it works with any clip:
+   *  a quick wind-up, a fast strike through, then an ease back to rest. */
+  private swingTool(dt: number): void {
+    if (this.swingT < 0) return
+    this.swingT += dt / 0.52
+    if (this.swingT >= 1) { this.swingT = -1; if (this.heldMount) this.heldMount.rotation.set(0, 0, 0); return }
+    if (!this.heldMount) return
+    const t = this.swingT
+    // -0.5 (cocked back) → +1.9 rad (through), then settle: a cubic ease out
+    // of the wind-up and a hard fast strike, which is where the weight reads
+    const wind = Math.min(1, t / 0.28)
+    const strike = t < 0.28 ? 0 : Math.min(1, (t - 0.28) / 0.34)
+    const settle = t < 0.62 ? 0 : (t - 0.62) / 0.38
+    const angle = -0.55 * (1 - wind * wind) - 0.55 * wind + 2.45 * (1 - Math.pow(1 - strike, 3)) - 1.35 * (settle * settle)
+    this.heldMount.rotation.x = angle
+    // and a little roll, so it is not a pure hinge
+    this.heldMount.rotation.z = 0.18 * Math.sin(t * Math.PI)
+  }
+
   /** Pose diagnostics: matched leg bones + live thigh flex (radians). */
   poseInfo(): { thighs: number; shins: number; flexX: number; sitBlend: number } {
     return {
@@ -196,6 +220,7 @@ export class Player {
     if (!action) return
     action.reset().play()
     this.oneShotT = 0.55
+    this.swingT = 0 // and the tool starts its own arc (M48b)
   }
 
   /** Fixed-step: translate keys + camera yaw into mover intent. */
@@ -340,6 +365,7 @@ export class Player {
   private animate(dt: number): void {
     if (!this.mixer) return
     this.oneShotT = Math.max(0, this.oneShotT - dt)
+    this.swingTool(dt)
     const planar = Math.hypot(this.mover.intent.vx, this.mover.intent.vz)
     const running = planar > WALK_SPEED * 1.25
     const airborne = !this.riding && !this.swimming && !this.mover.grounded

@@ -154,6 +154,25 @@ await g('window.__g.game.interact()') // dismount
 await page.waitForTimeout(200)
 check(!(await g('window.__g.game.riding()')), 'dismounted')
 
+// ---------- M48b: gathering has feel ----------
+// every swing pays, the thing you hit looks hit, and it falls at the end
+{
+  const t = await g('window.__g.game.nearestNodeInfo("tree")')
+  const before = await page.evaluate(([x, z]) => window.__g.game.nodeState('tree', x, z), [t.x, t.z])
+  check(before.maxHp >= 5, `a tree takes ${before.maxHp} swings, not three`)
+  const wood0 = await g('window.__g.game.count("wood")')
+  await page.evaluate(([x, z]) => window.__g.game.hitNode('tree', 1, x, z), [t.x, t.z])
+  const mid = await page.evaluate(([x, z]) => window.__g.game.nodeState('tree', x, z), [t.x, t.z])
+  check(mid.wound > 0 && mid.drawnTint < before.drawnTint, `a struck tree darkens (tint ${before.drawnTint} → ${mid.drawnTint})`)
+  check((await g('window.__g.game.count("wood")')) > wood0, 'and the swing already paid a chip of wood')
+  await page.evaluate(([x, z]) => window.__g.game.hitNode('tree', 9, x, z), [t.x, t.z])
+  const felled = await page.evaluate(([x, z]) => window.__g.game.nodeState('tree', x, z), [t.x, t.z])
+  check(!felled.alive, 'the felling blow kills it')
+  check((await g('window.__g.game.hitsDebug()')).falling > 0, 'and it is FALLING, not gone')
+  await page.waitForTimeout(2000)
+  check((await g('window.__g.game.hitsDebug()')).falling === 0, 'the fall finishes and clears itself')
+}
+
 // ---------- save / reload ----------
 const savedWood = await g('window.__g.game.count("wood")')
 await page.evaluate(() => window.__g.game.save()) // explicit: pagehide races reload

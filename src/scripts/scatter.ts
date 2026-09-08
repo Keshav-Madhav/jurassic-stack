@@ -38,6 +38,8 @@ export interface ScatterNode {
   scale: number
   rotY: number
   tint: number
+  /** what it had before anyone hit it — the wound is hp/maxHp (M48b) */
+  maxHp: number
   hp: number
   alive: boolean
   respawnAt: number
@@ -1088,6 +1090,7 @@ export class Scatter {
           // cliff stands in the cliff's shade for good (M47)
           z, scale: scale * scaleMul, rotY, tint: tint * ambientAt(x, z),
           hp: NODE_DEFS[kind].hp,
+          maxHp: NODE_DEFS[kind].hp,
           alive: true,
           respawnAt: 0,
         })
@@ -1136,6 +1139,7 @@ export class Scatter {
     node.hp -= 1
     // the thing you hit KNOWS it was hit: a wobble that decays over ~0.4 s
     this.shakes.set(node.id, { node, t: 1, lean: (Math.random() - 0.5) * 0.12 })
+    this.poseNode(node, 0, 0) // repaint immediately: the wound shows on this frame
     if (node.hp > 0) {
       // chips: every swing pays a little, so the bar moves while you work
       const chip = NODE_DEFS[node.kind].chip
@@ -1199,7 +1203,14 @@ export class Scatter {
     if (!prop || !ids) return
     const idx = ids.indexOf(node.id)
     if (idx < 0) return
-    prop.setInstanceTilted(idx, node.x, node.y - sink * node.scale, node.z, node.scale, node.rotY, node.tint, lean)
+    // A WOUNDED THING LOOKS WOUNDED (M48b): a half-chopped trunk darkens toward
+    // its own cut wood and takes a permanent list, so you can see across a
+    // clearing which trees you have already been at. `wound` is 0 (untouched)
+    // to 1 (one blow from falling).
+    const wound = node.maxHp > 1 ? 1 - node.hp / node.maxHp : 0
+    const tint = node.tint * (1 - wound * 0.3)
+    const list = wound * 0.055 * (node.id % 2 ? 1 : -1)
+    prop.setInstanceTilted(idx, node.x, node.y - sink * node.scale, node.z, node.scale, node.rotY, tint, lean + list)
   }
 
   flushColliderDrops(physics: Physics): void {
@@ -1222,6 +1233,7 @@ export class Scatter {
       n.hp = NODE_DEFS[n.kind].hp
       this.dead.delete(id)
       this.setNodeVisible(n, true)
+      this.poseNode(n, 0, 0) // a regrown tree is not a wounded one
       this.ensureCollidersAround(Number.NaN, Number.NaN, physics, true)
     }
   }
