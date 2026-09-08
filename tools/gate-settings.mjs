@@ -88,6 +88,29 @@ check(await click('Effects', 'Full'), 'and back to full')
 await page.waitForTimeout(600)
 check((await g('window.__g.post().enabled')) === true, 'the composer is back')
 
+// --- a frozen scene must render an IDENTICAL frame every time, in every
+// effects configuration. With AO on, the composer's buffer ping-pong left the
+// atmosphere pass reading stale depth on alternate frames — a 59/255 strobe
+// that no gate could see and no still screenshot could show (M46).
+await page.keyboard.press('KeyO')
+await page.waitForTimeout(300)
+await page.evaluate(() => { const g = window.__g; g.setTime(0.5); g.game.setGod(true); g.teleport(-286, 793); g.setCam(1.35, 0.02); g.setFrozen(true) })
+await page.waitForTimeout(2000)
+for (const [label, fn] of [
+  ['off', () => window.__g.post().setQuality('off')],
+  ['basic', () => { const p = window.__g.post(); p.setAo(false); p.setQuality('basic') }],
+  ['full', () => { const p = window.__g.post(); p.setAo(false); p.setQuality('full') }],
+  ['full + AO', () => { const p = window.__g.post(); p.setQuality('full'); p.setAo(true) }],
+]) {
+  await page.evaluate(fn)
+  await page.waitForTimeout(1200)
+  const a = await page.screenshot()
+  await page.waitForTimeout(180)
+  const b2 = await page.screenshot()
+  check(Buffer.compare(a, b2) === 0, `effects "${label}": a frozen scene renders the same frame twice`)
+}
+await page.evaluate(() => window.__g.setFrozen(false))
+
 await browser.close()
 console.log(failed ? '\nGATE FAILED' : '\nGATE PASSED')
 process.exit(failed ? 1 : 0)

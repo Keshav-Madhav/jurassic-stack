@@ -188,8 +188,21 @@ export class Post {
     // second geometry render, which is the rule GTAO broke (M42)
     target.depthTexture = new THREE.DepthTexture(size.x, size.y, THREE.UnsignedIntType)
     this.composer = new EffectComposer(renderer, target)
+    // BOTH targets carry depth. EffectComposer ping-pongs readBuffer and
+    // writeBuffer, and it does not reset them between frames — so with an ODD
+    // number of swapping passes (which is exactly what turning AO on makes it)
+    // the RenderPass writes into the other target every other frame. With
+    // depth on only one of them the atmosphere pass then read stale depth on
+    // alternate frames: a 59/255 strobe, found by diffing consecutive frames
+    // of a frozen scene (M46).
+    this.composer.renderTarget2.depthTexture = new THREE.DepthTexture(size.x, size.y, THREE.UnsignedIntType)
     this.renderPass = new RenderPass(scene, camera)
     this.composer.addPass(this.renderPass)
+
+    // the atmosphere reads the depth the RenderPass just wrote, so it runs
+    // FIRST, while readBuffer is still that render's target
+    this.air = new ShaderPass(AirShader)
+    this.composer.addPass(this.air)
 
     // AO at half resolution and denoised — full res costs three times as much
     // for a difference you cannot see under a canopy
@@ -217,13 +230,6 @@ export class Post {
     // alone.
     this.bloom = new UnrealBloomPass(new THREE.Vector2(size.x, size.y), 0.5, 0.5, 0.95)
     this.composer.addPass(this.bloom)
-
-    // ATMOSPHERE. Height fog that pools in the low ground and thins as you
-    // climb, brightening toward the sun — the depth buffer the scene already
-    // wrote is all it needs (M43).
-    this.air = new ShaderPass(AirShader)
-    this.air.material.uniforms.tDepth.value = target.depthTexture
-    this.composer.addPass(this.air)
 
     this.grade = new ShaderPass(GradeShader)
     this.composer.addPass(this.grade)
@@ -291,6 +297,9 @@ export class Post {
    *  day's colours. Called once a frame, before render(). */
   air_update(camera: THREE.PerspectiveCamera, sunDir: THREE.Vector3, fog: THREE.Color, sun: THREE.Color, nightness: number): void {
     const u = this.air.material.uniforms
+    // whichever target the RenderPass is about to draw into — see the note in
+    // the constructor about the ping-pong
+    u.tDepth.value = (this.composer.readBuffer as THREE.WebGLRenderTarget).depthTexture
     camera.updateMatrixWorld()
     ;(u.invViewProj.value as THREE.Matrix4)
       .multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
