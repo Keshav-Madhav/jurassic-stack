@@ -108,6 +108,8 @@ export class Dino {
   /** main.ts hangs the sound bank here: `voice` is what the animal did, not
    *  which file to play — the mapping to samples lives with the mixer (sfx.ts) */
   static onVoice: ((voice: 'call' | 'roar' | 'hurt' | 'die' | 'eat', d: Dino) => void) | null = null
+  /** the moment a falling body hits the ground — main.ts makes the noise and the dust */
+  static onThud: ((d: Dino) => void) | null = null
   /** the scene the dino's object lives in while awake — a dormant dino's
    *  object is REMOVED from the scene (three walks every object in the graph
    *  every frame: 1500 empty groups were 5.5K objects and ~3 ms — M24) */
@@ -155,9 +157,22 @@ export class Dino {
   private thinkT = Math.random() * 0.5
   /** the carcass timer (dead) and the meal timer (feed) share it */
   private deadT = 0
-  /** rigs without a real death clip topple procedurally when KO'd */
+  /** THE TOPPLE (rigs without a death clip). Not a linear roll any more: an
+   *  animal that goes down carries the direction it was hit from and falls
+   *  under something like gravity, overshoots, bounces once and settles — with
+   *  a thud when it lands (M41). A real jointed ragdoll per species is a much
+   *  bigger job for a body that is only ever seen lying still afterwards. */
   private topple = 0
   private toppleWanted = false
+  /** which way it goes over: +1 = its right, -1 = its left */
+  private toppleDir = 1
+  private toppleVel = 0
+  private toppleLanded = false
+  /** seconds until a clip-driven collapse hits the ground */
+  private thudIn = 0
+  /** world position of whatever last hit it, so it falls AWAY from the blow */
+  private lastHitX = 0
+  private lastHitZ = 0
   /** navmesh path-following (chase/follow): waypoints toward the target */
   private waypoints: PathPoint[] = []
   private repathT = 0
@@ -498,6 +513,8 @@ export class Dino {
   /** A hit from the player. torporHit=true for fists (KO route), false for weapons (damage route). */
   takeHit(damage: number, torporGain: number, fromX: number, fromZ: number): void {
     if (this.state === 'ko' || this.state === 'tamed') return
+    this.lastHitX = fromX
+    this.lastHitZ = fromZ
     this.hp -= damage
     this.torpor += torporGain
     if (this.hp <= 0) {
@@ -534,6 +551,62 @@ export class Dino {
       return true
     }
     return false
+  }
+
+  /** Ground clamp, slope pitch and the topple — everything a body does with
+   *  the floor. Extracted (M41) because `case 'dead'` RETURNED before reaching
+   *  it: the procedural topple only ever ran on knocked-out animals, and a
+   *  killed one with no death clip stood there like a statue. */
+  private settle(dt: number, pos: THREE.Vector3): void {
+    // slope-aware ground clamp: average front/back paw heights along the
+    // heading, and pitch the body to match — single-point clamping floats the
+    // feet on any slope
+    const fx = Math.sin(this.heading) * 0.8
+    const fz = Math.cos(this.heading) * 0.8
+    const hFront = heightAt(pos.x + fx, pos.z + fz)
+    const hBack = heightAt(pos.x - fx, pos.z - fz)
+    pos.y = (hFront + hBack) / 2 - 0.06 // slight embed: convex micro-ground floated feet
+    this.object.rotation.y = this.heading + (this.species.facingOffset ?? 0)
+    this.object.rotation.x = THREE.MathUtils.clamp(Math.atan2(hBack - hFront, 1.6), -0.3, 0.3)
+    if (this.thudIn > 0) {
+      this.thudIn -= dt
+      if (this.thudIn <= 0 && !this.toppleLanded) { this.toppleLanded = true; Dino.onThud?.(this) }
+    }
+    // the topple: a fall, not a fade. It accelerates like a felled tree, lands,
+    // bounces once off its own mass and settles (M41)
+    if (this.toppleWanted) {
+      if (this.topple < 1) {
+        // the further over it goes the harder gravity pulls — a pendulum past
+        // its balance point, scaled by how tall the animal is
+        this.toppleVel += (1.6 + 2.4 * this.topple) * dt * (2.6 / Math.max(1.2, this.species.height * 0.5))
+        this.topple += this.toppleVel * dt
+        if (this.topple >= 1) {
+          this.topple = 1
+          if (this.toppleVel > 0.8) {
+            this.toppleVel = -this.toppleVel * 0.22 // it comes back up a little
+            if (!this.toppleLanded) {
+              this.toppleLanded = true
+              Dino.onThud?.(this)
+            }
+          } else {
+            this.toppleVel = 0
+            if (!this.toppleLanded) { this.toppleLanded = true; Dino.onThud?.(this) }
+          }
+        }
+      } else if (this.toppleVel < 0) {
+        this.topple += this.toppleVel * dt
+        this.toppleVel += 5.5 * dt
+        if (this.topple > 1) { this.topple = 1; this.toppleVel = 0 }
+      }
+    } else if (this.topple > 0) {
+      this.topple = Math.max(0, this.topple - dt / 0.5) // it gets back up (a tamed KO)
+    }
+    if (this.topple > 0) {
+      const t = Math.min(1, this.topple)
+      this.object.rotation.z = -1.45 * t * this.toppleDir
+      this.object.rotation.x += -0.22 * t // and noses down as it goes
+      pos.y -= this.species.height * 0.2 * t
+    } else this.object.rotation.z = 0
   }
 
   update(dt: number, playerPos: THREE.Vector3, attackPlayer: (damage: number, from?: Dino) => void, senses?: Senses): void {
@@ -617,6 +690,7 @@ export class Dino {
         // a carcass: lies where it fell for a while, then is gone
         this.deadT -= dt
         this.speed = 0
+        this.settle(dt, pos) // it falls, lands and settles — see settle()
         this.animate(dt, 0, false)
         this.mixer?.update(0)
         if (this.deadT <= 0) this.object.visible = false
@@ -787,23 +861,7 @@ export class Dino {
       }
     }
 
-    // slope-aware ground clamp: average front/back paw heights along the
-    // heading, and pitch the body to match — single-point clamping floats the
-    // feet on any slope
-    const fx = Math.sin(this.heading) * 0.8
-    const fz = Math.cos(this.heading) * 0.8
-    const hFront = heightAt(pos.x + fx, pos.z + fz)
-    const hBack = heightAt(pos.x - fx, pos.z - fz)
-    pos.y = (hFront + hBack) / 2 - 0.06 // slight embed: convex micro-ground floated feet
-    this.object.rotation.y = this.heading + (this.species.facingOffset ?? 0)
-    this.object.rotation.x = THREE.MathUtils.clamp(Math.atan2(hBack - hFront, 1.6), -0.3, 0.3)
-    // the procedural topple (no death clip): roll onto the side, sink a little
-    const wantT = this.toppleWanted ? 1 : 0
-    if (this.topple !== wantT) this.topple = THREE.MathUtils.clamp(this.topple + (wantT ? dt / 0.8 : -dt / 0.5), 0, 1)
-    if (this.topple > 0) {
-      this.object.rotation.z = -1.35 * this.topple
-      pos.y -= this.species.height * 0.18 * this.topple
-    } else this.object.rotation.z = 0
+    this.settle(dt, pos)
     const running = this.speed > this.species.walkSpeed * 1.4
     this.animate(dt, this.speed / (running ? this.species.runSpeed : this.species.walkSpeed), running)
   }
@@ -896,6 +954,8 @@ export class Dino {
 
   /** Struck by another dino: herbivores flee or (defensive) fight back; carnivores fight back. */
   takeHitFrom(attacker: Dino, damage: number): void {
+    this.lastHitX = attacker.object.position.x
+    this.lastHitZ = attacker.object.position.z
     this.say('hurt')
     if (this.state === 'dead' || this.state === 'ko' || this.state === 'tamed') {
       if (this.state === 'tamed') this.hp -= damage // a tame can be hurt; it fights back below
@@ -917,6 +977,12 @@ export class Dino {
   }
 
   /** Killed: a carcass for a while, then gone. */
+  /** QA: drop it where it stands, as a killing blow from (x, z) would */
+  kill(fromX?: number, fromZ?: number): void {
+    if (fromX !== undefined && fromZ !== undefined) { this.lastHitX = fromX; this.lastHitZ = fromZ }
+    if (this.state !== 'dead') this.die()
+  }
+
   /** speak, if anything is listening */
   private say(voice: 'call' | 'roar' | 'hurt' | 'die' | 'eat'): void {
     Dino.onVoice?.(voice, this)
@@ -1046,7 +1112,18 @@ export class Dino {
       ko.reset().setLoop(THREE.LoopOnce, 1).play()
       ko.clampWhenFinished = true
       this.toppleWanted = false
+      // a clip-driven collapse lands too — the thud is not the topple's alone
+      this.thudIn = 0.55
+      this.toppleLanded = false
     } else {
+      // away from the blow: the cross product of "which way it faces" and
+      // "which way the hit came from" gives the side it falls on
+      const dx = this.object.position.x - this.lastHitX
+      const dz = this.object.position.z - this.lastHitZ
+      const side = Math.cos(this.heading) * dx - Math.sin(this.heading) * dz
+      this.toppleDir = side >= 0 ? 1 : -1
+      this.toppleVel = 0.55 + Math.random() * 0.5
+      this.toppleLanded = false
       this.toppleWanted = true
     }
   }

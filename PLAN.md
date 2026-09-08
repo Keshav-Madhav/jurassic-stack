@@ -388,7 +388,9 @@ polish / content:**
    (polish: footsteps by ground, dino calls by species/state, bites, water, fire — Kenney/freesound
    CC0) · **the build tier from ruins** (content: recipe tablets in the 23 ruins unlock chest, bedroll
    respawn, workbench, tent, fence, door, thatch roof — the Kenney kit already holds most of these).
-2. **Ragdolls** (feel) · **opaque grass + far terrain** (perf, B+E) · **the visual LUT + material
+2. ~~Ragdolls~~ **M41 did the honest version** — a directed, accelerating topple with a landing
+   thud, not a jointed ragdoll (a body that is only ever seen lying still afterwards does not repay
+   a per-species joint rig; revisit only if bodies start falling off cliffs) · **opaque grass + far terrain** (perf, B+E) · **the visual LUT + material
    normalisation** (polish) · **cold on the ranges: fur off mammoths** (content, beat 4).
 3. ~~Tames defend you~~ **DONE M36** · **hunger drive** (feel) · **depth pre-pass + occlusion
    queries** (perf, C+F — note the frame is already 3–5 ms; measure before building either) ·

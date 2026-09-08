@@ -74,5 +74,24 @@ await page.waitForTimeout(6000)
 const hpAfter = await page.evaluate((i) => window.__g.game.dinoStates()[i].hp, foe)
 check(hpAfter < hpBefore, `the tame actually bites: the carno is ${hpBefore} → ${hpAfter} hp`)
 
+
+// --- M41: a body goes down like a body ---
+// (measured, not eyeballed: the roll accelerates rather than ramping linearly,
+// finishes on its side, and makes a noise when it lands)
+// a T-Rex, deliberately: its GLB ships no death clip (its slot falls back to a
+// roar), so it is one of the rigs the procedural topple exists for
+const victim = await page.evaluate(() => { const p = window.__g.player(); return window.__g.game.spawnDino('trex', p.x + 8, p.z - 8) })
+await page.waitForTimeout(2500)
+const rolls = []
+const thudsBefore = await page.evaluate(() => window.__g.game.thuds())
+await page.evaluate((k) => window.__g.game.killDino(k), victim)
+for (let i = 0; i < 12; i++) { rolls.push(await page.evaluate((k) => window.__g.game.dinoRoll(k), victim)); await page.waitForTimeout(110) }
+const mag = rolls.map(Math.abs)
+check(mag[mag.length - 1] > 1.2, `the carcass ends up on its side (${mag[mag.length - 1].toFixed(2)} rad)`)
+const early = mag[1] - mag[0]
+const later = mag[3] - mag[2]
+check(later > early, `the fall accelerates rather than ramps (${early.toFixed(2)} → ${later.toFixed(2)} rad a frame)`)
+check((await page.evaluate(() => window.__g.game.thuds())) > thudsBefore, 'and it lands with a thud')
+
 await browser.close()
 process.exit(failed ? 1 : 0)

@@ -152,6 +152,16 @@ async function boot(): Promise<void> {
   // WHAT THE ANIMALS SOUND LIKE. dinos.ts says what happened ('call', 'roar',
   // 'hurt', 'die', 'eat'); the sample and the pitch are chosen here, from the
   // species — a rex speaks a fifth below a raptor, and carries twice as far.
+  // a body hitting the ground: a heavy thud pitched to its size, and dust
+  let thudCount = 0
+  Dino.onThud = (d) => {
+    thudCount++
+    const p = d.object.position
+    const big = d.species.height
+    sfx.play('hit-flesh', { at: { x: p.x, y: p.y, z: p.z }, range: 90 + big * 20, volume: 0.9, rate: Math.max(0.45, 1.2 - big * 0.11) })
+    sfx.play('step-dirt', { at: { x: p.x, y: p.y, z: p.z }, range: 70, volume: 0.7, rate: Math.max(0.4, 0.9 - big * 0.06) })
+    hitFx.burst(p.x, p.y + 0.25, p.z, big > 3)
+  }
   Dino.onVoice = (voice, d) => {
     const p = d.object.position
     const big = d.species.height
@@ -1141,6 +1151,14 @@ async function boot(): Promise<void> {
       dinoStates: () => dinos.map((d) => ({ state: d.state, torpor: d.torpor, saddled: d.saddled, guarding: d.guarding, hp: Math.round(d.hp), species: d.species.id })),
       /** QA: the awake ecology — who is doing what to whom */
       ecology: () => awake.filter((d) => d.state !== 'idle' && d.state !== 'wander').map((d) => ({ sp: d.species.id, state: d.state, hp: Math.round(d.hp), x: Math.round(d.object.position.x), z: Math.round(d.object.position.z), foe: d.currentFoe ? d.currentFoe.species.id : d.state === 'aggro' || d.state === 'hunt' ? 'player' : null })),
+      /** QA: where dino #i stands */
+      dinoPos: (i: number) => { const d = dinos[i]; return d ? { x: d.object.position.x, y: d.object.position.y, z: d.object.position.z } : null },
+      /** QA: how many bodies have hit the ground (the thud fires with or without audio) */
+      thuds: () => thudCount,
+      /** QA: how far dino #i has rolled over (radians; the topple) */
+      dinoRoll: (i: number) => dinos[i]?.object.rotation.z ?? 0,
+      /** QA: kill dino #i, as a blow from the player would */
+      killDino: (i: number) => { const f = feetPos(); dinos[i]?.kill(f.x, f.z) },
       /** QA: drop a wild dino of a species here */
       spawnDino: (id: string, x: number, z: number) => { const d = spawnDino(id, x, z); return d.index },
       dinoCalib: () => dinos.map((d) => ({ sp: d.species.id, ...d.debugCalib })),
