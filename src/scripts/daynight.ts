@@ -313,6 +313,14 @@ export class DayNight {
     if (this.env.texture) this.scene.environment = this.env.texture
   }
 
+  /** INSIDE (M51): 0 out in the open, 1 deep in a cave. A bowl 13 m deep and
+   *  60 m wide geometrically sees most of the sky — that is why the baked sky
+   *  view only reads 0.87 in there — so the roof's darkness is stated, not
+   *  derived: the key light and the sky fill are taken away and the exposure
+   *  drops, which is what a cave IS. Lerped by the caller so walking in is a
+   *  dimming, not a pop. */
+  interior = 0
+
   private apply(): void {
     const elev = this.sunElevationDeg
     const azimuth = (this.time - 0.25) * Math.PI * 2 * 0.5 + Math.PI * 0.15
@@ -337,7 +345,9 @@ export class DayNight {
       grade = lerpGrade(GOLDEN, NIGHT, t, scratch)
     }
 
-    this.renderer.toneMappingExposure = grade.exposure
+    // the cave: no sun, almost no sky, and a darker print
+    const ins = this.interior
+    this.renderer.toneMappingExposure = grade.exposure * THREE.MathUtils.lerp(1, 0.62, ins)
     const fog = this.scene.fog as THREE.Fog
     fog.color.copy(grade.fog)
     fog.near = grade.fogNear * this.fogScale
@@ -350,9 +360,9 @@ export class DayNight {
     }
     this.hemi.color.copy(grade.hemiSky)
     this.hemi.groundColor.copy(grade.hemiGround)
-    this.hemi.intensity = grade.hemiIntensity
+    this.hemi.intensity = grade.hemiIntensity * THREE.MathUtils.lerp(1, 0.12, ins)
     this.sunLight.color.copy(grade.sun)
-    this.sunLight.intensity = grade.sunIntensity
+    this.sunLight.intensity = grade.sunIntensity * THREE.MathUtils.lerp(1, 0.06, ins)
     this.sunLight.position.copy(this.focus).addScaledVector(this.sunDir, 420)
     this.sunLight.target.position.copy(this.focus)
     this.rimLight.intensity = grade.rimIntensity
@@ -402,6 +412,6 @@ export class DayNight {
     // so nothing is re-filtered. M19's re-bake cost 20-40 ms and jumped; this
     // costs one quad and moves continuously.
     this.env.update(this.time)
-    this.scene.environmentIntensity = THREE.MathUtils.lerp(0.13, 0.025, this.nightness)
+    this.scene.environmentIntensity = THREE.MathUtils.lerp(0.13, 0.025, this.nightness) * THREE.MathUtils.lerp(1, 0.15, ins)
   }
 }

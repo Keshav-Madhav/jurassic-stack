@@ -1011,7 +1011,7 @@
       "tag": "foothill-circle",
       "x": 1084,
       "z": 86,
-      "y": 92.5,
+      "y": 92,
       "keystone": true,
       "layout": "circle"
     },
@@ -2281,6 +2281,62 @@
       }
     ]
   },
+  "caves": [
+    {
+      "name": "dune-hollow",
+      "mouth": {
+        "x": -670,
+        "z": 1090
+      },
+      "into": {
+        "x": -0.55,
+        "z": -0.84
+      },
+      "reach": 62,
+      "radius": 26,
+      "keystone": false,
+      "mouthY": 30,
+      "floorY": 17,
+      "bakedFloorY": 17,
+      "bakedMouthY": 29.7
+    },
+    {
+      "name": "east-adit",
+      "mouth": {
+        "x": 1410,
+        "z": 50
+      },
+      "into": {
+        "x": -0.9,
+        "z": 0.44
+      },
+      "reach": 66,
+      "radius": 27,
+      "keystone": false,
+      "mouthY": 122,
+      "floorY": 108,
+      "bakedFloorY": 108,
+      "bakedMouthY": 121.7
+    },
+    {
+      "name": "range-deep",
+      "mouth": {
+        "x": -1270,
+        "z": -590
+      },
+      "into": {
+        "x": -0.72,
+        "z": -0.69
+      },
+      "reach": 74,
+      "radius": 30,
+      "keystone": true,
+      "mouthY": 156,
+      "floorY": 139,
+      "bakedFloorY": 139,
+      "bakedMouthY": 155.8
+    }
+  ],
   "forests": [
     {
       "name": "southwood",
@@ -3755,5 +3811,5 @@
       ]
     ]
   ],
-  "bakedAt": "2026-09-08T10:50:54.075Z"
+  "bakedAt": "2026-09-08T14:56:57.270Z"
 }

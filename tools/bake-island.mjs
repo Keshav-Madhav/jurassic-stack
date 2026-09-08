@@ -15,7 +15,7 @@
 // river path becomes a bed, and then lets erosion age it.
 import { writeFileSync, mkdirSync } from 'node:fs'
 import {
-  HALF, SPAWN, VOLCANO, COAST, RANGES, HOLM, SHELVES, RIVER, RIVER_PATHS, LAKES, FORESTS, CLEARINGS, RUINS, BIOMES, RAVINE,
+  HALF, SPAWN, VOLCANO, COAST, RANGES, HOLM, SHELVES, RIVER, RIVER_PATHS, LAKES, FORESTS, CLEARINGS, RUINS, BIOMES, RAVINE, CAVES,
   shoreDist, distToPath, closedPath,
 } from './hand-geometry.mjs'
 import { encodeRowDelta } from './world-io.mjs'
@@ -211,6 +211,32 @@ for (let iz = 0; iz < SIDE; iz++) {
       if (sd > edge) continue
       const t = smoothstep(edge, -edge * 0.35, sd)
       h = lerp(h, sh.h + 1.5 * fbm(x * 0.02, z * 0.02, 2), t)
+    }
+
+    // THE CAVES: a bowl sunk into a hillside, with a throat down from the
+    // mouth. The roof is a mesh (caves.ts) — a heightmap has no overhangs —
+    // but the floor, the walls and the way in are all terrain (M51).
+    for (const cv of CAVES) {
+      const cx = cv.mouth.x + cv.into.x * cv.reach
+      const cz = cv.mouth.z + cv.into.z * cv.reach
+      const dCh = Math.hypot(x - cx, z - cz)
+      const mouthH = cv.mouthY
+      const floor = cv.floorY
+      if (dCh < cv.radius + 26) {
+        // the chamber: a flat floor, its rim blended into the hill
+        const t = smoothstep(cv.radius + 22, cv.radius * 0.55, dCh)
+        h = lerp(h, floor, t)
+      }
+      // the throat: a ramp from the mouth down into the chamber
+      const { d: dTh, t: along, seg: segTh } = distToPath(x, z, [
+        { x: cv.mouth.x - cv.into.x * 12, z: cv.mouth.z - cv.into.z * 12 },
+        { x: cx, z: cz },
+      ])
+      if (dTh < 20) {
+        void segTh
+        const want = lerp(mouthH + 0.4, floor, smoothstep(0.05, 0.85, along ?? 0))
+        h = lerp(h, want, smoothstep(20, 7, dTh))
+      }
     }
 
     // THE GATE-WALL'S BACK: the 104 m shelf the door is set into must not be
@@ -708,6 +734,38 @@ for (let iz = 0; iz < SIDE; iz++) {
 }
 // the Ravine's floor and the crater bench: re-laid (see carveRavine)
 carveRavine(true)
+// AND THE CAVES. Erosion fills a carved bowl the way it fills any hollow —
+// the first bake asked for a 139 m floor and got 146 back (M51). A cave you
+// cannot stand up in is not a cave, so the chamber floor and the throat are
+// asserted again here, exactly as the Ravine's floor is.
+for (const cv of CAVES) {
+  const cx = cv.mouth.x + cv.into.x * cv.reach
+  const cz = cv.mouth.z + cv.into.z * cv.reach
+  const throat = [
+    { x: cv.mouth.x - cv.into.x * 12, z: cv.mouth.z - cv.into.z * 12 },
+    { x: cx, z: cz },
+  ]
+  for (let iz = 0; iz < SIDE; iz++) {
+    for (let ix = 0; ix < SIDE; ix++) {
+      const x = worldX(ix), z = worldZ(iz)
+      const dCh = Math.hypot(x - cx, z - cz)
+      const { d: dTh, t: along } = distToPath(x, z, throat)
+      if (dCh > cv.radius + 24 && dTh > 20) continue
+      const i0 = idx(ix, iz)
+      let want = null
+      if (dCh < cv.radius + 22) {
+        const t = smoothstep(cv.radius + 22, cv.radius * 0.55, dCh)
+        want = lerp(H[i0], cv.floorY, t)
+      }
+      if (dTh < 20) {
+        const ramp = lerp(cv.mouthY + 0.4, cv.floorY, smoothstep(0.05, 0.85, along ?? 0))
+        const t2 = smoothstep(20, 7, dTh)
+        want = want === null ? lerp(H[i0], ramp, t2) : Math.min(want, lerp(H[i0], ramp, t2))
+      }
+      if (want !== null) H[i0] = want
+    }
+  }
+}
 {
   const crater = SHELVES.find((sh) => sh.name === 'crater')
   for (let iz = 0; iz < SIDE; iz++) {
@@ -953,6 +1011,16 @@ const meta = {
   swamp: SWAMP ? { level: SWAMP.level, shore: SWAMP.shore } : null,
   biomes: BIOMES,
   coast: COAST, ranges: RANGES, holm: HOLM, ravine: RAVINE,
+  caves: CAVES.map((c) => ({
+    name: c.name, mouth: c.mouth, into: c.into, reach: c.reach, radius: c.radius,
+    keystone: !!c.keystone,
+    mouthY: c.mouthY,
+    floorY: c.floorY,
+    // what the bake actually produced, so the runtime and the gates can check
+    // the carve landed where it was asked to
+    bakedFloorY: +hAt(c.mouth.x + c.into.x * c.reach, c.mouth.z + c.into.z * c.reach).toFixed(1),
+    bakedMouthY: +hAt(c.mouth.x, c.mouth.z).toFixed(1),
+  })),
   forests: FORESTS, clearings: CLEARINGS,
   bakedAt: new Date().toISOString(),
 }

@@ -115,6 +115,24 @@ export async function loadHeightmap(base = ''): Promise<void> {
   VOLCANO.z = worldMeta.volcano.z
 }
 
+/** Inside one of the carved cave bowls or its throat? Nothing grows in a cave
+ *  and nothing spawns in one (M51) — and the runtime asks the same question to
+ *  know when to make it dark, so the answer lives here with the world data. */
+export function caveAt(x: number, z: number, margin = 0): { name: string; keystone: boolean } | null {
+  const caves = (worldMeta as unknown as { caves?: { name: string; keystone: boolean; mouth: { x: number; z: number }; into: { x: number; z: number }; reach: number; radius: number }[] } | null)?.caves
+  if (!caves) return null
+  for (const c of caves) {
+    const cx = c.mouth.x + c.into.x * c.reach
+    const cz = c.mouth.z + c.into.z * c.reach
+    if (Math.hypot(x - cx, z - cz) < c.radius + margin) return c
+    const ax = c.mouth.x - c.into.x * 8, az = c.mouth.z - c.into.z * 8
+    const dx = cx - ax, dz = cz - az
+    const t = Math.max(0, Math.min(1, ((x - ax) * dx + (z - az) * dz) / (dx * dx + dz * dz)))
+    if (t > 0.02 && Math.hypot(x - (ax + dx * t), z - (az + dz * t)) < 11 + margin) return c
+  }
+  return null
+}
+
 /** SKY VIEW: how much sky each patch of ground can see, baked by
  *  tools/bake-island.mjs (sixteen horizon rays out to 240 m, 1024² over the
  *  island). This is the landscape's share of ambient occlusion, and since a

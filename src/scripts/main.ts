@@ -15,6 +15,7 @@ import { SPECIES } from './species'
 import { Scatter, setLodBands, type ScatterNode } from './scatter'
 import { Building, type PieceKind } from './building'
 import { Ruins } from './ruins'
+import { Caves } from './caves'
 import { Keystones } from './keystones'
 import { Beacon } from './beacon'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
@@ -322,6 +323,12 @@ async function boot(): Promise<void> {
   // the look, finished in post — see post.ts (and PERFORMANCE.md: this is the
   // headroom the M31-M41 rounds bought, spent deliberately)
   const post = new Post(renderer, scene, cam.camera)
+  // the dark places (PLAN beat 4): the terrain is the floor, this is the roof
+  let caveDark = 0
+  const caves = new Caves()
+  caves.build()
+  scene.add(caves.group)
+  caves.group.name = 'caves'
   const chests = new Chests()
   if (save) chests.restore(save.chests as Parameters<Chests['restore']>[0])
   const building = new Building(physics, kit, lights)
@@ -1174,6 +1181,10 @@ async function boot(): Promise<void> {
         return { x: Math.round(best.x), z: Math.round(best.z), hp: best.hp, alive: best.alive, got }
       },
       hitsDebug: () => scatter.debugHits(),
+      caves: () => caves.debug(),
+      caveDefs: () => caves.defs.map((c) => ({ name: c.name, mouth: c.mouth, into: c.into, reach: c.reach, radius: c.radius, floorY: c.bakedFloorY })),
+      inCave: () => { const f = feetPos(); return caves.inside(f.x, f.z)?.name ?? null },
+      caveDark: () => +caveDark.toFixed(3),
       /** QA: a node's damage state — hp, and the tint the wound paints it */
       nodeState: (kind: string, x: number, z: number) => {
         let best = null as null | { hp: number; maxHp: number; tint: number; alive: boolean; d: number }
@@ -1959,6 +1970,15 @@ async function boot(): Promise<void> {
     player.sprintAllowed = survival.canSprint
     survival.sprinting = !riding && player.sprinting
     survival.moving = riding ? Math.hypot(riding.mover?.intent.vx ?? 0, riding.mover?.intent.vz ?? 0) > 0.1 : player.moving
+    // INSIDE (M51): the cave takes the sky away, over about a second, so
+    // walking into one dims rather than pops. It also drives the hint and the
+    // reason a torch is worth carrying.
+    {
+      const cf0 = feetPos()
+      const wantIn = caves.inside(cf0.x, cf0.z) ? 1 : 0
+      caveDark += (wantIn - caveDark) * Math.min(1, dt * 2.2)
+      daynight.interior = caveDark
+    }
     // the cold (M50): how high, how dark, and what is keeping it off you
     {
       const cf = feetPos()
@@ -2013,6 +2033,7 @@ async function boot(): Promise<void> {
       if (!seen('thirsty') && survival.water < 40) onboarding.hint('thirsty')
       if (!seen('stamina') && survival.winded) onboarding.hint('stamina')
       if (!seen('cold') && survival.cold) onboarding.hint('cold')
+      if (!seen('cave') && caveDark > 0.5) onboarding.hint('cave')
       if (!seen('night') && daynight.nightness > 0.7) onboarding.hint('night')
       if (!seen('raptor') && nearestDino(30, (d) => d.species.id === 'raptor' && d.state !== 'tamed' && d.state !== 'dead')) onboarding.hint('raptor')
       if (!seen('carcass') && nearestDino(INTERACT_RANGE + 2, (d) => d.state === 'dead')) onboarding.hint('carcass')

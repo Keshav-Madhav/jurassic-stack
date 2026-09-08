@@ -76,7 +76,14 @@ export class Keystones {
   build(): void {
     const meta = worldMeta!
     const geo = new THREE.IcosahedronGeometry(0.55, 0)
-    for (const site of meta.ruinSites) {
+    // the ruin sites, and any cave that keeps one (M51): a stone in the dark
+    // at the back of a chamber is worth more than a thirteenth on a hillside
+    const sites: { tag: string; x: number; z: number; keystone?: boolean }[] = [...meta.ruinSites]
+    for (const c of (meta as unknown as { caves?: { name: string; keystone: boolean; mouth: { x: number; z: number }; into: { x: number; z: number }; reach: number }[] }).caves ?? []) {
+      if (!c.keystone) continue
+      sites.push({ tag: `cave-${c.name}`, x: c.mouth.x + c.into.x * (c.reach + 12), z: c.mouth.z + c.into.z * (c.reach + 12), keystone: true })
+    }
+    for (const site of sites) {
       if (site.tag === 'caldera-gate' || !site.keystone) continue
       const mat = new THREE.MeshStandardMaterial({
         color: 0x76e8ff,

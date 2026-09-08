@@ -346,7 +346,7 @@ and desert flora · M10g ground clutter · M10h boulders and outcrops.
 
 *Status 2026-09-07: beats 1–3 and 5 are built and live (the beach statue, twelve keystones / eight
 open the door, the caldera door in the Ravine's throat, the Gatekeeper alpha, the crater Beacon and
-credits). Beat 4 is half-closed: **cold shipped M50**; the aquatic tame and the three caves remain. Survival (M21), the
+credits). Beat 4: **cold shipped M50, the three caves shipped M51**; the aquatic tame remains. Survival (M21), the
 ecology (M19) and the first-minutes hints (M30) are in; see CHECKLIST.md M17–M30.*
 
 Sandbox first — no dialogue, no quest log, no obligation. For anyone who wants direction, five acts
@@ -398,8 +398,8 @@ polish / content:**
    ~~settings menu~~ **DONE M40** (render scale, shadows, grass, draw distance, volume, sensitivity,
    FOV — key rebinding still open) · **waterfalls + swamp/pine interiors** (content).
 4. **The Wayfinder item + corpse bag death** (feel) · **shadow caching + KTX2** (perf, G+H) · **playtest
-   ritual: F8 report dump + the 10-item first-ten-minutes checklist** (polish) · **caves** (content —
-   after sound and the build tier: a cave with neither is a dark room).
+   ritual: F8 report dump + the 10-item first-ten-minutes checklist** (polish) · ~~caves~~ **DONE M51** — three carved bowls with stone roofs, dark enough that a
+   torch matters, one of them behind the cold and holding a keystone.
 5. **Roster honesty**: Dilophosaurus / Sauropelta / Spinosaurus have no clips — budget the Blender
    authoring or drop them from the "15+" line; the flyer and the aquatic are movement modes (decision
    7) and come after.
