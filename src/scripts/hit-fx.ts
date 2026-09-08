@@ -25,6 +25,9 @@ export const CHIP_LOOK = {
   wood: { color: 0x7a5326, size: 0.14 },
   stone: { color: 0x8d8880, size: 0.12 },
   leaf: { color: 0x3f6a24, size: 0.16 },
+  // footstep dust: the ground's own colour is set per burst, so this is only
+  // the fallback and the size (M49)
+  dust: { color: 0x9a8054, size: 0.1 },
 } as const
 export type ChipKind = keyof typeof CHIP_LOOK
 
@@ -60,8 +63,11 @@ export class HitFx {
     for (let i = 0; i < CHIP_BURSTS; i++) {
       const geo = new THREE.BufferGeometry()
       geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(PER_CHIP * 3), 3))
-      // chips are little flakes, not drops: square points read as splinters
-      const points = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0x7a5326, size: 0.14, transparent: true, opacity: 1, depthWrite: false, sizeAttenuation: true }))
+      // a soft round sprite — an untextured point is a hard SQUARE, which is
+      // fine at splinter size and looked like flying cardboard boxes the
+      // moment footstep dust made them big (M49, and the same lesson the blood
+      // learned in M19)
+      const points = new THREE.Points(geo, new THREE.PointsMaterial({ color: 0x7a5326, size: 0.14, map: dropTexture(), alphaTest: 0.12, transparent: true, opacity: 1, depthWrite: false, sizeAttenuation: true }))
       points.visible = false
       points.frustumCulled = false
       this.group.add(points)
@@ -121,11 +127,42 @@ export class HitFx {
     }
   }
 
+  /** A small puff at a footfall — the chip pool again, slower and sparser, in
+   *  whatever colour the ground under the foot is painted (M49). */
+  dust(x: number, y: number, z: number, color: number, strong = false): void {
+    let b = this.chips.find((q) => !q.alive)
+    if (!b) return // never steal a live chip burst for a footstep
+    const pos = b.points.geometry.getAttribute('position') as THREE.BufferAttribute
+    const arr = pos.array as Float32Array
+    const n = strong ? 10 : 6
+    for (let i = 0; i < PER_CHIP; i++) {
+      const on = i < n
+      arr[i * 3] = x + (Math.random() - 0.5) * 0.3
+      arr[i * 3 + 1] = on ? y : -999
+      arr[i * 3 + 2] = z + (Math.random() - 0.5) * 0.3
+      const a = Math.random() * Math.PI * 2
+      const out = 0.4 + Math.random() * (strong ? 1.3 : 0.7)
+      b.vel[i * 3] = Math.cos(a) * out
+      b.vel[i * 3 + 1] = 0.7 + Math.random() * (strong ? 1.4 : 0.8)
+      b.vel[i * 3 + 2] = Math.sin(a) * out
+    }
+    pos.needsUpdate = true
+    const mat = b.points.material as THREE.PointsMaterial
+    mat.color.setHex(color)
+    // bigger and brighter than the first cut: at 0.1 m and a third opacity it
+    // was invisible against the sand it came off (M49)
+    mat.size = strong ? 0.3 : 0.22
+    mat.opacity = strong ? 0.85 : 0.6
+    b.points.visible = true
+    b.t = 0
+    b.alive = true
+  }
+
   /** A burst of chips off whatever was struck. `dirX/dirZ` is the direction
    *  the blow came FROM, so the debris flies back at the swinger — which is
    *  what makes it read as coming off the trunk rather than out of the ground.
    *  @param heavy a felling blow: twice the chips, thrown harder */
-  chip(kind: ChipKind, x: number, y: number, z: number, dirX = 0, dirZ = 0, heavy = false): void {
+  chip(kind: ChipKind, x: number, y: number, z: number, dirX = 0, dirZ = 0, heavy = false, color?: number): void {
     let b = this.chips.find((q) => !q.alive)
     if (!b) b = this.chips.reduce((p, q) => (q.t > p.t ? q : p))
     b.kind = kind
@@ -150,7 +187,7 @@ export class HitFx {
     }
     pos.needsUpdate = true
     const mat = b.points.material as THREE.PointsMaterial
-    mat.color.setHex(look.color)
+    mat.color.setHex(color ?? look.color)
     mat.size = look.size * (heavy ? 1.35 : 1)
     mat.opacity = 1
     b.points.visible = true
@@ -165,9 +202,12 @@ export class HitFx {
       if (b.t > CHIP_LIFE) { b.alive = false; b.points.visible = false; continue }
       const pos = b.points.geometry.getAttribute('position') as THREE.BufferAttribute
       const arr = pos.array as Float32Array
+      const dusty = b.kind === 'dust'
       for (let i = 0; i < PER_CHIP; i++) {
         if (arr[i * 3 + 1] < -900) continue
-        b.vel[i * 3 + 1] -= 16 * dt
+        // dust hangs and drifts; a chip falls like a chip
+        b.vel[i * 3 + 1] -= (dusty ? 1.4 : 16) * dt
+        if (dusty) { b.vel[i * 3] *= 1 - dt * 1.6; b.vel[i * 3 + 2] *= 1 - dt * 1.6 }
         arr[i * 3] += b.vel[i * 3] * dt
         arr[i * 3 + 1] += b.vel[i * 3 + 1] * dt
         arr[i * 3 + 2] += b.vel[i * 3 + 2] * dt

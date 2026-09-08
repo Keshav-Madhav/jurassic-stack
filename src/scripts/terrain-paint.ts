@@ -341,6 +341,18 @@ export function buildChunkArrays(originX: number, originZ: number, quads: number
   return { pos, nor, col, spl, indices }
 }
 
+/** The ground's painted colour at a point — footstep dust takes its colour
+ *  from the actual ground so a beach puffs sand and a wood puffs leaf litter
+ *  (M49). Same function the terrain's vertex colours come from. */
+const dustScratch = new THREE.Color()
+export function groundHexAt(x: number, z: number): number {
+  const h = heightAt(x, z)
+  const ny = normalAt(x, z).y
+  groundColorAt(x, z, h, ny, dustScratch)
+  // lift it: dust in the air is brighter than the ground it came off
+  return dustScratch.clone().multiplyScalar(1.9).getHex()
+}
+
 /** What you are standing on, for the footstep sampler (sfx.ts). Reads the same
  *  splat rules the ground is painted with, so the sound always matches the
  *  picture — walk from the meadow into the wood and the step goes soft. */

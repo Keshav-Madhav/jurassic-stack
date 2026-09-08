@@ -689,3 +689,11 @@ Findings and fixes, each measured with the new jitter meter (`__g.frameStats()`,
 - [x] **Gate (m4, +6 checks)**: a tree takes six swings not three · a struck tree darkens · the swing already paid a chip · the felling blow kills it · **it is FALLING, not gone** · the fall finishes and clears itself
 - [x] **A harness bug caught by its own gate**: `hitNode` (the QA hook that lets the camera stand back and watch) yielded items without crediting the pack, so "did the chip land?" was testing the harness rather than the game. It runs the inventory path now
 - [x] Gates 11 files, all green
+
+### M49 — WEIGHT: a camera that answers a blow, and dust under your feet
+- [x] **`camKick` was a 5 cm vertical nudge and it was the ENTIRE impact feedback in the game.** There is a real shake now: a decaying tremor with a DIRECTION — two out-of-phase sines over 0.35 s, pushed along the blow and across it in CAMERA space so it reads the same whichever way you face, with a touch of roll. Frame-rate independent (sampled on a clock, not per frame) and a bigger shake overrides a smaller one instead of stacking into nausea
+- [x] **Wired to everything worth feeling**: chopping (0.06, back along the swing) · mining stone (0.07) · a spear landing (0.1) · **being bitten** (0.1 + damage, from the direction of the bite, capped at 0.34) · and a body hitting the ground within 40 m, scaled by the animal's size and how close you are — a rex landing near you shakes the frame
+- [x] **Footstep dust**, in the ground's own colour: `groundHexAt()` reads the same paint function the terrain's vertex colours come from, so the dunes puff sand and the wood puffs leaf litter. Sprinting kicks up more, a mount more again, and it never steals a live chip burst
+- [x] **Two corrections from screenshots**: at 0.1 m / 0.34 opacity the dust was invisible against the sand it came off (now 0.22-0.3 and 0.6-0.85), and the chip pool had no sprite — fine at splinter size, flying cardboard boxes at dust size. It uses the same soft round drop the blood learned to use in M19. Dust also hangs and drifts now (gravity 1.4 vs the chips' 16)
+- [x] **Gate (m4, +2)**: the camera kicks when you land a blow (0.025 m) and settles back to where it was (0.0001 m) — a shake that does not return is a drift bug waiting to happen
+- [x] Gates 11 files, all green

@@ -173,6 +173,24 @@ check(!(await g('window.__g.game.riding()')), 'dismounted')
   check((await g('window.__g.game.hitsDebug()')).falling === 0, 'the fall finishes and clears itself')
 }
 
+// the camera answers a blow, and settles back to exactly where it was
+{
+  const t2 = await g('window.__g.game.nearestNodeInfo("tree")')
+  await page.evaluate(([x, z]) => { const gg = window.__g; gg.teleport(x + 2.6, z); gg.setCam(-Math.PI / 2, 0) }, [t2.x, t2.z])
+  await page.waitForTimeout(1200)
+  const at = () => page.evaluate(() => { const c = window.__g.cam; return [c.position.x, c.position.y, c.position.z] })
+  const still = await at()
+  await g('window.__g.game.swing()')
+  await page.waitForTimeout(45)
+  const kicked = await at()
+  const d = Math.hypot(kicked[0] - still[0], kicked[1] - still[1], kicked[2] - still[2])
+  check(d > 0.01, `the camera kicks when you land a blow (${d.toFixed(3)} m)`)
+  await page.waitForTimeout(900)
+  const back = await at()
+  const d2 = Math.hypot(back[0] - still[0], back[1] - still[1], back[2] - still[2])
+  check(d2 < 0.004, `and settles back to where it was (${d2.toFixed(4)} m)`)
+}
+
 // ---------- save / reload ----------
 const savedWood = await g('window.__g.game.count("wood")')
 await page.evaluate(() => window.__g.game.save()) // explicit: pagehide races reload

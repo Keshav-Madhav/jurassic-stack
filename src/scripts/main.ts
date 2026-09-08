@@ -43,7 +43,7 @@ import { GpuTimer } from './gpu-timer'
 import { Sfx } from './sfx'
 import { SettingsPanel } from './settings'
 import { Post } from './post'
-import { groundKindAt } from './terrain-paint'
+import { groundKindAt, groundHexAt } from './terrain-paint'
 import { warmRoots } from './uploads'
 import { LightRig } from './lights'
 
@@ -172,6 +172,9 @@ async function boot(): Promise<void> {
     sfx.play('hit-flesh', { at: { x: p.x, y: p.y, z: p.z }, range: 90 + big * 20, volume: 0.9, rate: Math.max(0.45, 1.2 - big * 0.11) })
     sfx.play('step-dirt', { at: { x: p.x, y: p.y, z: p.z }, range: 70, volume: 0.7, rate: Math.max(0.4, 0.9 - big * 0.06) })
     hitFx.burst(p.x, p.y + 0.25, p.z, big > 3)
+    // the ground shakes when something big lands on it, if you are close
+    const dp = feetPos().distanceTo(p)
+    if (dp < 40) shakeCamera(Math.min(0.3, (big / 6) * (1 - dp / 40) ** 2 * 0.5), 0, 1)
   }
   Dino.onVoice = (voice, d) => {
     const p = d.object.position
@@ -460,7 +463,24 @@ async function boot(): Promise<void> {
   // --- interaction state ---
   let riding: Dino | null = null
   let swingT = 0
+  // CAMERA SHAKE. `camKick` was a 5 cm vertical nudge and it was the entire
+  // impact feedback in the game. A shake is a decaying tremor with a direction
+  // — a chop kicks back along the swing, a bite kicks from where it came, a
+  // felled tree thumps the whole frame — and it must be FRAME-RATE INDEPENDENT
+  // (a per-frame random offset reads as noise at 60 fps and as a stutter at
+  // 30), so it is sampled from smooth noise on a clock (M49).
   let camKick = 0
+  const shake = { amp: 0, t: 0, dirX: 0, dirY: 0 }
+  /** @param amp metres of tremor at its peak · dir where the blow came FROM */
+  const shakeCamera = (amp: number, dirX = 0, dirY = 1): void => {
+    // a bigger shake overrides a smaller one instead of stacking into nausea
+    if (amp <= shake.amp * 0.8) return
+    shake.amp = Math.min(0.42, amp)
+    shake.t = 0
+    const len = Math.hypot(dirX, dirY) || 1
+    shake.dirX = dirX / len
+    shake.dirY = dirY / len
+  }
   const raycaster = new THREE.Raycaster()
   const aimPoint = new THREE.Vector3()
 
@@ -539,7 +559,12 @@ async function boot(): Promise<void> {
   const hurtPlayer = (damage: number, from?: Dino): void => {
     rallyTames(from)
     if (creative || god) return
-    if (damage > 0) sfx.play('player-hurt', { volume: 0.7, cooldown: 0.5 })
+    if (damage > 0) {
+      sfx.play('player-hurt', { volume: 0.7, cooldown: 0.5 })
+      const f2 = feetPos()
+      const fx = from ? f2.x - from.object.position.x : 0
+      shakeCamera(Math.min(0.34, 0.1 + damage * 0.012), fx, 0.7)
+    }
     playerHp -= damage
     vignette.classList.add('hurt')
     setTimeout(() => vignette.classList.remove('hurt'), 220)
@@ -609,6 +634,7 @@ async function boot(): Promise<void> {
       const tp = target.object.position
       hitFx.burst(tp.x, tp.y + target.species.height * 0.5, tp.z, held === 'spear')
       sfx.play('hit-flesh', { volume: 0.8, at: { x: tp.x, y: tp.y + 1, z: tp.z } })
+      shakeCamera(held === 'spear' ? 0.1 : 0.07, 0, 0.8)
       rallyTames(target) // your animals join in
       hud.toast(target.state === 'ko' ? `${target.species.name} knocked out!` : target.state === 'dead' ? `${target.species.name} killed` : `Hit ${target.species.name} (torpor ${Math.round(target.torpor)}/${target.species.torporMax})`)
       return true
@@ -630,6 +656,8 @@ async function boot(): Promise<void> {
         // strike height: a trunk is hit at chest height, cover at the ground
         const hy = node.y + (WOODY.has(node.kind) || stone ? Math.min(1.6, node.scale * 0.12) : 0.3)
         hitFx.chip(chipKind, node.x, hy, node.z, f.x - node.x, f.z - node.z, node.hp <= 1)
+        const back = new THREE.Vector3(f.x - node.x, 0, f.z - node.z).normalize()
+        shakeCamera(stone ? 0.07 : WOODY.has(node.kind) ? 0.06 : 0.025, -back.x, 0.6)
       }
       const hits = creative ? 99 : held === 'hatchet' && isWood ? 2 : 1
       let yielded: Partial<Record<ItemId, number>> | null = null
@@ -1405,6 +1433,7 @@ async function boot(): Promise<void> {
       /** QA: what the mixer has actually played, and anything that failed to load */
       sfx: () => ({ ready: sfx.ready, plays: { ...sfx.plays }, missing: [...sfx.missing] }),
       ground: () => { const f = feetPos(); return groundKindAt(f.x, f.z) },
+      groundHex: () => { const f = feetPos(); return groundHexAt(f.x, f.z) },
       /** the three point-light slots, who holds them, and the scene's REAL light count (lever A) */
       lights: () => {
         let n = 0
@@ -1708,6 +1737,7 @@ async function boot(): Promise<void> {
     if (frozen) dt = 0
     swingT -= dt
     camKick = Math.max(0, camKick - dt * 0.3)
+    if (shake.amp > 0.0005) { shake.t += dt; if (shake.t > 0.35) shake.amp = 0 }
     if (playerHp < 100 && survival.food > 20 && survival.water > 20) playerHp = Math.min(100, playerHp + dt * 1.5)
 
     const focus = riding?.mover ? riding.mover.position : player.mover.position
@@ -1904,6 +1934,19 @@ async function boot(): Promise<void> {
       const camTargetFeet = renderFeet()
       cam.update(input, camTargetFeet, dt)
       cam.camera.position.y += camKick
+      // the shake: two out-of-phase sines decaying over ~0.35 s, pushed along
+      // the blow's direction and across it, in CAMERA space so it reads the
+      // same whichever way you are facing
+      if (shake.amp > 0.0005) {
+        const k = shake.amp * Math.max(0, 1 - shake.t / 0.35) ** 2
+        const a = Math.sin(shake.t * 62) * k
+        const b2 = Math.sin(shake.t * 41 + 1.7) * k
+        const right = new THREE.Vector3().setFromMatrixColumn(cam.camera.matrixWorld, 0)
+        const up = new THREE.Vector3().setFromMatrixColumn(cam.camera.matrixWorld, 1)
+        cam.camera.position.addScaledVector(right, a * shake.dirX + b2 * 0.4)
+        cam.camera.position.addScaledVector(up, b2 * shake.dirY + a * 0.3)
+        cam.camera.rotateZ(a * 0.06)
+      }
       if (riding) cam.camera.position.addScaledVector(cam.camera.getWorldDirection(new THREE.Vector3()), -2.2)
     }
 
@@ -2072,11 +2115,16 @@ async function boot(): Promise<void> {
       // a mount is heavier and slower-footed than a person
       strideLeft = 3.2
       sfx.play('step-dirt', { volume: 0.5, rate: 0.62 })
+      hitFx.dust(p.x, p.y + 0.05, p.z, groundHexAt(p.x, p.z), true) // a mount kicks up more
       return
     }
     strideLeft = player.sprinting ? 2.05 : 1.55
     const kind = groundKindAt(p.x, p.z)
     sfx.play(`step-${kind}` as const, { volume: player.sprinting ? 0.42 : 0.3, rate: player.sprinting ? 1.08 : 1 })
+    // dust at the foot, in the ground's own colour — sand puffs, wet swamp does not
+    if (!player.swimming && kind !== 'snow') {
+      hitFx.dust(p.x, p.y + 0.06, p.z, groundHexAt(p.x, p.z), player.sprinting)
+    }
   }
 
   // THE F3 READOUT (PERFORMANCE.md's instrument). Refreshed twice a second.
