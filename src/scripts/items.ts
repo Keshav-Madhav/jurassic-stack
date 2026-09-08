@@ -4,6 +4,7 @@ export type ItemId =
   | 'wood' | 'stone' | 'fiber' | 'flint' | 'berry' | 'rawmeat' | 'cookedmeat' | 'hide'
   | 'hatchet' | 'spear'
   | 'campfire' | 'torch' | 'foundation' | 'wall' | 'ceiling' | 'bedroll' | 'workbench' | 'chest'
+  | 'fence' | 'canopy'
   | 'saddle'
 
 export interface ItemDef {
@@ -33,6 +34,8 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   bedroll: { id: 'bedroll', name: 'Bedroll', icon: '🛏️', placeable: true },
   workbench: { id: 'workbench', name: 'Workbench', icon: '🛠️', placeable: true },
   chest: { id: 'chest', name: 'Chest', icon: '🧰', placeable: true },
+  fence: { id: 'fence', name: 'Fence', icon: '🚧', placeable: true },
+  canopy: { id: 'canopy', name: 'Canopy', icon: '⛺', placeable: true },
   saddle: { id: 'saddle', name: 'Saddle', icon: '🪑' },
 }
 
@@ -54,6 +57,8 @@ export const RECIPES: Recipe[] = [
   { output: 'ceiling', count: 1, cost: { wood: 6, fiber: 3 } },
   { output: 'bedroll', count: 1, cost: { fiber: 16, hide: 3 } }, // NOT bench-gated: it is what death costs you, and you need it early
   { output: 'workbench', count: 1, cost: { wood: 20, stone: 8, fiber: 6 } },
-  { output: 'chest', count: 1, cost: { wood: 14, fiber: 6 }, bench: true }, // straw and skins: where you wake up (M37)
+  { output: 'chest', count: 1, cost: { wood: 14, fiber: 6 }, bench: true },
+  { output: 'fence', count: 3, cost: { wood: 6, fiber: 2 } }, // a rail run: pens for your tames, a line round the camp
+  { output: 'canopy', count: 1, cost: { wood: 18, fiber: 8 }, bench: true }, // four posts and a plank roof: the homestead's shelter // straw and skins: where you wake up (M37)
   { output: 'saddle', count: 1, cost: { fiber: 12, hide: 6, wood: 4 }, bench: true }, // hide off a carcass: the hunt feeds the saddle (M21)
 ]

@@ -40,6 +40,7 @@ import { SkyExtras } from './sky-extras'
 import { Ambience } from './ambience'
 import { GpuTimer } from './gpu-timer'
 import { Sfx } from './sfx'
+import { SettingsPanel } from './settings'
 import { groundKindAt } from './terrain-paint'
 import { warmRoots } from './uploads'
 import { LightRig } from './lights'
@@ -358,6 +359,27 @@ async function boot(): Promise<void> {
   // the inventory releases the mouse (the panel has buttons); Tab or Esc or a
   // click on the world closes it and re-locks the pointer (user: "inventory
   // not closeable, mouse doesn't appear")
+  // --- settings (O) ---
+  const settings = new SettingsPanel(document.getElementById('hud')!)
+  const applySettings = (v = settings.values): void => {
+    if (v.renderScale > 0) { adaptive = false; pixelRatio = v.renderScale; renderer.setPixelRatio(v.renderScale); renderer.setSize(innerWidth, innerHeight) }
+    else adaptive = true
+    daynight.setShadowSize(v.shadowSize)
+    grass.setEnabled(v.grass, scene)
+    setLodBands({ far: 120 * v.drawDistance, mid: 260 * v.drawDistance, cover: 90 * v.drawDistance })
+    scatter.updateVisibility(cam.camera.position.x, cam.camera.position.z, true)
+    ambience.setVolume(v.volume)
+    sfx.setVolume(v.volume)
+    cam.sensitivity = v.sensitivity
+    if (cam.camera.fov !== v.fov) { cam.camera.fov = v.fov; cam.camera.updateProjectionMatrix() }
+  }
+  settings.onApply = (v) => { applySettings(v); sfx.play('ui-click', { volume: 0.3 }) }
+  settings.onToggle = (open) => {
+    hud.root?.classList.toggle('panel-open', open || hud.panelOpen)
+    if (open) { document.exitPointerLock?.(); sfx.play('ui-open', { volume: 0.45 }) }
+    else { sfx.play('ui-close', { volume: 0.45 }); renderer.domElement.requestPointerLock() }
+  }
+
   onboarding.show = (text) => hud.hint(text)
   onboarding.hint('wake')
   hud.panelContext = () => {
@@ -771,6 +793,12 @@ async function boot(): Promise<void> {
       if (!perfHud) hud.setPerf(null)
       return
     }
+    if (e.code === 'KeyO') {
+      if (hud.panelOpen) hud.togglePanel()
+      settings.toggle()
+      return
+    }
+    if (settings.open) { if (e.code === 'Escape') settings.close(); return }
     if (e.code === 'Tab') {
       e.preventDefault()
       hud.togglePanel()
@@ -1470,10 +1498,21 @@ async function boot(): Promise<void> {
       // still compiling at the wood line, and the load warm-up's own pass runs
       // before the terrain has streamed a single cell in (M36)
       undo.push(scatter.showAll(), ruins.showAll())
-      daynight.setShadowExtent(2100)
-      renderer.shadowMap.needsUpdate = true
-      renderer.render(scene, cam.camera)
+      // FROM FIVE PLACES, not one. A material compiles its depth program when
+      // it is first drawn INTO THE SHADOW MAP, and the shadow camera is an
+      // ortho box centred on the player — widening it to ±2100 m still centres
+      // it on spawn, so casters in the far corners were never drawn and the
+      // wood line kept its two compiles (M40). Five focus points cover the
+      // island; each costs one render, behind the boot card.
+      const saved = daynight.shadowFocus()
+      daynight.setShadowExtent(1200)
+      for (const [fx, fz] of [[0, 1560], [-286, 793], [-250, 1040], [300, -560], [-700, -400], [0, -1000]]) {
+        daynight.focusShadow(fx, fz)
+        renderer.shadowMap.needsUpdate = true
+        renderer.render(scene, cam.camera)
+      }
       daynight.setShadowExtent(85)
+      daynight.focusShadow(saved.x, saved.z)
       renderer.shadowMap.needsUpdate = true
       renderer.render(scene, cam.camera)
       for (const u of undo) u()
@@ -1988,6 +2027,11 @@ async function boot(): Promise<void> {
     renderer.setPixelRatio(pixelRatio)
     renderer.setSize(innerWidth, innerHeight)
   }
+
+  // The player's own settings, applied once everything they touch exists —
+  // `adaptive` and `pixelRatio` are declared above this point, and reading them
+  // any earlier is a temporal-dead-zone crash that takes the whole boot with it.
+  applySettings()
 
   // periodic node respawns
   setInterval(() => scatter.tickRespawns(physics), 1000)

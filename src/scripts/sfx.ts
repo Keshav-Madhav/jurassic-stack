@@ -67,7 +67,7 @@ export class Sfx {
     if (this.ctx) return
     this.ctx = ctx
     this.bus = ctx.createGain()
-    this.bus.gain.value = 0.9
+    this.bus.gain.value = 0.9 * this.level
     this.bus.connect(destination)
     // THE WHOLE BANK, UP FRONT. It is 1.1 MB against the world's 31 MB of
     // rigs, and a sample that has not decoded yet simply does not play — the
@@ -75,6 +75,13 @@ export class Sfx {
     // (M35 gate). Fetched four at a time so the decode never bunches up.
     void this.preloadAll()
   }
+
+  /** settings: the effects level (0-1), applied live */
+  setVolume(v: number): void {
+    this.level = v
+    if (this.bus) this.bus.gain.value = 0.9 * v
+  }
+  private level = 1
 
   get ready(): boolean {
     return this.ctx !== null

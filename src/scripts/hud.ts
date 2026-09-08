@@ -39,7 +39,7 @@ export class Hud {
   /** move one item (or the whole pile, with shift) between pack and chest */
   onChestMove: ((id: ItemId, dir: 'in' | 'out', all: boolean) => void) | null = null
 
-  constructor(private root: HTMLElement, private inv: Inventory, private onCraft: (id: ItemId) => void, private icons: Map<ItemId, string> = new Map()) {
+  constructor(readonly root: HTMLElement, private inv: Inventory, private onCraft: (id: ItemId) => void, private icons: Map<ItemId, string> = new Map()) {
     root.innerHTML = `
       <div id="hud-stats">
         <span id="hud-fps">-- fps</span>
@@ -63,7 +63,7 @@ export class Hud {
       <div id="hud-panel" hidden></div>
       <div id="hud-perf" hidden></div>
       <div id="hud-credits" hidden></div>
-      <div id="hud-help">WASD · SHIFT sprint · LMB use · E interact/drink/cook · F eat · N wayfinder · TAB inventory · C creative</div>
+      <div id="hud-help">WASD · SHIFT sprint · LMB use · E interact · F eat · N wayfinder · TAB pack · O settings · C creative</div>
     `
     this.fpsEl = root.querySelector('#hud-fps')!
     this.posEl = root.querySelector('#hud-pos')!

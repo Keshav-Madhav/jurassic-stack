@@ -390,9 +390,10 @@ polish / content:**
    respawn, workbench, tent, fence, door, thatch roof — the Kenney kit already holds most of these).
 2. **Ragdolls** (feel) · **opaque grass + far terrain** (perf, B+E) · **the visual LUT + material
    normalisation** (polish) · **cold on the ranges: fur off mammoths** (content, beat 4).
-3. **Tames defend you + hunger drive** (feel, if not done in 1) · **depth pre-pass + occlusion
-   queries** (perf, C+F) · **settings menu: presets, render scale, sensitivity, FOV, rebinding**
-   (polish) · **waterfalls + swamp/pine interiors** (content).
+3. ~~Tames defend you~~ **DONE M36** · **hunger drive** (feel) · **depth pre-pass + occlusion
+   queries** (perf, C+F — note the frame is already 3–5 ms; measure before building either) ·
+   ~~settings menu~~ **DONE M40** (render scale, shadows, grass, draw distance, volume, sensitivity,
+   FOV — key rebinding still open) · **waterfalls + swamp/pine interiors** (content).
 4. **The Wayfinder item + corpse bag death** (feel) · **shadow caching + KTX2** (perf, G+H) · **playtest
    ritual: F8 report dump + the 10-item first-ten-minutes checklist** (polish) · **caves** (content —
    after sound and the build tier: a cave with neither is a dark room).

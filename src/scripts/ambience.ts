@@ -14,6 +14,13 @@ export class Ambience {
   private t = 0
   private started = false
 
+  /** settings: the master level (0-1), applied live and remembered */
+  setVolume(v: number): void {
+    this.level = v
+    if (this.master) this.master.gain.value = 0.55 * v
+  }
+  private level = 1
+
   /** the shared AudioContext and mix bus — sfx.ts hangs its one-shots here so
    *  the whole game has one context and one place to set the level */
   get context(): AudioContext | null {
@@ -31,7 +38,7 @@ export class Ambience {
     const ctx = new AudioContext()
     this.ctx = ctx
     this.master = ctx.createGain()
-    this.master.gain.value = 0.55
+    this.master.gain.value = 0.55 * this.level
     this.master.connect(ctx.destination)
 
     // wind: white noise → lowpass → gain; the filter cutoff and gain breathe

@@ -15,7 +15,7 @@ import type { Emitter, LightRig } from './lights'
 export const CELL = 3
 const WALL_H = 3
 
-export type PieceKind = 'foundation' | 'wall' | 'ceiling' | 'campfire' | 'torch' | 'bedroll' | 'workbench' | 'chest'
+export type PieceKind = 'foundation' | 'wall' | 'ceiling' | 'campfire' | 'torch' | 'bedroll' | 'workbench' | 'chest' | 'fence' | 'canopy'
 
 export interface Piece {
   kind: PieceKind
@@ -128,6 +128,30 @@ export class Building {
       return { piece: p, valid }
     }
 
+    if (kind === 'fence') {
+      // a rail run stands on the ground, on the cell edge you are facing —
+      // a wall needs a foundation, a fence needs only somewhere to stand
+      const cx = gx * CELL
+      const cz = gz * CELL
+      const dxe = aim.x - cx
+      const dze = aim.z - cz
+      const edge = Math.abs(dxe) > Math.abs(dze) ? (dxe > 0 ? 1 : 3) : dze > 0 ? 2 : 0
+      const ex = cx + (edge === 1 ? CELL / 2 : edge === 3 ? -CELL / 2 : 0)
+      const ez = cz + (edge === 2 ? CELL / 2 : edge === 0 ? -CELL / 2 : 0)
+      const p: Piece = { kind, gx, gz, level: 0, edge, baseY: heightAt(ex, ez) - 0.1 }
+      return { piece: p, valid: !this.keys.has(this.key(p)) }
+    }
+
+    if (kind === 'canopy') {
+      // a roof on four posts: it stands over things, so it is NOT furniture
+      // (a bedroll or a bench belongs under it) — only another canopy is in its way
+      const cx = gx * CELL
+      const cz = gz * CELL
+      const corners = [heightAt(cx - CELL / 2, cz - CELL / 2), heightAt(cx + CELL / 2, cz - CELL / 2), heightAt(cx - CELL / 2, cz + CELL / 2), heightAt(cx + CELL / 2, cz + CELL / 2)]
+      const p: Piece = { kind, gx, gz, level: 0, edge: 0, baseY: Math.min(...corners) - 0.05 }
+      return { piece: p, valid: !this.keys.has(this.key(p)) && Math.max(...corners) - Math.min(...corners) < 1.6 }
+    }
+
     if (kind === 'wall') {
       // nearest foundation/ceiling cell, nearest edge to the aim point
       const base = this.pieceAt('foundation', gx, gz, 0) ?? this.pieceAt('ceiling', gx, gz, 0)
@@ -183,12 +207,12 @@ export class Building {
     const { pos, size } = this.box(p)
     const mesh = this.kit ? this.kitMesh(p, size) : new THREE.Mesh(new THREE.BoxGeometry(size.x, size.y, size.z), new THREE.MeshStandardMaterial({ color: 0x8a6a45 }))
     mesh.position.set(pos.x, p.baseY, pos.z)
-    if (p.kind === 'wall') mesh.rotation.y = p.edge === 1 || p.edge === 3 ? Math.PI / 2 : 0
+    if (p.kind === 'wall' || p.kind === 'fence') mesh.rotation.y = p.edge === 1 || p.edge === 3 ? Math.PI / 2 : 0
     this.group.add(mesh)
     if (p.kind === 'campfire' || p.kind === 'torch') this.lightFire(p)
     // static collider matching the piece's box (a torch is a stake and a
     // bedroll is on the floor — you walk over both)
-    if (p.kind === 'torch' || p.kind === 'bedroll') return
+    if (p.kind === 'torch' || p.kind === 'bedroll' || p.kind === 'canopy') return
     this.colliders.push(
       this.physics.world.createCollider(
         RAPIER.ColliderDesc.cuboid(size.x / 2, size.y / 2, size.z / 2).setTranslation(pos.x, pos.y, pos.z),
@@ -211,6 +235,8 @@ export class Building {
       case 'campfire': return this.kit!.instance(file, { width: 1.3 })
       case 'torch': return this.kit!.instance(file, { height: 1.6 })
       case 'bedroll': return this.kit!.instance(file, { width: 1.9 })
+      case 'fence': return this.kit!.instance(file, { width: CELL })
+      case 'canopy': return this.kit!.instance(file, { width: CELL * 1.15 })
       case 'workbench': return this.kit!.instance(file, { width: 2.0 })
       case 'chest': return this.kit!.instance(file, { width: 1.1 })
     }
@@ -283,6 +309,18 @@ export class Building {
         return { pos: new THREE.Vector3(cx, p.baseY + 0.12, cz), size: new THREE.Vector3(1.9, 0.25, 0.9) }
       case 'workbench':
         return { pos: new THREE.Vector3(cx, p.baseY + 0.5, cz), size: new THREE.Vector3(2, 1, 1.1) }
+      case 'canopy':
+        return { pos: new THREE.Vector3(cx, p.baseY + 1.3, cz), size: new THREE.Vector3(CELL * 1.15, 2.6, CELL * 1.15) }
+      case 'fence': {
+        const off = CELL / 2
+        const horiz = p.edge === 0 || p.edge === 2
+        const pos = new THREE.Vector3(
+          cx + (p.edge === 1 ? off : p.edge === 3 ? -off : 0),
+          p.baseY + 0.7,
+          cz + (p.edge === 2 ? off : p.edge === 0 ? -off : 0),
+        )
+        return { pos, size: new THREE.Vector3(horiz ? CELL : 0.2, 1.4, horiz ? 0.2 : CELL) }
+      }
       case 'chest':
         return { pos: new THREE.Vector3(cx, p.baseY + 0.35, cz), size: new THREE.Vector3(1.1, 0.7, 0.8) }
       case 'wall': {

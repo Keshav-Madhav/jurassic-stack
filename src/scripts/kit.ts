@@ -29,6 +29,8 @@ export const ITEM_MODEL: Record<ItemId, string> = {
   bedroll: 'kenney-bedroll',
   workbench: 'kenney-workbench',
   chest: 'kenney-chest',
+  fence: 'kenney-fence',
+  canopy: 'kenney-structure-roof',
 }
 
 /** per-icon framing tweaks: yaw/pitch, zoom, and a vertical offset (fraction of the model's extent) */
@@ -48,6 +50,8 @@ const ICON_FRAME: Partial<Record<ItemId, { yaw?: number; pitch?: number; roll?: 
   bedroll: { pitch: 0.55, zoom: 1.05 },
   workbench: { yaw: 0.6, pitch: 0.2 },
   chest: { yaw: 0.5, pitch: 0.25, zoom: 1.1 },
+  fence: { yaw: 0.45, zoom: 1.15 },
+  canopy: { yaw: 0.5, pitch: 0.28 },
   saddle: { yaw: -0.5, pitch: 0.15, zoom: 1.15, lift: 1.6 }, // dark leather: lift it or the icon is a silhouette (the M29 lesson)
   stone: { zoom: 1.1 },
   berry: { zoom: 1.05 },

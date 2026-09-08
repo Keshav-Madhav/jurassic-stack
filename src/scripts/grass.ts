@@ -42,8 +42,19 @@ export class GrassField {
   /** the outer rings: no shadow sampling (the shadow camera ends at 85 m anyway) */
   private farMaterial: THREE.Material
 
+  /** Settings: grass off detaches the whole field (never `visible = false` —
+   *  three walks every object in the graph either way, M24). */
+  private enabled = true
+  setEnabled(on: boolean, scene: THREE.Object3D): void {
+    if (on === this.enabled) return
+    this.enabled = on
+    if (on) scene.add(this.group)
+    else this.group.parent?.remove(this.group)
+  }
+
   /** Call every frame with the viewer position: keeps the tiles around it built. */
   update(x: number, z: number): void {
+    if (!this.enabled) return
     const tx = Math.floor(x / TILE)
     const tz = Math.floor(z / TILE)
     if (tx !== this.lastTx || tz !== this.lastTz) {

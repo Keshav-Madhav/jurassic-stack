@@ -30,10 +30,13 @@ export class ThirdPersonCamera {
     this.first = true
   }
 
+  /** settings: a multiplier on the look speed (1 = as tuned) */
+  sensitivity = 1
+
   update(input: Input, targetFeet: THREE.Vector3, dt: number): void {
     const { dx, dy } = input.drainPointer()
-    this.yaw -= dx * SENSITIVITY
-    this.pitch -= dy * SENSITIVITY
+    this.yaw -= dx * SENSITIVITY * this.sensitivity
+    this.pitch -= dy * SENSITIVITY * this.sensitivity
     this.pitch = Math.min(PITCH_MAX, Math.max(PITCH_MIN, this.pitch))
 
     const head = targetFeet.clone()
