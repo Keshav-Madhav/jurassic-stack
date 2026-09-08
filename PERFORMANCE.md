@@ -112,7 +112,8 @@ against measurement and should each be A/B'd before any of them is built.
 | **H5** | **The scatter visibility pass**: re-parsed group keys into strings and did three Map lookups per cell, over thousands of cells, every 3 m walked. Flattened to resolved references and plain numbers | 12–58 ms → **5–13 ms** | done M33 |
 | **H6** | **A teleport rebuilds terrain synchronously (~770 ms)** — QA-only today, but the same code path runs at load | once per teleport | OPEN |
 | **H7** | **~30-50 textures still upload on first sight of the plain** — reachable from neither the scene nor the registered roots, and no longer costing a visible hitch (the warden drains them) | ~16 ms | OPEN |
-| **H8** | **Two depth-variant compiles at the wood line, one at the plain** — owner unidentified, and PARKED at ~30 ms once per region. Ruled out, each with a measurement: warming every species' rig at boot (144 → 30 ms, M36) · attaching every prop and ruin for the boot shadow frame (no change, M36) · rendering the boot shadow frame from six focus points across the island rather than one, in case the ±2100 m box centred on spawn missed the far corners (no change, M40). A bisect that hides every group and reveals them one at a time reported 29 new programs for objects that had demonstrably already been drawn, which says `renderer.info.programs.length` is not a sound proxy for "a compile happened" — the next attempt needs a better instrument (a patched `WebGLPrograms.acquireProgram`, or Chrome's own GPU trace) rather than another guess | ~30 ms once per region | PARKED |
+| **H8** | **CLOSED (M54), and it was two bugs, neither of them where I looked.** The old note is kept below because the reason it stayed open for six rounds is the lesson. Found by building the instrument the note asked for — `tools/qa-compile.mjs` patches `WebGL2RenderingContext.prototype.shaderSource`/`linkProgram` before the page loads and records every real link with its `#define SHADER_NAME`, its `SHADER_TYPE` and its defines, so "something compiled around here" becomes "THIS material, with THESE flags, in THIS frame". **(a)** A material's program cache key carries the **bound render target's colour space and tone mapping**, so every material is TWO programs — one for the canvas (sRGB + ACES) and one for the composer's linear HDR target. The warm-up drew to the canvas; the game draws through the composer. Exactly the shape of H4's environment-map bug. The warm-up compiles against both surfaces now. **(b)** `Scatter.addDistanceFade` appended the fade distance to `customProgramCacheKey` — but the distance goes in as a **uniform**, so it was compiling a separate, byte-identical program for each of the six cover distances, and three more every time the draw-distance setting moved | a lap of the island: **16 links → 3**, hitches over 25 ms **8 → 4**, all three survivors `MeshDepthMaterial` variants. Costs **+100 ms** of warm-up at load (325 → 427 ms; time-to-`ready` unchanged at 6.2-6.4 s) | done M54 |
+| ~~H8 (the old note)~~ | Two depth-variant compiles at the wood line, one at the plain — owner unidentified, PARKED at ~30 ms once per region. Ruled out, each with a measurement: warming every species' rig at boot (144 → 30 ms, M36) · attaching every prop and ruin for the boot shadow frame (no change, M36) · rendering the boot shadow frame from six focus points across the island (no change, M40). A bisect reported 29 new programs for objects that had demonstrably already been drawn, which says **`renderer.info.programs.length` is not a sound proxy for "a compile happened"** — the next attempt needs a better instrument rather than another guess | — | superseded |
 | **H9** | **Colliders a few a frame** — crossing a chunk boundary built the whole 3×3 neighbourhood's trunks and rock hulls in one frame | 11–24 ms → gone | done M34 |
 | **H10** | **The boot card**: `ready` means warm. Every species' shaders, textures, impostor card and shadow-depth variant are paid behind a title card instead of in the player's first minute | 40–150 ms × 11 → load | done M34 |
 
@@ -129,6 +130,11 @@ The worst frame on the island is 31 ms of scatter CPU — the next thing to budg
   re-baselines the ceilings after a win.
 - `tools/qa-hitch.mjs` — a lap of the island reporting each region's worst frame, its section
   breakdown, and how many programs and textures it created. **The hitch instrument.**
+- `tools/qa-compile.mjs` — the same lap, but it asks the DRIVER what compiled: patched
+  `shaderSource`/`linkProgram`/`deleteProgram` on the WebGL prototype before the page loads, so
+  every link is reported with its material name, its material type, its defines, and a diff of its
+  program cache key against the nearest key already compiled. **Use this, not
+  `renderer.info.programs.length`, which counts entries and not compiles (H8).**
 - `tools/qa-jitter.mjs` — the same, for standing/walking/sprinting/flying/spinning.
 - **F3 in the HUD** — GPU ms (p10 of ~240 frames), CPU update/draw, calls, tris, pixel count, light
   slots, dinos awake, and the GPU's own name. This is how a player on another machine reports.
@@ -143,6 +149,11 @@ The worst frame on the island is 31 ms of scatter CPU — the next thing to budg
   hard cap of 3 + the sun.
 - Anything new with a material must exist before the load-time warm-up or hook the per-species path
   (M18/M30); a first-sight compile is a 50–200 ms hitch.
+- **The program cache key is bigger than the shader source.** It carries the bound render target's
+  colour space and tone mapping, the light counts, the morph-target count, and whatever
+  `customProgramCacheKey()` returns — so a warm-up that draws to a different surface than the game,
+  or a cache-key suffix built from a value that is really a uniform, silently doubles the
+  compile bill (H8, M54). Put a value in the key only if it is a literal IN the source.
 - Measure GPU with timer queries at the user's pixel count; the JS render timer measures submit.
 
 ## Post-processing (M42) — the headroom, spent

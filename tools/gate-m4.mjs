@@ -203,4 +203,5 @@ check(await g('window.__g.game.dinoStates().some(d => d.state === "tamed")'), 't
 
 await page.screenshot({ path: 'shots/gate-m4-final.png' })
 await browser.close()
+console.log(failed ? '\nGATE FAILED' : '\nGATE PASSED')
 process.exit(failed ? 1 : 0)

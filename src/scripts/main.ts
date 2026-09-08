@@ -1536,6 +1536,16 @@ async function boot(): Promise<void> {
       const undo = d.attachForWarmup()
       if (undo && d.rig) { seen.add(d.species.id); detach.push(undo); warmRigs.push([d.species.id, d.rig]) }
     }
+    // TWICE, ONCE PER OUTPUT SURFACE. A material's program cache key carries
+    // the BOUND RENDER TARGET's colour space and tone mapping, so one material
+    // is two programs: one for the canvas (sRGB, ACES) and one for the
+    // composer's linear HDR target. The warm-up drew to the canvas; the game
+    // draws through the composer — so every material quietly compiled its
+    // other half the first time it was seen in play. Same shape of bug as the
+    // environment map in M32, found with tools/qa-compile.mjs (M54).
+    renderer.setRenderTarget(post.composer.renderTarget1 as THREE.WebGLRenderTarget)
+    renderer.compile(scene, cam.camera)
+    renderer.setRenderTarget(null)
     renderer.compile(scene, cam.camera)
     // ONE ISLAND-WIDE SHADOW FRAME: the depth variant of a material compiles
     // when the material first enters the shadow box, and the box is 85 m — so
@@ -1596,7 +1606,12 @@ async function boot(): Promise<void> {
       // frame that draws the animal, which is how a species used to cost a
       // 40-100 ms freeze the moment you met it (M33).
       model.visible = false
-      void renderer.compileAsync(model as unknown as THREE.Scene, cam.camera, scene).then(() => {
+      // both output surfaces, as the boot warm-up does — the canvas and the
+      // composer's linear target are two programs for the same material (M54)
+      renderer.setRenderTarget(post.composer.renderTarget1 as THREE.WebGLRenderTarget)
+      const offscreen = renderer.compileAsync(model as unknown as THREE.Scene, cam.camera, scene)
+      renderer.setRenderTarget(null)
+      void Promise.all([offscreen, renderer.compileAsync(model as unknown as THREE.Scene, cam.camera, scene)]).then(() => {
         model.visible = true
         // The DEPTH variant only compiles when the rig is actually drawn into
         // the shadow map — and at this moment the animal is almost always

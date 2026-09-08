@@ -83,4 +83,5 @@ for (const w of walks) {
 }
 
 await browser.close()
+console.log(failed ? '\nGATE FAILED' : '\nGATE PASSED')
 process.exit(failed ? 1 : 0)

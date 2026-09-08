@@ -118,4 +118,5 @@ check(later > early, `the fall accelerates rather than ramps (${early.toFixed(2)
 check((await page.evaluate(() => window.__g.game.thuds())) > thudsBefore, 'and it lands with a thud')
 
 await browser.close()
+console.log(failed ? '\nGATE FAILED' : '\nGATE PASSED')
 process.exit(failed ? 1 : 0)

@@ -154,4 +154,5 @@ check(await g('window.__g.game.beaconLit()'), 'lit beacon survives reload')
 }
 
 await browser.close()
+console.log(failed ? '\nGATE FAILED' : '\nGATE PASSED')
 process.exit(failed ? 1 : 0)

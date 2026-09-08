@@ -85,4 +85,5 @@ const land = await page.evaluate(() => window.__g.game.swimming())
 check(!land, 'back to walking on the beach')
 
 await browser.close()
+console.log(failed ? '\nGATE FAILED' : '\nGATE PASSED')
 process.exit(failed ? 1 : 0)

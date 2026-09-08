@@ -474,8 +474,15 @@ class InstancedProp {
             transformed.y *= k;
           }`)
     }
+    // THE DISTANCE IS A UNIFORM, SO IT MUST NOT BE IN THE CACHE KEY. This read
+    // `+ '|fade' + fadeAt` and it compiled a SEPARATE, BYTE-IDENTICAL program
+    // for every distinct cover distance — six of them, plus three more every
+    // time the draw-distance setting moved, each one a fresh link the first
+    // time that band was drawn (M54, found with tools/qa-compile.mjs). The
+    // marker still has to be here so a faded material never shares a program
+    // with an unfaded one; the VALUE never belonged.
     const prevKey = mat.customProgramCacheKey.bind(mat)
-    mat.customProgramCacheKey = () => prevKey() + '|fade' + fadeAt
+    mat.customProgramCacheKey = () => prevKey() + '|fade'
   }
 
   /** attach/detach the holder (see the field note) */
