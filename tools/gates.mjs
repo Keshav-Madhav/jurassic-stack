@@ -9,15 +9,25 @@
 //   node tools/gates.mjs                      every gate, against localhost:4173
 //   node tools/gates.mjs --url=https://…      against the deployment
 //   node tools/gates.mjs --only=settings,m4   just these
-//   node tools/gates.mjs --skip=perf          all but these
+//   node tools/gates.mjs --skip=perf
+//   node tools/gates.mjs --write        re-baseline the expected check counts
+//
+// A gate that runs FEWER checks than last time has silently skipped one, which
+// looks exactly like passing. That happened between a local run (256) and the
+// same commit against the deployment (255): one `check()` simply did not
+// execute, no FAIL, no SKIP, nothing to see. The counts are baselined in
+// tools/gate-counts.json and a shortfall is a failure (M64).          all but these
 import { spawn } from 'node:child_process'
-import { readdirSync } from 'node:fs'
+import { readdirSync, readFileSync, writeFileSync, existsSync } from 'node:fs'
 
 const args = process.argv.slice(2)
 const arg = (k, d) => (args.find((a) => a.startsWith(`--${k}=`)) ?? `--${k}=${d}`).slice(k.length + 3)
 const url = arg('url', 'http://localhost:4173')
 const only = arg('only', '').split(',').filter(Boolean)
 const skip = arg('skip', '').split(',').filter(Boolean)
+const rebaseline = args.includes('--write')
+const countsFile = new URL('./gate-counts.json', import.meta.url)
+const expected = existsSync(countsFile) ? JSON.parse(readFileSync(countsFile, 'utf8')) : {}
 
 // gate-perf last: it is the one that measures, so it should not share the GPU
 // with anything else in the run
@@ -45,12 +55,21 @@ for (const name of list) {
   const skipped = (r.out.match(/^SKIP /gm) ?? []).length
   // a gate that printed no checks at all did not run — a crash reads exactly
   // like a pass if you only look for the word FAIL
-  const ok = r.code === 0 && fail === 0 && pass > 0
-  results.push({ ...r, pass, fail, ok })
-  console.log(`${ok ? ' ok ' : 'FAIL'}  gate-${name.padEnd(10)} ${String(pass).padStart(3)} pass · ${String(fail).padStart(2)} fail${skipped ? ` · ${skipped} skip` : ''} · exit ${r.code} · ${r.secs}s`)
+  const want = expected[name]
+  const short = want !== undefined && pass < want
+  const ok = r.code === 0 && fail === 0 && pass > 0 && !short
+  results.push({ ...r, pass, fail, ok, short, want })
+  const note = short ? `  ⟨${want - pass} CHECK(S) DID NOT RUN — expected ${want}⟩` : want !== undefined && pass > want ? `  (+${pass - want} new)` : ''
+  console.log(`${ok ? ' ok ' : 'FAIL'}  gate-${name.padEnd(10)} ${String(pass).padStart(3)} pass · ${String(fail).padStart(2)} fail${skipped ? ` · ${skipped} skip` : ''} · exit ${r.code} · ${r.secs}s${note}`)
   if (!ok) for (const line of r.out.split('\n').filter((l) => /^FAIL |Error|error:|\[err\]/.test(l)).slice(0, 12)) console.log(`        ${line}`)
 }
 
+if (rebaseline) {
+  const next = { ...expected }
+  for (const r of results) if (r.fail === 0 && r.code === 0) next[r.name] = r.pass
+  writeFileSync(countsFile, JSON.stringify(next, null, 2) + '\n')
+  console.log('\nexpected check counts re-baselined (tools/gate-counts.json)')
+}
 const bad = results.filter((r) => !r.ok)
 const checks = results.reduce((a, r) => a + r.pass, 0)
 console.log(`\n${checks} checks across ${results.length} gates · ${bad.length ? `${bad.length} FAILED: ${bad.map((r) => r.name).join(', ')}` : 'ALL GREEN'}`)

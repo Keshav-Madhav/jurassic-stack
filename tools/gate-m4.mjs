@@ -125,15 +125,26 @@ for (let i = 0; i < 14; i++) {
 check(await g('window.__g.game.dinoStates().some(d => d.state === "tamed")'), 'raptor tamed')
 
 // ---------- saddle + ride ----------
-for (let i = 0; i < 3; i++) { // (a follow-step can carry the tame out of reach between goto and interact)
-  await page.evaluate((i) => window.__g.game.gotoDinoIndex(i), ourRaptor)
-  await g('window.__g.game.interact()') // saddle
+// STEP AND ACT IN THE SAME EVALUATE. A tame follows you, so it can walk out of
+// reach in the wall-clock gap between `gotoDinoIndex` and `interact` — and on
+// a loaded machine that gap is long enough to matter: this failed once in nine
+// runs, at a load average of 12 (M64). Inside one evaluate no time passes at
+// all, and six tries covers the rest.
+const stepAndAct = (idx) => page.evaluate((i) => {
+  window.__g.game.gotoDinoIndex(i)
+  window.__g.game.interact()
+}, idx)
+for (let i = 0; i < 6; i++) {
+  await stepAndAct(ourRaptor)
   await page.waitForTimeout(250)
   if (await g('window.__g.game.dinoStates().some(d => d.saddled)')) break
 }
 check(await g('window.__g.game.dinoStates().some(d => d.saddled)'), 'raptor saddled')
-await g('window.__g.game.interact()') // mount
-await page.waitForTimeout(200)
+for (let i = 0; i < 6; i++) {
+  await stepAndAct(ourRaptor) // mount
+  await page.waitForTimeout(200)
+  if (await g('window.__g.game.riding()')) break
+}
 check(await g('window.__g.game.riding()'), 'mounted')
 // ride out: the mount stands where it was tamed, so a tree or rock may block
 // one heading — try the four in turn

@@ -11,6 +11,13 @@ await page.goto(url, { waitUntil: 'networkidle' })
 await page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 60000 })
 // the 1500 rigs clone in over ~10 s; wait until every species has a loaded rig
 await page.waitForFunction('Object.keys(window.__g.game.animAudit()).length >= 11', null, { timeout: 40000 }).catch(() => {})
+// WAIT FOR THE WHOLE ROSTER BEFORE AUDITING IT. The audit loop below runs one
+// check per species it can see, so a species whose eager rig clone had not
+// landed yet silently produced one FEWER CHECK — no FAIL, no SKIP, just 43
+// instead of 44 (spotted M64 by comparing a local run against the same commit
+// on the deployment, and now impossible to miss: tools/gates.mjs fails a gate
+// that runs short of its baseline).
+await page.waitForFunction(() => Object.keys(window.__g.game.animAudit()).length >= 14, null, { timeout: 60000 }).catch(() => {})
 const audit = await page.evaluate(() => window.__g.game.animAudit())
 const species = Object.keys(audit)
 check(species.length >= 11, `${species.length} species loaded`)
