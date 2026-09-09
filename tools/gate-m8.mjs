@@ -186,6 +186,36 @@ if (dune && meadow) {
   check(meadow.r / meadow.g < 1.2 && meadow.b / meadow.g < 1, `the plain is still green (red/green ${(meadow.r / meadow.g).toFixed(2)}, blue/green ${(meadow.b / meadow.g).toFixed(2)})`)
 }
 
+// THE TERRAIN LOD CACHE GIVES ITS MEMORY BACK (M62). Every (chunk, LOD) pair
+// used to be cached for the life of the session — 1024 chunks × a quarter of a
+// megabyte at LOD0 — so touring the island grew the heap without bound. Fine
+// LODs are freed after two minutes unused now. The gate runs with a short TTL
+// so it does not have to wait, and checks the two things that matter: the
+// geometry count comes back DOWN, and the sweep is not thrashing the builder.
+{
+  await page.evaluate(() => { window.__g.game.setGod(true); window.__g.game.setTerrainCacheTtl(8000) })
+  let peak = 0
+  for (const [x, z] of [[0, 1560], [-286, 793], [700, 900], [300, -560], [-700, -400]]) {
+    await page.evaluate(([px, pz]) => window.__g.teleport(px, pz), [x, z])
+    await page.waitForTimeout(6000)
+    peak = Math.max(peak, await page.evaluate(() => window.__g.renderer.info.memory.geometries))
+  }
+  await page.waitForTimeout(14000) // sit still: everything left behind goes stale
+  const after = await page.evaluate(() => window.__g.renderer.info.memory.geometries)
+  const t = await page.evaluate(() => window.__g.mem().terrainEvicted)
+  check(t.count > 0, `the terrain cache frees what it is done with (${t.count} chunk LODs, ${t.mb} MB)`)
+  // NB the gate runs with an 8 s TTL so it need not wait two minutes, which
+  // means the sweep is already freeing THROUGHOUT the tour — the live count
+  // never climbs to what it would reach unevicted, so the thing to assert is
+  // that a real share of it has been handed back and that it is not still
+  // growing once you stand still.
+  check(t.count > after * 0.2, `and a real share of the live count has been handed back (${t.count} freed vs ${after} live)`)
+  check(after <= peak, `and it is not still growing while you stand still (peak ${peak} → ${after})`)
+  // an eviction scheme that immediately rebuilds what it freed is worse than
+  // none: the first cut evicted by DISTANCE and rebuilt 40% of it (M62)
+  check(t.rebuilt < Math.max(20, t.count * 0.25), `without thrashing the builder (${t.rebuilt} rebuilt of ${t.count})`)
+}
+
 await browser.close()
 console.log(failed ? '\nGATE FAILED' : '\nGATE PASSED')
 process.exit(failed ? 1 : 0)

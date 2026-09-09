@@ -21,6 +21,8 @@ const speed = Number((args.find((a) => a.startsWith('--speed=')) ?? '--speed=8')
  *  short. That is fine — the numbers come from the ground actually covered. */
 /** path queries a frame; pass a big number for the old unbudgeted behaviour */
 const navBudget = Number((args.find((a) => a.startsWith('--nav=')) ?? '--nav=0').slice(6))
+/** terrain LOD cache time-to-live in ms; pass a huge number to switch eviction off (M62 A/B) */
+const ttl = Number((args.find((a) => a.startsWith('--ttl=')) ?? '--ttl=0').slice(6))
 
 /** south beach → meadow → the wood → the plain → the river → the swamp edge →
  *  back west over the foothills → the dunes. About 5 km of ground. */
@@ -51,15 +53,16 @@ await page.evaluate(([x, z]) => {
 }, [ROUTE[0][1], ROUTE[0][2]])
 await page.waitForTimeout(6000)
 await page.evaluate((n) => {
-  if (n > 0) window.__g.game.setNavBudget(n)
+  if (n[0] > 0) window.__g.game.setNavBudget(n[0])
+  if (n[1] > 0) window.__g.game.setTerrainCacheTtl(n[1])
   window.__g.frameStats()
   window.__tex = window.__g.renderer.info.memory.textures
   window.__pro = window.__g.renderer.info.programs.length
   window.__nav = { ...window.__g.game.nav() }
   window.__g.game.worstDino()
-}, navBudget)
+}, [navBudget, ttl])
 
-console.log(`trek at ${speed} m/s, ${small ? 1280 : 2560}×${small ? 720 : 1440}${navBudget ? `, nav budget ${navBudget}/frame` : ''}\n`)
+console.log(`trek at ${speed} m/s, ${small ? 1280 : 2560}×${small ? 720 : 1440}${navBudget ? `, nav budget ${navBudget}/frame` : ''}${ttl ? `, terrain cache TTL ${ttl} ms` : ''}\n`)
 let worstEver = { ms: 0, leg: '' }
 let totalOver25 = 0
 let totalOver50 = 0
@@ -116,6 +119,7 @@ for (let i = 1; i < ROUTE.length; i++) {
       navPeak: n.peakFrameCalls,
       navDenied: n.denied - window.__nav.denied,
       worstDino: window.__g.game.worstDino(),
+      terrain: window.__g.mem().terrainEvicted,
     }
     window.__tex = t; window.__pro = p; window.__nav = { ...n }
     return o
@@ -124,6 +128,7 @@ for (let i = 1; i < ROUTE.length; i++) {
   totalOver25 += legOver25
   totalOver50 += legOver50
   console.log(`→ ${name.padEnd(16)} ${String(Math.round((Date.now() - t0) / 1000)).padStart(3)}s · mean ${(legSum / Math.max(1, legFrames)).toFixed(1)} ms · worst ${String(legMax).padStart(6)} ms · frames>25ms ${String(legOver25).padStart(3)} · +${d.pro} progs +${d.tex} tex · paths ${d.navCalls} in ${d.navMs.toFixed(0)} ms (peak ${d.navPeak}/frame, ${d.navDenied} deferred)${stuck ? `  ⟨STUCK at ${Math.round(last.x)},${Math.round(last.z)}, ${Math.round(last.d)} m short — stepped over⟩` : cut ? `  ⟨still walking, ${Math.round(last.d)} m short at the 150 s cap — stepped over⟩` : ''}`)
+  if (d.terrain && (d.terrain.count || d.terrain.rebuilt)) console.log(`     terrain cache: ${d.terrain.count} LODs freed (${d.terrain.mb} MB), ${d.terrain.rebuilt} REBUILT`)
   if (d.worstDino && d.worstDino.ms > 4) console.log(`     dearest single animal: ${d.worstDino.ms.toFixed(1)} ms — ${d.worstDino.species} (${d.worstDino.state}${d.worstDino.dormant ? ', dormant' : ''}) at ${d.worstDino.dist} m`)
   if (stuck || cut) { await page.evaluate(([px, pz]) => window.__g.teleport(px, pz), [tx, tz]); await page.waitForTimeout(2500) }
   if (legWorst && legWorst.ms > 25) {

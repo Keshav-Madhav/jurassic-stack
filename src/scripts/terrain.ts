@@ -15,6 +15,23 @@ const LOD_DISTANCE = [0, 260, 520, 1000]
 /** Far terrain merges 4×4 chunks into one 512 m super-chunk at LOD3 resolution:
  *  the 4 km island is 1024 chunks, and a thousand 128-tri draw calls of the
  *  splat shader cost more than the triangles they carried. */
+/** how long a cached chunk LOD may sit unused before it is thrown away (M62) */
+let CACHE_TTL_MS = 120_000
+/** QA: turn the eviction off (a huge TTL) to A/B it against itself */
+export function setTerrainCacheTtl(ms: number): void {
+  CACHE_TTL_MS = ms
+}
+/** how often the sweep runs */
+const EVICT_EVERY_MS = 2_000
+/** QA: how many cached chunk geometries have been freed this session */
+let terrainEvictions = 0
+let terrainEvictedBytes = 0
+/** builds of a (chunk, LOD) that had been evicted before — the whole cost of
+ *  the scheme, and the number that says whether the TTL is long enough (M62) */
+let terrainRebuilds = 0
+export function terrainEvicted(): { count: number; mb: number; rebuilt: number } {
+  return { count: terrainEvictions, mb: +(terrainEvictedBytes / 1e6).toFixed(1), rebuilt: terrainRebuilds }
+}
 const SUPER = 4
 const SUPER_SIZE = CHUNK_SIZE * SUPER
 
@@ -28,6 +45,11 @@ interface Chunk {
   mesh: THREE.Mesh
   lod: number
   cache: (THREE.BufferGeometry | null)[]
+  /** when each cached LOD was last the one being drawn (M62's eviction clock) */
+  usedAt: number[]
+  /** which LODs have been thrown away at least once — rebuilding one of these
+   *  is the ONLY way eviction can cost anything, so it is counted (M62) */
+  evictedOnce: boolean[]
   /** LOD currently being built in the worker (-1 none) */
   pending: number
 }
@@ -188,6 +210,8 @@ export class Terrain {
           centerZ: originZ + CHUNK_SIZE / 2,
           mesh, lod: -1, pending: -1,
           cache: [null, null, null, null],
+          usedAt: [0, 0, 0, 0],
+          evictedOnce: [false, false, false, false],
         }
         this.chunks.push(chunk)
         this.group.add(mesh)
@@ -216,7 +240,50 @@ export class Terrain {
    *  frame, nearest first (a LOD0 chunk is 4K vertices of colour + splat
    *  work; crossing a border at a gallop used to build three at once and
    *  the frame hitched). A chunk waiting on its build keeps its old LOD. */
+  /**
+   * THROW AWAY THE CHUNK GEOMETRY NOBODY HAS LOOKED AT FOR A MINUTE (M62).
+   *
+   * Every (chunk, LOD) pair was cached for the life of the session, and a LOD0
+   * chunk is ~4K vertices of position, normal, colour and splat — about a
+   * quarter of a megabyte. The island is 1024 chunks, so touring all of it
+   * accumulated a quarter of a GIGABYTE of terrain nobody can see any more.
+   *
+   * The first cut evicted by DISTANCE and it was a disaster: chunks cross a
+   * radius constantly as you walk, so the builder spent the whole trek
+   * rebuilding and re-uploading geometry it had just thrown away — a 5 km walk
+   * went from 14 frames over 25 ms to 468. TIME is the right axis. A LOD you
+   * have not drawn for a minute is one you have genuinely left behind, and
+   * walking back and forth over any boundary costs nothing at all.
+   *
+   * The collider does not read this cache (`chunkGridData` samples the
+   * heightmap itself), so nothing physical depends on it.
+   */
+  private evictAt = 0
+  private evictStale(now: number): void {
+    if (now < this.evictAt) return
+    this.evictAt = now + EVICT_EVERY_MS
+    for (const c of this.chunks) {
+      // ONLY THE FINE LEVELS ARE WORTH FREEING. A LOD0 chunk is 4225 vertices
+      // and a LOD1 is 1089; LOD2 and LOD3 together are under 400 and are what
+      // the far half of the island is drawn from, so keeping them for ever
+      // costs almost nothing and saves the most-likely rebuild.
+      for (let i = 0; i < 2; i++) {
+        const g = c.cache[i]
+        if (!g || i === c.lod || c.pending === i) continue
+        if (now - c.usedAt[i] < CACHE_TTL_MS) continue
+        for (const a of Object.values(g.attributes)) terrainEvictedBytes += (a as THREE.BufferAttribute).array.byteLength
+        terrainEvictedBytes += g.index?.array.byteLength ?? 0
+        g.dispose()
+        c.cache[i] = null
+        c.evictedOnce[i] = true
+        terrainEvictions++
+      }
+    }
+  }
+
   update(focusX: number, focusZ: number): void {
+    const now = performance.now()
+    this.evictStale(now)
     const wanted: { c: Chunk; lod: number; d: number }[] = []
     for (const c of this.chunks) {
       const dx = c.centerX - focusX
@@ -226,6 +293,7 @@ export class Terrain {
       for (let i = 0; i < LOD_DISTANCE.length; i++) {
         if (d >= LOD_DISTANCE[i]) lod = i
       }
+      c.usedAt[lod] = now
       if (lod === c.lod) continue
       if (c.cache[lod]) {
         c.lod = lod
@@ -242,6 +310,7 @@ export class Terrain {
         if (c.lod === -1 || !this.builder.available) {
           // no geometry yet (first frames) or no worker: build here, budgeted
           if (performance.now() - t0 > 3 && c.lod !== -1) break
+          if (c.evictedOnce[w.lod]) terrainRebuilds++
           c.cache[w.lod] = buildChunkGeometry(c.originX, c.originZ, LOD_QUADS[w.lod])
           c.lod = w.lod
           c.mesh.geometry = c.cache[w.lod]!
@@ -251,6 +320,7 @@ export class Terrain {
         if (this.builder.inFlight >= 6) break // keep the queue short so requests stay fresh
         c.pending = w.lod
         const lod = w.lod
+        if (c.evictedOnce[lod]) terrainRebuilds++
         this.builder.request(c.originX, c.originZ, LOD_QUADS[lod], CHUNK_SIZE, (a) => {
           c.cache[lod] = geometryFrom(a)
           c.pending = -1

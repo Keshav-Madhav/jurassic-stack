@@ -36,6 +36,7 @@ import { saveGame, loadGame, SAVE_VERSION, type SaveFile } from './save'
 import { heightAt, loadHeightmap, worldMeta, SPAWN, skyViewAt } from './heightmap'
 import { loadNavmesh, findPath, beginNavFrame, navStats, setNavBudget } from './navmesh'
 import { gridBytes } from './heightmap'
+import { terrainEvicted, setTerrainCacheTtl } from './terrain'
 import { WaterSystem } from './water'
 import { wildPopulation } from './population'
 import { GrassField } from './grass'
@@ -1070,6 +1071,7 @@ async function boot(): Promise<void> {
         gridsMB: MB(Object.values(grids).reduce((a, b) => a + b, 0)),
         grids: Object.fromEntries(Object.entries(grids).map(([k, v]) => [k, MB(v)])),
         roots: warmRoots.length,
+        terrainEvicted: terrainEvicted(),
       }
     },
     perf: () => ({ update: +perfUpdate.toFixed(2), render: +perfRender.toFixed(2), dinos: +perfSec.dinos.toFixed(2), scatter: +perfSec.scatter.toFixed(2), grass: +perfSec.grass.toFixed(2), terrain: +perfSec.terrain.toFixed(2), physics: +perfSec.physics.toFixed(2) }),
@@ -1383,6 +1385,8 @@ async function boot(): Promise<void> {
       rigAlbedos: () => { const out: Record<string, string[]> = {}; for (const d of dinos) { if (out[d.species.id]) continue; const r = d.albedoReport(); if (r.length) out[d.species.id] = r } return out },
       rigMaterials: () => { const out: Record<string, string[]> = {}; for (const d of dinos) { if (out[d.species.id]) continue; const r = d.materialReport(); if (r.length) out[d.species.id] = r } return out },
       /** QA: draw state of the nearest dino of a species */
+      /** QA: the terrain LOD cache's time-to-live, for A/B (M62) */
+      setTerrainCacheTtl: (ms: number) => setTerrainCacheTtl(ms),
       /** QA (M60): mixers are built lazily; nothing drawable may be without one */
       anim: () => ({
         dinos: dinos.length,

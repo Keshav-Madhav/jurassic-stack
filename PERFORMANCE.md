@@ -287,6 +287,34 @@ the individual, so they are measured once per species instead of once per animal
 `skinnedBounds` walks of up to 2500 vertices each, times ~200 clones, removed. Time to `ready`
 **6.2-6.4 s → 5.9 s**. (The cull spheres had been cached this way since M18; this is the other half.)
 
+## The terrain LOD cache (M62) — and two wrong answers before the right one
+
+Every `(chunk, LOD)` geometry was cached for the life of the session. A LOD0 chunk is 4225 vertices
+of position, normal, colour and splat — about a quarter of a megabyte — and the island is **1024
+chunks**, so touring all of it accumulated a quarter of a gigabyte of terrain nobody can see any
+more. Measured: one lap took the geometry count **332 → 1059** and the heap **322 → 579 MB**.
+
+Fine LODs (0 and 1 only — LOD2 and LOD3 together are under 400 vertices and are what the far half of
+the island is drawn from) are freed after **120 s unused**.
+
+**The two failures are the useful part of this entry.**
+
+1. **Evicting by DISTANCE was a disaster.** Chunks cross a radius constantly as you walk, so the
+   builder spent the whole trek rebuilding and re-uploading geometry it had just thrown away: a 5 km
+   walk went from 14 frames over 25 ms to **468**. Distance is the wrong axis; **time** is the right
+   one, because "I have not drawn this for two minutes" means you have genuinely left.
+2. **A 60 s TTL over all four levels still thrashed** — 614 of 1524 evictions were **rebuilt**, 40%.
+   The frame-time evidence for this was useless (the machine was running a Next build and two other
+   things; load average 15–23, and the trek swung 8× between identical runs). So the metric to tune
+   against became a **counter, not a clock**: `terrainEvicted().rebuilt` — a build of a (chunk, LOD)
+   that had been evicted before is the *only* way this scheme can cost anything, and it does not
+   care what else the machine is doing. At 120 s and levels 0–1 it is **9 rebuilds against 333
+   evictions on a 5 km walk**, and **5 against 295** in the gate.
+
+Result: **56.5 MB handed back on a walk, 62-90 MB on a full tour**, geometry count plateaus instead
+of climbing. `gate-m8` asserts the cache frees a real share of the live count, is not still growing
+while you stand still, and is not thrashing the builder.
+
 ## Not doing
 
 - N8AO / anything that renders the scene a second time — see the GTAO measurement above.
