@@ -241,6 +241,29 @@ if (dune && meadow) {
   check(strays === 0, `and none of it grows inland (${strays} at the plain, ${plain.h} m)`)
 }
 
+// THE WAYFINDER POINTS THE RIGHT WAY (M68). It read `atan2(-dx, -dz)`, which
+// measures the bearing ANTICLOCKWISE from north — east and west came out
+// swapped, and it had been sending players the wrong way since it was written.
+// A compass that is confidently wrong is worse than no compass. This checks
+// the very function the Wayfinder points with, so it cannot drift from it.
+{
+  const c = (fx, fz, tx, tz) => page.evaluate(([a, b2, d, e]) => window.__g.game.compass(a, b2, d, e), [fx, fz, tx, tz])
+  // north is -z, east is +x
+  check((await c(0, 0, 100, 0)) === 'E', `+x is EAST (got ${await c(0, 0, 100, 0)})`)
+  check((await c(0, 0, -100, 0)) === 'W', `-x is WEST (got ${await c(0, 0, -100, 0)})`)
+  check((await c(0, 0, 0, -100)) === 'N', `-z is NORTH (got ${await c(0, 0, 0, -100)})`)
+  check((await c(0, 0, 0, 100)) === 'S', `+z is SOUTH (got ${await c(0, 0, 0, 100)})`)
+  check((await c(0, 0, 100, -100)) === 'NE', `+x -z is NE (got ${await c(0, 0, 100, -100)})`)
+  check((await c(0, 0, -100, 100)) === 'SW', `-x +z is SW (got ${await c(0, 0, -100, 100)})`)
+  // and the real toast agrees with it end to end
+  await page.evaluate(() => { window.__g.game.setGod(true); window.__g.teleport(-120, 1500) })
+  await page.waitForTimeout(1500)
+  await page.keyboard.press('KeyN')
+  await page.waitForTimeout(350)
+  const said = await page.evaluate(() => document.getElementById('hud-toast')?.textContent ?? '')
+  check(/Wayfinder: .+ (N|NE|E|SE|S|SW|W|NW) · \d+m/.test(said), `the Wayfinder still reads out a bearing ("${said}")`)
+}
+
 await browser.close()
 console.log(failed ? '\nGATE FAILED' : '\nGATE PASSED')
 process.exit(failed ? 1 : 0)

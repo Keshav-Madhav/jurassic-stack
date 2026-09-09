@@ -56,10 +56,14 @@ for (const name of list) {
   // a gate that printed no checks at all did not run — a crash reads exactly
   // like a pass if you only look for the word FAIL
   const want = expected[name]
-  const short = want !== undefined && pass < want
+  // A DECLARED SKIP IS ACCOUNTED FOR. gate-m3 deliberately skips its fps check
+  // on a contended machine and says so, and counting that as a missing check
+  // turned an honest "I could not measure this" into a failure (M68). The
+  // guard is for checks that vanish SILENTLY.
+  const short = want !== undefined && pass + skipped < want
   const ok = r.code === 0 && fail === 0 && pass > 0 && !short
-  results.push({ ...r, pass, fail, ok, short, want })
-  const note = short ? `  ⟨${want - pass} CHECK(S) DID NOT RUN — expected ${want}⟩` : want !== undefined && pass > want ? `  (+${pass - want} new)` : ''
+  results.push({ ...r, pass, fail, skipped, ok, short, want })
+  const note = short ? `  ⟨${want - pass - skipped} CHECK(S) DID NOT RUN — expected ${want}⟩` : want !== undefined && pass > want ? `  (+${pass - want} new)` : ''
   console.log(`${ok ? ' ok ' : 'FAIL'}  gate-${name.padEnd(10)} ${String(pass).padStart(3)} pass · ${String(fail).padStart(2)} fail${skipped ? ` · ${skipped} skip` : ''} · exit ${r.code} · ${r.secs}s${note}`)
   if (!ok) {
     const named = r.out.split('\n').filter((l) => /^FAIL |Error|error:|\[err\]/.test(l)).slice(0, 12)
@@ -78,7 +82,7 @@ for (const name of list) {
 
 if (rebaseline) {
   const next = { ...expected }
-  for (const r of results) if (r.fail === 0 && r.code === 0) next[r.name] = r.pass
+  for (const r of results) if (r.fail === 0 && r.code === 0) next[r.name] = Math.max(r.pass + r.skipped, expected[r.name] ?? 0)
   writeFileSync(countsFile, JSON.stringify(next, null, 2) + '\n')
   console.log('\nexpected check counts re-baselined (tools/gate-counts.json)')
 }

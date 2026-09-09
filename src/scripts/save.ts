@@ -27,6 +27,10 @@ export interface SaveFile {
   alphaSlain?: boolean
   survival?: { food: number; water: number; stamina: number }
   hints?: string[]
+  /** ruin tags whose recipe tablet has been read (M68). ABSENT means a save
+   *  from before tablets existed, which is granted the lot — see
+   *  Engrams.restore. An empty array is a new game that has found none. */
+  engrams?: string[]
   /** island days lived (fractional) */
   days?: number
   inventory: unknown

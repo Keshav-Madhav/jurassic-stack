@@ -29,6 +29,10 @@ await ready()
 await page.evaluate(() => window.__g.game.wipeAndReload()).catch(() => {})
 await page.waitForTimeout(500)
 await ready()
+// The homestead tier is tablet-gated since M68 and this gate is about BUILDING
+// a hut, not about finding the recipe for one. Grant the tablets a player
+// would have walked to; gate-homestead owns the finding.
+await page.evaluate(() => window.__g.game.learnAll())
 
 // ---------- gather ----------
 for (const kind of ['tree', 'rock', 'bush']) {

@@ -11,6 +11,8 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import { heightAt, VOLCANO, worldMeta } from './heightmap'
 import { makeStone } from './stone-material'
+import { ENGRAMS } from './engrams'
+import { ITEMS } from './items'
 import type { Physics } from './physics'
 import { registerWarmRoot } from './uploads'
 import { addObstacle } from './obstacles'
@@ -143,12 +145,57 @@ export class Ruins {
       }),
     )
 
+    // THE TABLET (M68): a leaning slab at every ruin that teaches a recipe.
+    // Built, not downloaded — it is a box with a chamfer, and the point of it
+    // is the ENGRAVED FACE, which is a canvas texture rather than geometry so
+    // each one can carry its own mark. Emissive so it catches the eye across
+    // a glade the way the keystones do, but far dimmer: a keystone is a prize
+    // and a tablet is a signpost.
+    const tabletFor = (tag: string): THREE.Object3D | null => {
+      const e = ENGRAMS.find((x) => x.site === tag)
+      if (!e) return null
+      const g = new THREE.Group()
+      const slab = new THREE.Mesh(
+        new THREE.BoxGeometry(1.15, 1.7, 0.22),
+        new THREE.MeshStandardMaterial({ color: 0xd8c8a4, roughness: 0.85, metalness: 0 }),
+      )
+      // gain 2.4: makeStone MULTIPLIES by the rock albedo (~0.45), so a slab
+      // left at its face value renders near-black beside the sand (M68)
+      makeStone(slab.material as THREE.MeshStandardMaterial, { metresPerTile: 1.1, gain: 2.4 })
+      slab.castShadow = true
+      slab.receiveShadow = true
+      g.add(slab)
+      const face = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.92, 1.4),
+        new THREE.MeshStandardMaterial({
+          map: engravingTexture(e.recipe),
+          transparent: true,
+          roughness: 0.9,
+          emissive: new THREE.Color(0x6fd0e0),
+          emissiveIntensity: 0.22,
+        }),
+      )
+      face.position.z = 0.115
+      g.add(face)
+      g.rotation.x = -0.13 // leaning back, as a slab set in the ground does
+      return g
+    }
+
     for (const site of meta.ruinSites) {
       const layout = LAYOUTS[site.tag] ?? (site.layout ? LAYOUTS_BY_KIND[site.layout] : undefined)
       if (!layout) continue
       const holder = new THREE.Group()
       holder.matrixAutoUpdate = false
       this.sites.push({ x: site.x, z: site.z, holder })
+      const tablet = tabletFor(site.tag)
+      if (tablet) {
+        // 3.5 m south of the site's heart: clear of the columns, and the first
+        // thing you face walking in from the open ground
+        const tx = site.x, tz = site.z + 3.5
+        tablet.position.set(tx, heightAt(tx, tz) + 0.72, tz)
+        tablet.rotation.y = Math.sin(site.x * 0.7) * 0.5
+        holder.add(tablet)
+      }
       for (const plan of layout) {
         const src = models.get(plan.model)!
         const piece = src.clone(true)
@@ -237,3 +284,57 @@ export class Ruins {
 
 /** ruins draw within this of the viewer (the fog ends at 1500; a 15 m arch at 900 m is a pixel) */
 const RUIN_DRAW = 900
+
+
+/**
+ * The mark on a tablet: the recipe's own icon, cut into the stone. Drawn to a
+ * canvas rather than modelled — an engraving is a picture, and this way each
+ * of the seven reads differently at a glance without seven new meshes.
+ */
+const engravings = new Map<string, THREE.CanvasTexture>()
+function engravingTexture(recipe: string): THREE.CanvasTexture {
+  const had = engravings.get(recipe)
+  if (had) return had
+  const S = 256
+  const c = document.createElement('canvas')
+  c.width = S; c.height = Math.round(S * 1.5)
+  const g = c.getContext('2d')!
+  g.clearRect(0, 0, c.width, c.height)
+  // a chiselled border
+  g.strokeStyle = 'rgba(40, 32, 22, 0.55)'
+  g.lineWidth = 6
+  g.strokeRect(16, 16, c.width - 32, c.height - 32)
+  // the icon, big, in cut-shadow and highlight so it reads as carved
+  const icon = (ITEMS as Record<string, { icon: string }>)[recipe]?.icon ?? '◆'
+  g.textAlign = 'center'
+  g.textBaseline = 'middle'
+  g.font = `${Math.round(S * 0.62)}px system-ui, "Apple Color Emoji", sans-serif`
+  // the shadow of the cut, offset down-right
+  g.globalAlpha = 0.3
+  g.fillStyle = '#120d05'
+  g.fillText(icon, c.width / 2, c.height * 0.42 + 5)
+  g.globalAlpha = 1
+  g.fillText(icon, c.width / 2, c.height * 0.42)
+  // FLATTEN IT TO STONE. The item icons are colour emoji, and left as they
+  // come they read as a sticker slapped on a rock rather than something cut
+  // into it. Painting over the glyph's own alpha keeps its shape and throws
+  // away its colour (M68).
+  g.globalCompositeOperation = 'source-atop'
+  g.globalAlpha = 0.82
+  g.fillStyle = '#3a2f1d'
+  g.fillRect(0, 0, c.width, c.height)
+  g.globalCompositeOperation = 'source-over'
+  // three rules beneath: the "writing" nobody has to read
+  g.globalAlpha = 0.4
+  g.strokeStyle = '#2a2115'
+  g.lineWidth = 5
+  for (let i = 0; i < 3; i++) {
+    const y = c.height * 0.74 + i * 26
+    const w = c.width * (0.5 - i * 0.08)
+    g.beginPath(); g.moveTo((c.width - w) / 2, y); g.lineTo((c.width + w) / 2, y); g.stroke()
+  }
+  const tex = new THREE.CanvasTexture(c)
+  tex.colorSpace = THREE.SRGBColorSpace
+  engravings.set(recipe, tex)
+  return tex
+}

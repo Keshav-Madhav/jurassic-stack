@@ -39,7 +39,7 @@ export class Hud {
   /** What the pack should show BESIDE the pack, asked for at render time:
    *  whether a workbench is in reach (the homestead recipes want one) and what
    *  the chest you are standing at holds (M39). */
-  panelContext: (() => { bench: boolean; chest: [ItemId, number][] | null }) | null = null
+  panelContext: (() => { bench: boolean; chest: [ItemId, number][] | null; knows: (id: ItemId) => boolean }) | null = null
   /** move one item (or the whole pile, with shift) between pack and chest */
   onChestMove: ((id: ItemId, dir: 'in' | 'out', all: boolean) => void) | null = null
 
@@ -144,10 +144,12 @@ export class Hud {
     }
   }
 
-  toast(msg: string): void {
+  /** `secs` for the rare line worth reading twice — a tablet's inscription
+   *  cannot be taken in inside 2.4 s (M68) */
+  toast(msg: string, secs = 2.4): void {
     this.toastEl.textContent = msg
     this.toastEl.classList.add('show')
-    this.toastTimer = 2.4
+    this.toastTimer = secs
   }
 
   private hintTimer = 0
@@ -237,19 +239,24 @@ export class Hud {
   }
 
   private renderPanel(): void {
-    const ctx = this.panelContext?.() ?? { bench: false, chest: null }
+    const ctx = this.panelContext?.() ?? { bench: false, chest: null, knows: () => true }
     const rows = (Object.keys(ITEMS) as ItemId[])
       .filter((id) => this.inv.count(id) > 0)
       .map((id) => `<span class="res${ctx.chest ? ' movable' : ''}" data-move="${id}" title="${ctx.chest ? 'click to store · shift-click for all' : ITEMS[id].name}">${this.icon(id, 'sm')}<span>${ITEMS[id].name}</span><i>× ${this.inv.count(id)}</i></span>`)
       .join('')
     const recipes = RECIPES.map((r) => {
-      const locked = r.bench === true && !ctx.bench
+      // two different kinds of locked: one you fix by walking to your bench,
+      // one you fix by finding the tablet that teaches it (M68)
+      const unknown = r.learned === true && !ctx.knows(r.output)
+      const locked = unknown || (r.bench === true && !ctx.bench)
       const ok = this.inv.canCraft(r) && !locked
       const cost = Object.entries(r.cost)
         .map(([id, n]) => `<span class="cost ${this.inv.count(id as ItemId) >= (n ?? 0) ? '' : 'short'}" title="${ITEMS[id as ItemId].name}">${this.icon(id as ItemId, 'xs')}${n}</span>`)
         .join('')
-      return `<button class="recipe${locked ? ' locked' : ''}" data-id="${r.output}" ${ok ? '' : 'disabled'} title="${locked ? 'needs a workbench in reach' : ITEMS[r.output].name}">
-        ${this.icon(r.output)}<span class="name">${ITEMS[r.output].name}${r.count > 1 ? ` ×${r.count}` : ''}</span><small>${locked ? '<span class="cost short">🛠️ workbench</span>' : cost}</small></button>`
+      const why = unknown ? 'a tablet in the ruins teaches this' : 'needs a workbench in reach'
+      const badge = unknown ? '<span class="cost short">🗿 not yet known</span>' : '<span class="cost short">🛠️ workbench</span>'
+      return `<button class="recipe${locked ? ' locked' : ''}${unknown ? ' unknown' : ''}" data-id="${r.output}" ${ok ? '' : 'disabled'} title="${locked ? why : ITEMS[r.output].name}">
+        ${unknown ? '<span class="glyph">🗿</span>' : this.icon(r.output)}<span class="name">${unknown ? '???' : ITEMS[r.output].name + (r.count > 1 ? ` ×${r.count}` : '')}</span><small>${locked ? badge : cost}</small></button>`
     }).join('')
     const chest = ctx.chest
       ? `<h3>Chest</h3><div class="resources chest">${

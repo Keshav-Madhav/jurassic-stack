@@ -27,6 +27,7 @@ import { loadStoneTexture } from './stone-material'
 import { DinoImpostors } from './dino-impostors'
 import { Survival, FOODS, type FoodId } from './survival'
 import { Onboarding } from './onboarding'
+import { Engrams } from './engrams'
 import { Inventory } from './inventory'
 import { Chests } from './chests'
 import { ITEMS, RECIPES, type ItemId } from './items'
@@ -152,6 +153,16 @@ async function boot(): Promise<void> {
   if (save) inventory.restore(save.inventory as ReturnType<Inventory['serialize']>)
   const survival = new Survival()
   survival.restore(save?.survival)
+  // THE RUINS ARE THE TECH TREE (M68): the homestead tier is found, not
+  // levelled into. A save written before tablets existed keeps everything it
+  // could already make — see Engrams.restore.
+  const engrams = new Engrams()
+  engrams.restore(save?.engrams as string[] | undefined, !!save && save.engrams === undefined)
+  engrams.onLearn = (e) => {
+    hud.toast(`🗿 ${e.line}  —  you can make a ${ITEMS[e.recipe].name.toLowerCase()} now.`, 7)
+    sfx.play('ui-confirm', { volume: 0.7 })
+    hud.hint('TAB to open the pack — the new recipe is in it.')
+  }
   const onboarding = new Onboarding()
   onboarding.restore(save?.hints)
 
@@ -397,6 +408,11 @@ async function boot(): Promise<void> {
     const r = RECIPES.find((x) => x.output === id)
     if (!r) return false
     const f = feetPos()
+    if (r.learned && !engrams.knows(id)) {
+      hud.toast('You do not know how to make that yet — the ruins remember.')
+      sfx.play('ui-error', { volume: 0.5 })
+      return false
+    }
     if (r.bench && !building.nearBench(f.x, f.z)) {
       hud.toast(`${ITEMS[id].name} needs a workbench in reach.`)
       sfx.play('ui-error', { volume: 0.4 })
@@ -455,6 +471,7 @@ async function boot(): Promise<void> {
     const chest = building.chestNear(f.x, f.z)
     return {
       bench: building.nearBench(f.x, f.z),
+      knows: (id: ItemId) => engrams.knows(id),
       chest: chest ? chests.contents(Chests.key(chest.gx, chest.gz)) : null,
     }
   }
@@ -894,6 +911,22 @@ async function boot(): Promise<void> {
   if (creative) {
     hud.setCreative(true)
   }
+  /**
+   * A COMPASS POINT FROM (fx,fz) TO (tx,tz).
+   *
+   * This used to be inline in the Wayfinder as `atan2(-dx, -dz)`, which
+   * measures the bearing ANTICLOCKWISE from north: east and west came out
+   * swapped and it had been sending players the wrong way since it was
+   * written (M68). North is -z and east is +x, so the clockwise bearing is
+   * atan2(+dx, -dz). It lives here as one function so the gate can check the
+   * maths that the game actually uses rather than a copy of it.
+   */
+  const COMPASS = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
+  const compass = (fx: number, fz: number, tx: number, tz: number): string => {
+    const ang = ((Math.atan2(tx - fx, -(tz - fz)) * 180) / Math.PI + 360) % 360
+    return COMPASS[Math.round(ang / 45) % 8]
+  }
+
   let lastSpaceAt = 0
   addEventListener('keydown', (e) => {
     // NOTHING RESPONDS UNTIL THE WORLD IS UP. The boot card sits at z-index 20
@@ -951,13 +984,31 @@ async function boot(): Promise<void> {
     if (e.code === 'KeyN') {
       const f = feetPos()
       const gate = worldMeta?.ruinSites.find((r) => r.tag === 'caldera-gate')
-      const target = !keystones.enough ? keystones.nearestMissing(f.x, f.z) : doorOpen && !beaconLit ? beaconSite : gate ?? null
+      // A TABLET YOU HAVE NOT READ OUTRANKS A KEYSTONE (M68) — but only while
+      // it is genuinely nearer. The tablets are what open the game up (a bed,
+      // a bench, a saddle); the keystones are the arc's thread, and someone
+      // hunting stones should not be sent 2 km sideways for a recipe.
+      const tablet = engrams.nearestUnread(f.x, f.z, (tag) => {
+        const r = worldMeta!.ruinSites.find((q) => q.tag === tag)
+        return r ? { x: r.x, z: r.z + 3.5 } : null
+      })
+      const stone = !keystones.enough ? keystones.nearestMissing(f.x, f.z) : null
+      const stoneD = stone ? Math.hypot(stone.x - f.x, stone.z - f.z) : Infinity
+      // OPENING vs ARC. There are twelve keystones and seven tablets, so on
+      // pure distance a keystone almost always wins and the tablets would
+      // never be pointed at once — which defeats them, because a player who
+      // does not know they exist will not go looking. So while you are still
+      // in the opening (under three read) the Wayfinder answers the question
+      // you actually have — "what do I do?" — with a bed, a bench, a saddle.
+      // After that it hands back to the arc and simply picks whichever is
+      // nearer.
+      const opening = engrams.count < 3
+      const useTablet = tablet !== null && (opening || tablet.d < stoneD)
+      const target = useTablet ? tablet : stone ?? (doorOpen && !beaconLit ? beaconSite : gate ?? null)
       if (target) {
         const d = Math.hypot(target.x - f.x, target.z - f.z)
-        const ang = ((Math.atan2(-(target.x - f.x), -(target.z - f.z)) * 180) / Math.PI + 360) % 360
-        const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW']
-        const label = !keystones.enough ? 'keystone' : doorOpen && !beaconLit ? 'the beacon' : 'the caldera gate'
-        hud.toast(`Wayfinder: ${label} ${dirs[Math.round(ang / 45) % 8]} · ${Math.round(d)}m`)
+        const label = useTablet ? `a tablet (${ITEMS[tablet!.e.recipe].name.toLowerCase()})` : stone ? 'keystone' : doorOpen && !beaconLit ? 'the beacon' : 'the caldera gate'
+        hud.toast(`Wayfinder: ${label} ${compass(f.x, f.z, target.x, target.z)} · ${Math.round(d)}m`)
       }
     }
     if (e.code === 'KeyE') interact()
@@ -991,6 +1042,7 @@ async function boot(): Promise<void> {
     alphaSlain,
     survival: survival.serialize(),
     hints: onboarding.serialize(),
+    engrams: engrams.serialize(),
     }
   }
   setInterval(() => void saveGame(collectSave()), 30_000)
@@ -1546,6 +1598,13 @@ async function boot(): Promise<void> {
       },
       /** QA: move something between the pack and that chest */
       chestMove: (id: ItemId, dir: 'in' | 'out', all = false) => hud.onChestMove?.(id, dir, all),
+      /** QA (M68): the very function the Wayfinder points with */
+      compass: (fx: number, fz: number, tx: number, tz: number) => compass(fx, fz, tx, tz),
+      /** QA (M68): the tablets — what has been read, what is known */
+      engrams: () => engrams.debug(),
+      /** QA: grant every tablet, for checks that are about the tier and not
+       *  about finding it (the homestead gate's bench/chest flow) */
+      learnAll: () => { engrams.restore(undefined, true); hud.refreshPanel(); return engrams.debug() },
       /** QA: is a workbench in reach? */
       nearBench: () => { const f = feetPos(); return building.nearBench(f.x, f.z) },
       /** QA: where the bedroll is, and where the player would wake */
@@ -2145,6 +2204,16 @@ async function boot(): Promise<void> {
       if (submerged < 0.002) submerged = 0
       daynight.submerged = submerged
       skyExtras.setSubmerged(submerged > 0.5)
+    }
+    // THE TABLETS (M68): read themselves when you stand close enough. Cheap —
+    // seven distance tests, only until all seven are read — and checked on the
+    // same cadence as everything else that watches where you are standing.
+    if (frameCount % 12 === 0 && engrams.count < engrams.total) {
+      const ef = feetPos()
+      engrams.update(ef.x, ef.z, (tag) => {
+        const r = worldMeta!.ruinSites.find((q) => q.tag === tag)
+        return r ? { x: r.x, z: r.z + 3.5 } : null
+      })
     }
     // the cold (M50): how high, how dark, and what is keeping it off you
     {

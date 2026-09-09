@@ -47,6 +47,10 @@ export interface Recipe {
   cost: Partial<Record<ItemId, number>>
   /** needs a workbench within reach — the homestead tier (M39) */
   bench?: true
+  /** must be LEARNED from a tablet in a ruin first (M68, engrams.ts). The
+   *  early tier deliberately has none: you need fire before you have found
+   *  anything. */
+  learned?: true
 }
 
 export const RECIPES: Recipe[] = [
@@ -57,12 +61,12 @@ export const RECIPES: Recipe[] = [
   { output: 'foundation', count: 1, cost: { wood: 8, fiber: 4 } },
   { output: 'wall', count: 1, cost: { wood: 5, fiber: 2 } },
   { output: 'ceiling', count: 1, cost: { wood: 6, fiber: 3 } },
-  { output: 'bedroll', count: 1, cost: { fiber: 16, hide: 3 } },
+  { output: 'bedroll', count: 1, cost: { fiber: 16, hide: 3 }, learned: true },
   // the ranges are cold: the coat is what lets you go up (PLAN beat 4)
-  { output: 'furcoat', count: 1, cost: { fur: 8, hide: 4, fiber: 10 }, bench: true }, // NOT bench-gated: it is what death costs you, and you need it early
-  { output: 'workbench', count: 1, cost: { wood: 20, stone: 8, fiber: 6 } },
-  { output: 'chest', count: 1, cost: { wood: 14, fiber: 6 }, bench: true },
-  { output: 'fence', count: 3, cost: { wood: 6, fiber: 2 } }, // a rail run: pens for your tames, a line round the camp
-  { output: 'canopy', count: 1, cost: { wood: 18, fiber: 8 }, bench: true }, // four posts and a plank roof: the homestead's shelter // straw and skins: where you wake up (M37)
-  { output: 'saddle', count: 1, cost: { fiber: 12, hide: 6, wood: 4 }, bench: true }, // hide off a carcass: the hunt feeds the saddle (M21)
+  { output: 'furcoat', count: 1, cost: { fur: 8, hide: 4, fiber: 10 }, bench: true, learned: true }, // NOT bench-gated: it is what death costs you, and you need it early
+  { output: 'workbench', count: 1, cost: { wood: 20, stone: 8, fiber: 6 }, learned: true },
+  { output: 'chest', count: 1, cost: { wood: 14, fiber: 6 }, bench: true, learned: true },
+  { output: 'fence', count: 3, cost: { wood: 6, fiber: 2 }, learned: true }, // a rail run: pens for your tames, a line round the camp
+  { output: 'canopy', count: 1, cost: { wood: 18, fiber: 8 }, bench: true, learned: true }, // four posts and a plank roof: the homestead's shelter // straw and skins: where you wake up (M37)
+  { output: 'saddle', count: 1, cost: { fiber: 12, hide: 6, wood: 4 }, bench: true, learned: true }, // hide off a carcass: the hunt feeds the saddle (M21)
 ]
