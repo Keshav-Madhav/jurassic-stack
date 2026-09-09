@@ -121,6 +121,25 @@ check(woodInChest === woodBefore - 1, `the chest still holds ${woodBefore - 1} w
     return g.game.craft(i)
   }, id)
 
+  // THE RAMP (M69). tools/qa-opening.mjs played the first fifteen minutes with
+  // no god mode and no teleport, and the first cut of the tablets failed it:
+  // the nearest one was 682 m inland, nothing at all lay in the first 500 m,
+  // and a fresh player made fire at 2:14 then DIED SEVEN TIMES trying to reach
+  // a recipe — a water bar is about four minutes of running and that route has
+  // no water on it. These two checks are that lesson, not decoration.
+  {
+    const spawn = await page.evaluate(() => window.__g.game.spawn())
+    const sites = await page.evaluate(() => window.__g.game.tabletSites())
+    const byDist = sites
+      .map((t) => ({ ...t, d: Math.hypot(t.x - spawn.x, t.z - spawn.z) }))
+      .sort((a, b) => a.d - b.d)
+    const first = byDist[0]
+    check(first.d < 400, `there is something to find near the beach (${first.recipe} at ${Math.round(first.d)} m)`)
+    check(first.recipe === 'bedroll', `and the first thing you find is somewhere to sleep (${first.recipe})`)
+    const far = byDist[byDist.length - 1]
+    check(far.d > 1500, `and the last is a real expedition (${far.recipe} at ${Math.round(far.d)} m)`)
+  }
+
   // a fresh island knows nothing
   await page.evaluate(() => window.__g.game.wipeAndReload())
   await page.waitForTimeout(2500)
@@ -128,23 +147,27 @@ check(woodInChest === woodBefore - 1, `the chest still holds ${woodBefore - 1} w
   await page.waitForTimeout(3000)
   const fresh = await eng()
   check(fresh.read.length === 0 && fresh.total === 7, `a fresh island has read no tablets (0 of ${fresh.total})`)
-  check((await canMake('fence')) === false, 'and cannot make a fence it has never seen drawn')
+  // ...ask the game which tablet is where rather than hard-coding it: the
+  // ordering is a design knob and moved once already (M69)
+  const probe = (await page.evaluate(() => window.__g.game.tabletSites()))
+    .find((t) => t.tag === 'dune-shrine')
+  check((await canMake(probe.recipe)) === false, `and cannot make a ${probe.recipe} it has never seen drawn`)
   // ...but the FIRST tier is never gated: a survival game that will not let you
   // make fire in your first minutes is a puzzle, not a world
   check((await canMake('campfire')) === true, 'the first tier is free (a campfire)')
   check((await canMake('spear')) === true, 'and a spear')
 
-  // walk to the tablet that teaches the fence — dune-shrine, in the west dunes
-  await page.evaluate(() => { window.__g.game.setGod(true); window.__g.teleport(-700, 1283.5) })
+  // walk to the dune shrine and read whatever it teaches
+  await page.evaluate((t) => { window.__g.game.setGod(true); window.__g.teleport(t.x, t.z) }, probe)
   await page.waitForTimeout(4000)
   const after = await eng()
   // the inscription, read BEFORE anything else writes a toast — crafting puts
   // "Crafted Fence" over the top of it
   const said = await page.evaluate(() => document.getElementById('hud-toast')?.textContent ?? '')
   check(after.read.includes('dune-shrine'), 'standing at a ruin reads its tablet')
-  check(after.known.includes('fence'), 'and the recipe is known')
+  check(after.known.includes(probe.recipe), `and the recipe is known (${probe.recipe})`)
   check(said.includes('🗿') && said.length > 40, `the tablet says something worth reading ("${said.slice(0, 46)}…")`)
-  check((await canMake('fence')) === true, 'and now the fence can be made')
+  check((await canMake(probe.recipe)) === true, `and now the ${probe.recipe} can be made`)
 
   // it survives a reload — an engram is permanent
   await page.evaluate(() => window.__g.game.save())
@@ -153,7 +176,7 @@ check(woodInChest === woodBefore - 1, `the chest still holds ${woodBefore - 1} w
   await ready()
   await page.waitForTimeout(3000)
   const reloaded = await eng()
-  check(reloaded.read.includes('dune-shrine') && reloaded.known.includes('fence'), 'a tablet stays read across a reload')
+  check(reloaded.read.includes('dune-shrine') && reloaded.known.includes(probe.recipe), 'a tablet stays read across a reload')
 
   // AND THE ONE THAT MATTERS FOR ANYONE ALREADY PLAYING: a save written before
   // tablets existed has no `engrams` key at all. That player could craft a

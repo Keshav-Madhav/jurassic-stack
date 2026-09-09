@@ -27,7 +27,7 @@ import { loadStoneTexture } from './stone-material'
 import { DinoImpostors } from './dino-impostors'
 import { Survival, FOODS, type FoodId } from './survival'
 import { Onboarding } from './onboarding'
-import { Engrams } from './engrams'
+import { Engrams, ENGRAMS } from './engrams'
 import { Inventory } from './inventory'
 import { Chests } from './chests'
 import { ITEMS, RECIPES, type ItemId } from './items'
@@ -1266,6 +1266,28 @@ async function boot(): Promise<void> {
       },
       scatterDebug: () => scatter.debugSummary(),
       nodesNear: (x: number, z: number, r: number) => scatter.nodesNear(x, z, r),
+      /** QA (M69): what the CROSSHAIR is on right now — the exact raycast the
+       *  swing uses, without swinging. The only way to tell "the player cannot
+       *  aim at this" apart from "the swing is broken". */
+      /** QA (M69): fire a ray from the camera STRAIGHT AT (x,y,z) rather than
+       *  through the crosshair. If this hits and the crosshair does not, the
+       *  problem is aim precision; if neither hits, the raycast is broken. */
+      rayAt: (x: number, y: number, z: number) => {
+        const from = cam.camera.position.clone()
+        const dir = new THREE.Vector3(x, y, z).sub(from).normalize()
+        const rc = new THREE.Raycaster(from, dir)
+        const n = scatter.raycast(rc, feetPos(), REACH + 1.2)
+        return n ? { kind: n.kind, alive: n.alive } : null
+      },
+      aimDebug: () => {
+        raycaster.setFromCamera(new THREE.Vector2(0, 0), cam.camera)
+        return scatter.raycastDebug(raycaster, feetPos(), REACH + 1.2)
+      },
+      aimNode: () => {
+        raycaster.setFromCamera(new THREE.Vector2(0, 0), cam.camera)
+        const n = scatter.raycast(raycaster, feetPos(), REACH + 1.2)
+        return n ? { kind: n.kind, x: +n.x.toFixed(2), z: +n.z.toFixed(2), hp: n.hp, alive: n.alive } : null
+      },
       floaters: (t: number) => scatter.floaters(t),
       whatIsThere: (nx: number, ny: number) => {
         raycaster.setFromCamera(new THREE.Vector2(nx, ny), cam.camera)
@@ -1600,8 +1622,22 @@ async function boot(): Promise<void> {
       chestMove: (id: ItemId, dir: 'in' | 'out', all = false) => hud.onChestMove?.(id, dir, all),
       /** QA (M68): the very function the Wayfinder points with */
       compass: (fx: number, fz: number, tx: number, tz: number) => compass(fx, fz, tx, tz),
+      /** QA (M69): eat the best food in the pack, exactly as F does */
+      eat: () => {
+        const heldFood = inventory.held && inventory.held in FOODS ? (inventory.held as FoodId) : null
+        const pick = heldFood ?? (['cookedmeat', 'berry', 'rawmeat'] as FoodId[]).find((f) => inventory.count(f) > 0) ?? null
+        if (!pick || !inventory.remove(pick, 1)) return false
+        const f = survival.eat(pick)
+        playerHp = Math.max(1, Math.min(100, playerHp + f.hp))
+        return true
+      },
       /** QA (M68): the tablets — what has been read, what is known */
       engrams: () => engrams.debug(),
+      /** QA: where the tablets are, for the opening run (tools/qa-opening.mjs) */
+      tabletSites: () => ENGRAMS.map((e) => {
+        const r = worldMeta!.ruinSites.find((q) => q.tag === e.site)
+        return r ? { tag: e.site, recipe: e.recipe, x: r.x, z: r.z + 3.5 } : null
+      }).filter((v): v is { tag: string; recipe: ItemId; x: number; z: number } => v !== null),
       /** QA: grant every tablet, for checks that are about the tier and not
        *  about finding it (the homestead gate's bench/chest flow) */
       learnAll: () => { engrams.restore(undefined, true); hud.refreshPanel(); return engrams.debug() },

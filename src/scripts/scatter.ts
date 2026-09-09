@@ -1287,6 +1287,29 @@ export class Scatter {
     return bestSolid?.node ?? bestCover?.node ?? null
   }
 
+  /** QA (M69): the same walk as raycast(), reporting where each candidate is
+   *  lost — hit but out of reach, hit but dead, or never hit at all. */
+  raycastDebug(raycaster: THREE.Raycaster, playerFeet: THREE.Vector3, reach: number): unknown {
+    const rows: unknown[] = []
+    for (const [key, prop] of this.props) {
+      const hits = raycaster.intersectObjects(prop.meshes, false)
+      if (!hits.length) continue
+      for (const h of hits.slice(0, 3)) {
+        const ids = this.order.get(key)
+        const node = h.instanceId != null && ids ? this.nodes[ids[h.instanceId]] : null
+        rows.push({
+          key,
+          instanceId: h.instanceId,
+          rayDist: +h.distance.toFixed(2),
+          idsLen: ids ? ids.length : null,
+          node: node ? { kind: node.kind, alive: node.alive, d: +Math.hypot(node.x - playerFeet.x, node.z - playerFeet.z).toFixed(2) } : null,
+          reach,
+        })
+      }
+    }
+    return rows
+  }
+
   hit(node: ScatterNode): Partial<Record<ItemId, number>> | null {
     if (!node.alive) return null
     node.hp -= 1

@@ -24,9 +24,19 @@ export interface Engram {
 }
 
 /**
- * One tablet per ruin that has no keystone, so no site on the island is a
- * dead stop. Ordered roughly by how far they are from the spawn beach: the
- * first things you need are the closest to find.
+ * ORDERED BY HOW FAR THEY ARE FROM THE BEACH YOU WAKE ON, because that is the
+ * order a player meets them in and therefore the difficulty ramp.
+ *
+ * The first cut put the nearest tablet 682 m inland and left **nothing in the
+ * first 500 m** — and `tools/qa-opening.mjs` walked it: a fresh player made
+ * fire at 2:14 and then died SEVEN TIMES trying to reach the first recipe,
+ * because a water bar is about four minutes of running and the route has no
+ * water on it. That is not a difficulty curve, it is a wall.
+ *
+ * So the first tablet is on the beach statue, 190 m away — which is where PLAN
+ * always said the tutorial was: *"a broken statue pointing inland. That statue
+ * is the entire tutorial."* It already holds a keystone; a site can hold both,
+ * and the two do not interact.
  *
  * NB the early tier — hatchet, spear, campfire, torch, foundation, wall,
  * ceiling — is deliberately NOT here. You need those in your first minutes,
@@ -34,13 +44,14 @@ export interface Engram {
  * will not let you make fire is a puzzle rather than a world.
  */
 export const ENGRAMS: Engram[] = [
-  { site: 'south-mound-columns', recipe: 'bedroll', line: 'A sleeping place, drawn in worn relief. You could make one of these.' },
-  { site: 'holm-north-shrine', recipe: 'workbench', line: 'A bench, and the tools laid out on it. The rest of the city was built from here.' },
-  { site: 'dune-shrine', recipe: 'fence', line: 'A rail line drawn round a herd. They kept animals, then.' },
-  { site: 'coast-statue', recipe: 'chest', line: 'A banded box, carved shut. Somewhere to put what you are carrying.' },
-  { site: 'spit-columns', recipe: 'saddle', line: 'A rider, and the harness drawn plainly beneath. They did not walk everywhere.' },
-  { site: 'swamp-columns', recipe: 'canopy', line: 'Four posts and a roof. Shelter, before walls.' },
-  { site: 'pine-arch-west', recipe: 'furcoat', line: 'A figure wrapped against the cold, climbing. The high ground was theirs too.' },
+  //                                                     metres from spawn
+  { site: 'beach-statue', recipe: 'bedroll', line: 'A sleeping place, cut into the plinth. Somewhere to wake up.' }, //        190
+  { site: 'dune-shrine', recipe: 'workbench', line: 'A bench, and the tools laid out on it. The rest of the city was built from here.' }, // 754
+  { site: 'south-mound-columns', recipe: 'fence', line: 'A rail line drawn round a herd. They kept animals, then.' }, //       830
+  { site: 'swamp-columns', recipe: 'canopy', line: 'Four posts and a roof. Shelter, before walls.' }, //                      1219
+  { site: 'holm-north-shrine', recipe: 'chest', line: 'A banded box, carved shut. Somewhere to put what you are carrying.' }, // 1451
+  { site: 'spit-columns', recipe: 'saddle', line: 'A rider, and the harness drawn plainly beneath. They did not walk everywhere.' }, // 1484
+  { site: 'pine-arch-west', recipe: 'furcoat', line: 'A figure wrapped against the cold, climbing. The high ground was theirs too.' }, // 2139
 ]
 
 /** every recipe that has to be found */
