@@ -262,12 +262,25 @@ upload warden and the collider builder — instead of when its rig is cloned. Me
 animals ever build one**, and `gate-ecology` asserts the invariant that makes it safe (nothing
 drawable may be without a mixer, or it stands in its bind pose). Heap after load **704 → 526 MB**.
 
-**The lever, still unbuilt: a rig POOL.** Only a few dozen animals are ever drawn as rigs at once
-(`RIG_DIST`, and everything past it is a card or nothing), but all **1515** get a `SkeletonUtils`
-clone at load — the ~180 MB of `Bone` objects above, and the bulk of what is left. Handing out N
-rigs per species from a pool as animals wake would take most of it. It is a real refactor with real
-regression risk — the clone pump exists precisely because doing this work in play hitches — so it is
-written down, not attempted in passing.
+**M61 took the skeletons too (−200 MB), and it did not need a pool.** The note here said a rig pool
+was the answer and that it was a real refactor. It was the wrong shape: nothing has to be RECYCLED,
+because a clone that is never made costs nothing. A rig is only ever drawn inside 135 m (a cross-card
+to 260 m, nothing past that), so an animal asks for its clone when it comes within **380 m** — 120 m
+outside the draw distance, which at a sprint is fifteen seconds of warning for a queue that drains
+four a frame. **One eager clone per species** still happens at load, because the warm-up needs a rig
+of each to compile its shaders, calibrate its scale and capture its impostor card.
+
+| | before M57 | now |
+|---|---|---|
+| JS heap, standing at spawn | 882 MB | **324 MB** |
+| after visiting four regions | 882 MB | 459 MB |
+| skeletons built | 1515 | **40 at spawn, 167 after a lap** |
+| time to `ready` | 6.2-6.4 s | 5.0 s |
+| a 5 km walk | 33 frames over 25 ms | **14** |
+
+`gate-ecology` holds the two invariants that make it safe: **nothing inside the draw distance may be
+without a rig** (a hole in the world) and **nothing drawable may be without a mixer** (a bind pose).
+Both are asserted at the beach, the wood line and the plain.
 
 **Done in M57, because it was free:** the rig's scale and foot-lift are properties of the GLB, not of
 the individual, so they are measured once per species instead of once per animal — two

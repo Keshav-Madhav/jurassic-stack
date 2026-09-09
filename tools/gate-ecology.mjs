@@ -130,12 +130,16 @@ check((await page.evaluate(() => window.__g.game.thuds())) > thudsBefore, 'and i
   }
   const beach = await at(0, 1560)
   check(beach.unanimated === 0, `nothing drawable is in its bind pose at the beach (${beach.withMixer}/${beach.dinos} animals hold a mixer)`)
+  check(beach.unrigged === 0, `and nothing inside the draw distance is missing its rig (${beach.withRig} rigs)`)
   const wood = await at(-286, 793)
-  check(wood.unanimated === 0, `nor at the wood line (${wood.withMixer}/${wood.dinos})`)
+  check(wood.unanimated === 0, `nor at the wood line (${wood.withMixer} mixers)`)
+  check(wood.unrigged === 0, `nor a rig there (${wood.withRig} rigs)`)
   const plain = await at(-250, 1040)
-  check(plain.unanimated === 0, `nor at the plain (${plain.withMixer}/${plain.dinos})`)
-  // and the point of the exercise: most animals never need one
-  check(plain.withMixer < plain.dinos * 0.75, `most animals never build one (${plain.withMixer} of ${plain.dinos})`)
+  check(plain.unanimated === 0, `nor at the plain (${plain.withMixer} mixers)`)
+  check(plain.unrigged === 0, `nor a rig there (${plain.withRig} rigs)`)
+  // and the point of the exercise: most animals never need either
+  check(plain.withMixer < plain.dinos * 0.4, `most animals never build a mixer (${plain.withMixer} of ${plain.dinos})`)
+  check(plain.withRig < plain.dinos * 0.4, `nor a skeleton (${plain.withRig} of ${plain.dinos})`)
 }
 
 await browser.close()

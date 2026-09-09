@@ -344,12 +344,21 @@ async function boot(): Promise<void> {
 
   // --- dinos ---
   const dinos: Dino[] = []
+  /** ONE EAGER CLONE PER SPECIES, the rest on approach (M61). The load-time
+   *  warm-up needs a rig of every species to compile its shaders, calibrate its
+   *  scale and capture its impostor card — but only ONE. The other ~1500 ask
+   *  for theirs when the player comes within 380 m, which most of them never
+   *  do: 180 MB of `Bone` objects that used to be built at load. */
+  const eagerSpecies = new Set<string>()
   const spawnDino = (speciesId: string, x: number, z: number): Dino => {
     const d = new Dino(SPECIES[speciesId] ?? SPECIES.raptor, x, z, dinos.length)
     dinos.push(d)
     scene.add(d.object)
     Dino.scene = scene
-    void d.load()
+    if (!eagerSpecies.has(d.species.id)) {
+      eagerSpecies.add(d.species.id)
+      d.ensureRig()
+    }
     return d
   }
   // TAMED dinos persist from the save; the WILD roster always spawns fresh —
@@ -359,6 +368,7 @@ async function boot(): Promise<void> {
     for (const row of save.dinos as ReturnType<Dino['serialize']>[]) {
       if (!row.alive || row.state !== 'tamed') continue
       const d = spawnDino(row.species, row.x, row.z)
+      d.ensureRig() // a tame is at your shoulder; it never waits for the ring
       d.hp = row.hp
       d.saddled = row.saddled
       d.tameProgress = row.tame
@@ -1376,8 +1386,10 @@ async function boot(): Promise<void> {
       /** QA (M60): mixers are built lazily; nothing drawable may be without one */
       anim: () => ({
         dinos: dinos.length,
+        withRig: dinos.filter((d) => d.hasRig).length,
         withMixer: dinos.filter((d) => d.hasAnim).length,
         unanimated: dinos.filter((d) => d.unanimated).length,
+        unrigged: dinos.filter((d) => d.unrigged).length,
       }),
       /** QA: what the path queries cost (tools/qa-trek.mjs) */
       nav: () => ({ ...navStats }),

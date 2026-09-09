@@ -96,6 +96,9 @@ const DRAW_HYST = 30
 /** inside RIG_DIST the skinned rig is drawn; between RIG_DIST and DRAW_DIST a cross-card impostor (M25) */
 const RIG_DIST = 120
 const RIG_HYST = 15
+/** how far out an animal asks for its rig clone — well outside DRAW_DIST so
+ *  the four-a-frame clone pump always wins the race (M61) */
+const RIG_REQUEST = 380
 
 export class Dino {
   /** interpolation factor between the last two physics steps (main loop sets it each frame) */
@@ -192,7 +195,25 @@ export class Dino {
     this.object.rotation.y = this.heading
   }
 
+  /** has a clone been asked for? (the rig arrives asynchronously) */
+  private loadStarted = false
+
+  /**
+   * Ask for this animal's rig, once. A `SkeletonUtils.clone` is ~120 KB of
+   * `Bone` objects and the island holds 1515 animals — 180 MB of skeletons,
+   * measured in M57 — while a rig is only ever DRAWN inside 135 m (past that
+   * it is a cross-card, and past 260 m nothing at all). So the clone is asked
+   * for when the animal comes within `RIG_REQUEST`, not when it spawns; the
+   * clone pump's four-a-frame pacing then does what it has always done (M61).
+   */
+  ensureRig(): void {
+    if (this.loadStarted) return
+    this.loadStarted = true
+    void this.load()
+  }
+
   async load(): Promise<void> {
+    this.loadStarted = true
     const { scene: model, animations } = await loadModel(this.species.model)
     // dino rigs are skinned; any plain static mesh alongside is packaging junk
     // (the T-Rex GLB ships a giant ground plane that rendered as a green slab)
@@ -444,6 +465,17 @@ export class Dino {
    *  bind pose. The invariant is that this is never true; gate-ecology asserts it. */
   get unanimated(): boolean {
     return !this.dormant && !!this.model && !this.mixer
+  }
+
+  /** QA (M61): an animal inside the draw distance with no rig at all is a hole
+   *  in the world. The clone is asked for 120 m further out than this. */
+  get unrigged(): boolean {
+    return !this.dormant && !this.model && this.distToPlayer < DRAW_DIST
+  }
+
+  /** QA: how many animals hold a rig clone — the memory M61 is about */
+  get hasRig(): boolean {
+    return !!this.model
   }
 
   /** QA: how many animals hold a mixer — the memory this lever is about */
@@ -722,6 +754,10 @@ export class Dino {
       if (this.carded) { Dino.impostors?.clear(this.species.id, this.index); this.carded = false }
       return
     }
+    // AWAKE AND CLOSING: ask for the rig long before anything wants to draw
+    // it. RIG_REQUEST is 120 m outside DRAW_DIST, which at a sprint is fifteen
+    // seconds of warning for a queue that drains four a frame (M61).
+    if (!this.loadStarted && this.distToPlayer < RIG_REQUEST) this.ensureRig()
     // AWAKE MEANS ANIMATED. Everything below this line can be drawn, so the
     // mixer must exist by now whatever route got us here — waking from
     // dormancy, being a tame that is never dormant at all, or simply standing
