@@ -1,6 +1,6 @@
 // Asset intake gate — no model enters src/ or public/models without passing this.
 //   node tools/gate.mjs <file.glb|.gltf> [...more files]
-//   node tools/gate.mjs public/models/_raw/**/*.glb
+//   node tools/gate.mjs assets-raw/**/*.glb
 //
 // Reports per model: tris, bones, animation clips (+durations), texture sizes,
 // material count, file size. Exits non-zero if any FAIL threshold is hit.

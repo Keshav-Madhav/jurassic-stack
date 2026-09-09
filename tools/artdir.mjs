@@ -11,14 +11,14 @@ mkdirSync(OUT, { recursive: true })
 
 const MODELS = {
   'raptor.glb': 'public/models/dinos/Velociraptor.glb',
-  'pine1.glb': 'public/models/_raw/nature/Pine1.glb',
-  'tree1.glb': 'public/models/_raw/nature/Tree1.glb',
-  'tree2.glb': 'public/models/_raw/nature/Tree2.glb',
-  'tree3.glb': 'public/models/_raw/nature/Tree3.glb',
-  'rock1.glb': 'public/models/_raw/nature/Rock1.glb',
-  'rock2.glb': 'public/models/_raw/nature/Rock2.glb',
-  'grass1.glb': 'public/models/_raw/nature/Grass1.glb',
-  'bush1.glb': 'public/models/_raw/nature/Bush1.glb',
+  'pine1.glb': 'assets-raw/nature/Pine1.glb',
+  'tree1.glb': 'assets-raw/nature/Tree1.glb',
+  'tree2.glb': 'assets-raw/nature/Tree2.glb',
+  'tree3.glb': 'assets-raw/nature/Tree3.glb',
+  'rock1.glb': 'assets-raw/nature/Rock1.glb',
+  'rock2.glb': 'assets-raw/nature/Rock2.glb',
+  'grass1.glb': 'assets-raw/nature/Grass1.glb',
+  'bush1.glb': 'assets-raw/nature/Bush1.glb',
 }
 
 const VIEWER = `<!doctype html><meta charset="utf-8">

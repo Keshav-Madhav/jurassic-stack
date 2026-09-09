@@ -1,13 +1,16 @@
 # Asset intake ledger
 
 Every model that enters `public/models/` must pass `tools/gate.mjs` and get a row here.
-Raw originals are archived in `public/models/_raw/` (committed while small; packs >50 MB stay out
+Raw originals are archived in `assets-raw/` — **at the repo root, deliberately NOT under
+`public/`**: Vite copies `public/` verbatim into `dist/`, so 44 MB of source archives the game never
+loads were being uploaded and STORED on every single deployment (M70). Source material is not
+served content. (committed while small; packs >50 MB stay out
 of git — archive locally/cloud instead). Game-ready copies (meshopt-compressed) live in
 `public/models/dinos/` etc.
 
 Pipeline per model:
 
-1. Download → `_raw/<source>/<Species>.glb` (archive immediately — free listings vanish)
+1. Download → `assets-raw/<source>/<Species>.glb` (archive immediately — free listings vanish)
 2. `node tools/gate.mjs <raw>` — must not FAIL
 3. `node tools/turntable.mjs <raw>` — visual check, clips listed
 4. `npx gltf-transform meshopt <raw> <out> --level medium` (+ KTX2 when the model has textures)
@@ -76,7 +79,7 @@ quirk). Functionally the death clip — the species table's clip map must use th
 
 **Roster count: 14 primary + 2 fallback-only species (Apatosaurus, Parasaurolophus) = 16 species
 intaken and game-ready.** Raw Sketchfab archives (~400 MB zips + GLBs) are gitignored — archived
-locally at `public/models/_raw/sketchfab/`; keep a cloud copy too (listings vanish, and a fresh
+locally at `assets-raw/sketchfab/`; keep a cloud copy too (listings vanish, and a fresh
 clone won't have them).
 
 
@@ -94,7 +97,7 @@ clone won't have them).
 
 Trees now number ~6K and every triangle counts. The heaviest legacy props were
 simplified in place with `gltf-transform simplify` (meshopt simplifier), raw
-originals untouched in `_raw/nature/`, turntable-verified:
+originals untouched in `assets-raw/nature/`, turntable-verified:
 
 | Prop | Before | After | Flags |
 |---|---|---|---|
@@ -113,8 +116,8 @@ elder ≈ 1,500 / ≈ 450.
 ## The kit — items and buildables (M23, 2026-09-06) · `public/models/kit/`
 
 Downloaded, not built (PLAN: CC0 packs first). Intake: `gltf-transform copy` (embeds Kenney's external
-`Textures/colormap.png`) → `meshopt --level medium`. Raw archives in `_raw/kenney/` (the two kit zips)
-and `_raw/polypizza/` (with `SOURCES.md`: poly.pizza ids, authors, licences). Contact sheets via
+`Textures/colormap.png`) → `meshopt --level medium`. Raw archives in `assets-raw/kenney/` (the two kit zips)
+and `assets-raw/polypizza/` (with `SOURCES.md`: poly.pizza ids, authors, licences). Contact sheets via
 `tools/contact-sheet.mjs`. The item icons are RENDERED from these models at load (`kit.ts`), so the
 icon is the thing.
 
@@ -141,7 +144,7 @@ Kenney's colormap is saturated toy-orange; the kit tints Kenney materials to wea
 
 Downloaded, not synthesised (PLAN: CC0 packs first — and a synthesised roar sounds like a
 synthesiser). 74 files, 1.1 MB total, all CC0, no attribution required (given anyway). Raw archives
-in `_raw/kenney-audio/` and `_raw/oga-creatures/`. `src/scripts/sfx.ts` maps game events to these
+in `assets-raw/kenney-audio/` and `assets-raw/oga-creatures/`. `src/scripts/sfx.ts` maps game events to these
 ids; `tools/gate-sound.mjs` proves each one actually reaches the speakers.
 
 | In the game | File(s) | Source | Licence |
