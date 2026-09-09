@@ -246,6 +246,15 @@ material, only to its instance buffers:
 | GPU geometries | 3749 | **333** |
 | JS heap after load | 882 MB | **~700 MB** |
 | time to `ready` | 6.2-6.4 s | **4.8-5.0 s** (with M57's calibration cache) |
+| **CPU frame, wood line** | 7.9 ms p50 | **4.7 ms p50** (213 fps) |
+| CPU frame, plain | 7.9 ms p50 | **4.9 ms p50** |
+| a 5 km walk (`qa-trek`) | 33 frames over 25 ms, mean 6.0-11.7 ms | **27 over 25 ms, mean 5.3-8.8 ms** |
+
+The GPU is unchanged either side of it (4.88 ms at the plain, 7.31 at the wood line) — this was
+always CPU: three sorts and switches state per material and binds vertex attributes per geometry,
+and there were 3749 of the latter for twenty distinct shapes. **`gate-perf` now has a `wallP50`
+ceiling** for exactly this reason: nothing in the gate would have noticed the CPU frame being given
+back, because it only ever measured the GPU.
 
 **The lever, unbuilt: a rig POOL.** Only a few dozen animals are ever drawn as rigs at once
 (`RIG_DIST`, and everything past it is a card or nothing), but all ~200 get a clone and a mixer at

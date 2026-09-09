@@ -1,5 +1,5 @@
 {
-  "note": "GPU milliseconds at 2560x1440, measured in the live game loop by tools/gate-perf.mjs. 'aspiration' is the PERFORMANCE.md contract (60 fps on the M5 Pro at full window, 30+ on an integrated-GPU Windows laptop at 1080p). 'ceiling' is the regression guard: the gate fails above it. MEASURE AGAINST THE DEPLOYED URL when it matters \u2014 a local run on this machine reads up to 2x slow when anything else is building (M35: live 3.3-5.3 ms vs local 6-9.5 ms, same commit). The ceilings below are set ~60% above the clean live numbers so ordinary contention does not flake the gate; tighten them with --write after a lever wins, and never loosen one without a line in CHECKLIST.md. M42/M43: the ceilings now include the DEFAULT POST STACK (grade + FXAA + atmosphere + bloom, about 1.1 ms \u2014 see tools/qa-post.mjs for the layer price list). They were raised from 11/9/8 for that reason and no other.",
+  "note": "GPU milliseconds at 2560x1440, measured in the live game loop by tools/gate-perf.mjs. 'aspiration' is the PERFORMANCE.md contract (60 fps on the M5 Pro at full window, 30+ on an integrated-GPU Windows laptop at 1080p). 'ceiling' is the regression guard: the gate fails above it. MEASURE AGAINST THE DEPLOYED URL when it matters \u2014 a local run on this machine reads up to 2x slow when anything else is building (M35: live 3.3-5.3 ms vs local 6-9.5 ms, same commit). The ceilings below are set ~60% above the clean live numbers so ordinary contention does not flake the gate; tighten them with --write after a lever wins, and never loosen one without a line in CHECKLIST.md. M42/M43: the ceilings now include the DEFAULT POST STACK (grade + FXAA + atmosphere + bloom, about 1.1 ms \u2014 see tools/qa-post.mjs for the layer price list). They were raised from 11/9/8 for that reason and no other. M58: `wallP50` is a CPU ceiling, in wall-clock milliseconds at the p50 of the same runs. It exists because M58's prototype sharing cut the CPU frame from 7.9 to 4.7-4.9 ms with the GPU unchanged, and nothing in this gate would have noticed that being given back. Set generously (9 ms against a measured 4.7-4.9) so ordinary local contention does not flake it \u2014 it guards a regression, it does not chase a target.",
   "aspiration": {
     "spawn": 8,
     "wood-line": 12,
@@ -9,7 +9,8 @@
     "spawn": 12.0,
     "wood-line": 13.0,
     "plain": 11.0,
-    "spinHitches": 10
+    "spinHitches": 10,
+    "wallP50": 9.0
   },
   "openIssue": "spinning at the wood line still throws 3-8 frames over 25 ms: scatter cell attach (12-58 ms) and the first-sight textures of PERFORMANCE.md H4/H5. Tighten this ceiling when those land.",
   "measured": {
@@ -18,6 +19,7 @@
     "plain": 7.47,
     "at": "2560x1440 with post: full",
     "on": "live jurrasic.keshav-madhav.com, M5 Pro",
-    "when": "2026-09-08"
+    "when": "2026-09-08",
+    "wallP50": 4.9
   }
 }

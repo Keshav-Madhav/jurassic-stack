@@ -68,6 +68,12 @@ for (const s of SPOTS) {
   const ceil = budget.ceiling[s.name]
   console.log(`  ${s.name.padEnd(10)} wall p50 ${r.f.p50} p95 ${r.f.p95} max ${r.f.max} ms (${(1000 / r.f.p50).toFixed(0)} fps) · GPU ${r.g.p10}/${r.g.median}/${r.g.p95} ms (p10/median/p95) · hitches>25ms ${r.f.over25}`)
   check(r.g.p10 <= ceil, `${s.name}: GPU ${r.g.p10} ms within the ceiling of ${ceil} ms`)
+  // AND THE CPU. This gate measured only the GPU, so M58 cutting the CPU frame
+  // from 7.9 to 4.7 ms with the GPU unchanged would have gone unnoticed — and
+  // so would giving it back. The ceiling is deliberately loose (a local run
+  // reads up to 2x slow when anything else is building): it guards a
+  // regression, it does not chase a target.
+  check(r.f.p50 <= budget.ceiling.wallP50, `${s.name}: CPU frame ${r.f.p50} ms within the ceiling of ${budget.ceiling.wallP50} ms`)
   if (r.g.p10 > budget.aspiration[s.name]) console.log(`  INFO ${s.name} is over the PERFORMANCE.md target of ${budget.aspiration[s.name]} ms — levers remain`)
 }
 
