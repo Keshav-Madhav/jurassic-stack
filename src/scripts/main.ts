@@ -38,6 +38,7 @@ import { loadNavmesh, findPath, beginNavFrame, navStats, setNavBudget } from './
 import { gridBytes } from './heightmap'
 import { terrainEvicted, setTerrainCacheTtl } from './terrain'
 import { nearestObstacle } from './obstacles'
+import { advanceWind, windTime, windScale } from './wind'
 import { WaterSystem } from './water'
 import { wildPopulation } from './population'
 import { GrassField } from './grass'
@@ -1340,6 +1341,11 @@ async function boot(): Promise<void> {
       riding: () => riding !== null,
       pieces: () => building.pieces.length,
       /** QA: place a buildable at a world point (consumes the item) */
+      /** QA (M66): drive the wind clock by hand, so a FROZEN world can be
+       *  diffed against itself with only the wind moving */
+      setWindTime: (t: number) => { windTime.value = t },
+      /** QA: 0 switches the wind off with no recompile, for an honest A/B */
+      setWindScale: (v: number) => { windScale.value = v },
       /** QA (M65): what the ANIMALS' obstacle hash knows is at (x,z) — the
        *  thing player structures and ruin columns never registered into */
       obstacleNear: (x: number, z: number, within = 6) => {
@@ -2054,6 +2060,7 @@ async function boot(): Promise<void> {
     scatter.ensureCollidersAround(focus.x, focus.z, physics)
     scatter.pumpColliders(physics)
     scatter.updateHits(dt) // the wobble when you hit something, and felled trees going over
+    advanceWind(dt) // the one clock every wind-bent material shares (M66)
     // LOD bands and cover culling re-evaluate when the viewer has moved 3 m
     // (12K prop groups a frame was 2 ms of the same answer)
     {

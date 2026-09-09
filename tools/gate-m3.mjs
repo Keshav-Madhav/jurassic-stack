@@ -82,6 +82,35 @@ for (const w of walks) {
   check(traveled > 25, `${w.name}: traveled ${traveled.toFixed(0)}m`)
 }
 
+// THE ISLAND MOVES (M66, user-reported: "lack of animations in places"). Water
+// has had swell and flow since M12; every blade of grass, every fern, reed and
+// kelp frond was nailed rigid, which is the loudest "this is a render, not a
+// place" signal a game can give.
+//
+// Proving it needs care: a running world moves for a dozen reasons (animals,
+// water, the day clock). So FREEZE it — dt = 0, everything stops — and then
+// advance ONLY the wind clock. Anything that changes is the wind and nothing
+// else. The same clock value must also give a byte-identical frame, or the
+// determinism the settings gate relies on is gone.
+for (const [name, x, z, yaw, camY] of [['the plain', -250, 1040, 2.2, 16], ['the wood', -300, 700, 2.4, 16], ['the seabed', 0, 1720, 0, -3.9]]) {
+  await page.evaluate(([xx, zz, ya, yy]) => {
+    const g = window.__g
+    g.setTime(0.5); g.game.setGod(true); g.teleport(xx, zz); g.setFreeCam(xx, yy, zz, ya, -0.05)
+  }, [x, z, yaw, camY])
+  await page.waitForTimeout(3500)
+  await page.evaluate(() => window.__g.setFrozen(true))
+  await page.waitForTimeout(1200)
+  const at = async (t) => { await page.evaluate((tt) => window.__g.game.setWindTime(tt), t); await page.waitForTimeout(500); return page.screenshot() }
+  const a = await at(0)
+  const same = await at(0)
+  const later = await at(3.5)
+  let moved = 0
+  for (let i = 0; i < Math.min(a.length, later.length); i++) if (a[i] !== later[i]) moved++
+  check(Buffer.compare(a, same) === 0, `${name}: the same wind clock renders an identical frame`)
+  check(moved > 5000, `${name}: and advancing ONLY the wind moves it (${moved} bytes)`)
+  await page.evaluate(() => window.__g.setFrozen(false))
+}
+
 await browser.close()
 console.log(failed ? '\nGATE FAILED' : '\nGATE PASSED')
 process.exit(failed ? 1 : 0)

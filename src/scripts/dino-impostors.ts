@@ -12,7 +12,14 @@ import * as THREE from 'three'
 const SLOTS = 96
 const SIDE_PX = 160
 
-interface SpeciesSet { mesh: THREE.InstancedMesh; free: number[]; used: Map<number, number>; pos: Map<number, THREE.Vector3> }
+interface SpeciesSet {
+  mesh: THREE.InstancedMesh
+  free: number[]
+  used: Map<number, number>
+  pos: Map<number, THREE.Vector3>
+  /** which way each slot's sprite is mirrored, so the flip can hold (M66) */
+  flip: Map<number, number>
+}
 
 let captureScene: THREE.Scene | null = null
 let captureCam: THREE.OrthographicCamera | null = null
@@ -96,7 +103,7 @@ export class DinoImpostors {
     mesh.instanceMatrix.needsUpdate = true
     mesh.castShadow = false
     this.group.add(mesh)
-    this.sets.set(speciesId, { mesh, free: Array.from({ length: SLOTS }, (_, i) => SLOTS - 1 - i), used: new Map(), pos: new Map() })
+    this.sets.set(speciesId, { mesh, free: Array.from({ length: SLOTS }, (_, i) => SLOTS - 1 - i), used: new Map(), pos: new Map(), flip: new Map() })
   }
 
   has(speciesId: string): boolean {
@@ -128,7 +135,18 @@ export class DinoImpostors {
     let rel = heading - yaw
     while (rel > Math.PI) rel -= Math.PI * 2
     while (rel < -Math.PI) rel += Math.PI * 2
-    const flip = Math.sin(rel) < 0 ? -1 : 1
+    // FLIP WITH HYSTERESIS (M66, user-reported: "weird billboards sometimes").
+    // The card is a side-on sprite mirrored to match which way the animal
+    // faces, and the test was a bare `sin(rel) < 0`. When an animal walks
+    // straight toward or away from the camera sin(rel) sits at zero, so the
+    // smallest wobble in its heading snapped the sprite left-right, over and
+    // over — a mid-distance animal visibly stuttering between two mirror
+    // images. Keep the last decision until the heading is decisively the
+    // other way.
+    const prev = s.flip.get(slot) ?? 1
+    const sin = Math.sin(rel)
+    const flip = sin < -0.15 ? -1 : sin > 0.15 ? 1 : prev
+    s.flip.set(slot, flip)
     this.dummy.position.copy(p)
     this.dummy.rotation.set(0, yaw, 0)
     this.dummy.scale.set(flip, 1, 1)
@@ -158,6 +176,7 @@ export class DinoImpostors {
     if (slot === undefined) return
     s.used.delete(id)
     s.pos.delete(id)
+    s.flip.delete(slot)
     s.free.push(slot)
     s.mesh.setMatrixAt(slot, this.hidden)
     s.mesh.instanceMatrix.addUpdateRange(slot * 16, 16)

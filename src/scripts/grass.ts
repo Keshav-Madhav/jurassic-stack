@@ -8,6 +8,7 @@ import * as THREE from 'three'
 import { buildGrassCard } from './trees'
 import { buildGrassTile, GRASS_TILE as TILE } from './grass-gen'
 import { sharedBuilder } from './terrain'
+import { addWind } from './wind'
 
 const RADIUS = 4 // tiles each way → 9×9 = 81 tiles (64 m), ~290 m of grass around you
 /** tuft spacing by tile ring: dense underfoot, thinning with distance — on
@@ -38,6 +39,12 @@ export class GrassField {
     const std = mesh.material as THREE.MeshStandardMaterial
     this.material = new THREE.MeshLambertMaterial({ map: std.map, alphaTest: 0.5, side: THREE.DoubleSide })
     this.farMaterial = new THREE.MeshLambertMaterial({ map: std.map, alphaTest: 0.5, side: THREE.DoubleSide })
+    // the carpet breathes (M66). Small — a grass blade is under a metre, and
+    // 8 cm of tip sway across a whole field is plenty to stop it reading as
+    // a photograph. The far ring gets the same so the horizon does not sit
+    // still while the ground near you moves.
+    addWind(this.material, 0.08, true)
+    addWind(this.farMaterial, 0.08, true)
   }
   /** the outer rings: no shadow sampling (the shadow camera ends at 85 m anyway) */
   private farMaterial: THREE.Material

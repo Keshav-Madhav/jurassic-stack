@@ -18,6 +18,7 @@ import { buildCanopyTree, buildElderTree, buildMushroom, buildRedwood, buildMang
 import { captureImpostor } from './impostor'
 import { CHUNK_SIZE, CHUNKS_PER_SIDE } from './terrain'
 import { addObstacle } from './obstacles'
+import { addWind } from './wind'
 import type { Physics } from './physics'
 import type { ItemId } from './items'
 import { registerWarmRoot } from './uploads'
@@ -280,6 +281,13 @@ const IMPOSTOR_KINDS = new Set<NodeKind>(['tree', 'elder', 'redwood', 'pine', 'p
 // for ~800 stones nobody could see — M18 draw audit)
 const SMALL_SOLID_DRAW_DIST = 420
 const SMALL_SOLID = new Set<NodeKind>(['rock', 'boulder', 'outcrop'])
+/** metres of tip sway per kind (M66) — absent means it stands still */
+const WIND_SWAY: Partial<Record<NodeKind, number>> = {
+  fern: 0.05, bush: 0.035, flower: 0.06, reeds: 0.09, driedbush: 0.045,
+  grass: 0.06, mushroom: 0.015,
+  // underwater: slower in the shader's terms but further, because water drags
+  kelp: 0.14,
+}
 const SMALL_SOLID_DIST: Partial<Record<NodeKind, number>> = { rock: 220, boulder: 420, outcrop: 480 }
 /** outcrops keep their far twin (coarse stones) to the horizon */
 
@@ -395,6 +403,8 @@ class InstancedProp {
     private recolor?: (mat: THREE.MeshStandardMaterial) => void,
     /** ground cover: sink into the ground over the last 60 m before its draw distance (no hard ring) */
     private fadeAt = 0,
+    /** metres of wind sway at the tip; 0 for anything that should stand still (M66) */
+    private windAmt = 0,
     /** identity of the SHAPE (not the cell): every prop sharing it shares its
      *  geometry and materials. Omit to build a private set. */
     protoKey?: string,
@@ -483,6 +493,7 @@ class InstancedProp {
       }
       if (this.recolor) this.recolor(mat)
       if (this.fadeAt > 0) InstancedProp.addDistanceFade(mat, this.fadeAt)
+      if (this.windAmt > 0) addWind(mat, this.windAmt, true)
       parts.push({ geo, mat })
     })
     // UNTEXTURED submeshes fold into one vertex-coloured geometry: a prop's
@@ -930,7 +941,11 @@ export class Scatter {
       const cover = GROUND_COVER.has(kind)
       const fadeAt = cover ? (COVER_DIST_OVERRIDE[kind] ?? COVER_DRAW_DIST) : 0
       // every cell of one kind+variant is the same SHAPE — share it (M58)
-      const prop = new InstancedProp(root, Math.max(ids.length, 1), this.group, !cover, recolor, fadeAt, `${kind}#${variant}@${fadeAt}`)
+      // WHAT MOVES IN THE WIND, and by how much (M66). Stone does not move;
+      // a tree trunk does not visibly move; leaves, fronds, reeds and kelp do.
+      // Kelp is the strongest because it is in water, not air.
+      const windAmt = WIND_SWAY[kind] ?? 0
+      const prop = new InstancedProp(root, Math.max(ids.length, 1), this.group, !cover, recolor, fadeAt, windAmt, `${kind}#${variant}@${fadeAt}`)
       this.props.set(key, prop)
       ids.forEach((nodeId, i) => {
         const n = this.nodes[nodeId]
@@ -985,7 +1000,7 @@ export class Scatter {
         byCell.set(cell, list)
       }
       for (const [cell, ids] of byCell) {
-        const twin = new InstancedProp(farRoot, Math.max(ids.length, 1), this.group, true, undefined, 0, `mid:${kind}`)
+        const twin = new InstancedProp(farRoot, Math.max(ids.length, 1), this.group, true, undefined, 0, 0, `mid:${kind}`)
         const index = new Map<number, number>()
         ids.forEach((nodeId, i) => {
           const n = this.nodes[nodeId]
