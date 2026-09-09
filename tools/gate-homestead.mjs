@@ -72,6 +72,38 @@ const after = await g('window.__g.game.chestAt()')
 const woodInChest = after ? (after.find(([id]) => id === 'wood')?.[1] ?? 0) : 0
 check(woodInChest === woodBefore - 1, `the chest still holds ${woodBefore - 1} wood after a reload (found ${woodInChest})`)
 
+// A FENCE THE ANIMALS CAN SEE (M65, user-reported: "dinos being able to go
+// through fences"). Built pieces got a RAPIER collider, which stops the player
+// — the only physics body in the game. Dinos do not use physics at all: they
+// steer around obstacles.ts, which until now only scatter registered into. So
+// every wall and fence ever built was invisible to every animal, and a pen was
+// decoration. Ruin columns had the identical hole, and obstacles.ts's own
+// comment has claimed to cover them since M25.
+{
+  const spot = await page.evaluate(() => {
+    const g = window.__g
+    g.game.setGod(true); g.game.setCreative(true); g.teleport(-286, 793)
+    const p = g.player()
+    return { x: p.x + 6, z: p.z }
+  })
+  await page.waitForTimeout(1200)
+  const before = await page.evaluate(([x, z]) => window.__g.game.obstacleNear(x, z, 5), [spot.x, spot.z])
+  check(before === null, 'open ground is open ground to an animal')
+  const placed = await page.evaluate(([x, z]) => {
+    window.__g.game.give('fence', 4)
+    return window.__g.game.placeAt('fence', x, z)
+  }, [spot.x, spot.z])
+  check(!!placed, 'a fence goes up')
+  const after = await page.evaluate(([x, z]) => window.__g.game.obstacleNear(x, z, 5), [spot.x, spot.z])
+  check(after !== null && after.d < 1.5, `and the animals can now see it (${after ? after.d + ' m' : 'NOTHING — they walk through it'})`)
+  // the ruins have the same hole
+  const site = (await page.evaluate(() => window.__g.game.keystoneSites()))[0]
+  await page.evaluate(([x, z]) => window.__g.teleport(x, z + 14), [site.x, site.z])
+  await page.waitForTimeout(3500)
+  const col = await page.evaluate(([x, z]) => window.__g.game.obstacleNear(x, z, 12), [site.x, site.z])
+  check(col !== null, `a standing ruin column blocks them too (${site.tag})`)
+}
+
 await browser.close()
 console.log(failed ? '\nGATE FAILED' : '\nGATE PASSED')
 process.exit(failed ? 1 : 0)

@@ -27,6 +27,11 @@ export type NodeKind =
   | 'rock' | 'log' | 'bush' | 'fern' | 'flower' | 'grass' | 'mushroom'
   | 'driedbush' | 'cactus' | 'reeds'
   | 'pebbles' | 'stones' | 'sticks' | 'boulder' | 'outcrop'
+  // THE WET GROUND (M65). Everything above is gated to dry land by a global
+  // `h < SEA_LEVEL + 1.1` floor, so the tideline, the whole seabed and every
+  // lake bed were bare — the spawn beach, which is the first thing a player
+  // ever sees, was a featureless orange plane. These opt out of that floor.
+  | 'shellbed' | 'shorestone' | 'kelp' | 'seastone'
 
 export interface ScatterNode {
   id: number
@@ -73,6 +78,12 @@ const NODE_DEFS: Record<NodeKind, { hp: number; yields: Partial<Record<ItemId, [
   pebbles: { hp: 1, yields: { stone: [1, 2], flint: [0, 1] } },
   stones: { hp: 2, yields: { stone: [2, 3], flint: [0, 1] } },
   sticks: { hp: 1, yields: { wood: [1, 2] } },
+  // the wet ground (M65): shingle pays like shingle, and kelp is fibre — a
+  // small, real reason to wade in rather than pure decoration
+  shellbed: { hp: 1, yields: { stone: [1, 1], flint: [0, 1] } },
+  shorestone: { hp: 2, yields: { stone: [2, 3], flint: [0, 1] } },
+  seastone: { hp: 2, yields: { stone: [2, 3], flint: [0, 1] } },
+  kelp: { hp: 1, yields: { fiber: [2, 4] } },
   boulder: { hp: 5, yields: { stone: [4, 7], flint: [1, 2] } },
   outcrop: { hp: 8, yields: { stone: [6, 10], flint: [1, 3] } },
 }
@@ -127,6 +138,12 @@ const KIND_MODELS: Record<NodeKind, ModelRef[]> = {
   pebbles: [{ gen: 'pebbles', seed: 91 }, { gen: 'pebbles', seed: 92 }],
   stones: [{ gen: 'stones', seed: 93 }, { gen: 'stones', seed: 94 }],
   sticks: [{ gen: 'sticks', seed: 95 }, { gen: 'sticks', seed: 96 }],
+  // the wet kinds reuse the existing generators — a shell IS a small pale
+  // pebble, kelp IS a dark reed. Recoloured at build time below.
+  shellbed: [{ gen: 'pebbles', seed: 97 }, { gen: 'pebbles', seed: 98 }],
+  shorestone: [{ gen: 'stones', seed: 99 }, { gen: 'pebbles', seed: 100 }],
+  kelp: [{ gen: 'reeds', seed: 101 }, { gen: 'reeds', seed: 102 }],
+  seastone: [{ gen: 'stones', seed: 103 }, { gen: 'pebbles', seed: 104 }],
   // the rock: boulders (the Quaternius rocks, big) and built outcrops
   boulder: [{ file: 'Rock1' }, { file: 'Rock2' }],
   outcrop: [{ gen: 'outcrop', seed: 97 }, { gen: 'outcrop', seed: 98 }],
@@ -143,6 +160,19 @@ interface PlaceSpec {
   habitat: (h: number, ny: number, forest: number, riverD: number, fkind: number, coastD: number) => boolean
   /** forest kinds: chance also scales with wood fullness (thin at the wood line) */
   woodland?: boolean
+  /** at or below the waterline: skips the dry-land floor and the drowned test (M65) */
+  wet?: boolean
+  /**
+   * A HEIGHT BAND TESTED FIRST, before any of the expensive per-candidate work
+   * (M65). `habitat()` is the last thing `place()` calls — after the lake-shore
+   * loop, normalAt, the ravine test, caveAt, the ruin loop and riverDistAt —
+   * which is fine for a kind that lives almost anywhere. The wet kinds live in
+   * a band a couple of metres tall, so 95% of the island is rejected, and doing
+   * that rejection last cost TEN SECONDS of load. Declared here it is two float
+   * compares.
+   */
+  hMin?: number
+  hMax?: number
 }
 
 // caps are for the 4 km island (4× the 2 km ones): the scan runs north→south,
@@ -200,6 +230,17 @@ const SPECS: Record<NodeKind, PlaceSpec> = {
   stones: { cell: 20, chance: 0.45, sMin: 0.7, sMax: 1.4, cap: 16000, seed: 1010, habitat: (h) => h > 3 },
   // ROCK (mandate item 7): boulders on slopes and hills, outcrops where the
   // ground rises hard — cliffs, foothill crests, the ranges' feet
+  // --- the wet ground (M65) ---
+  // the tideline: shells and shingle on the wet sand, thickest right at the water
+  // NB no `coastD` test: it is computed only for palms (everything else gets
+  // Infinity), so a `coastD < 90` here silently placed NOTHING. The height
+  // band IS the tideline anywhere on the island, and lake shingle is a feature
+  // rather than a mistake.
+  shellbed: { cell: 6, chance: 0.72, sMin: 0.16, sMax: 0.34, cap: 90000, seed: 1313, wet: true, hMin: -0.7, hMax: 2.3, habitat: () => true },
+  shorestone: { cell: 10, chance: 0.5, sMin: 0.26, sMax: 0.62, cap: 24000, seed: 1414, wet: true, hMin: -1.4, hMax: 2.5, habitat: () => true },
+  // the seabed proper, and lake/river beds: shingle and kelp
+  seastone: { cell: 8, chance: 0.6, sMin: 0.3, sMax: 0.85, cap: 90000, seed: 1515, wet: true, hMin: -14, hMax: -0.4, habitat: () => true },
+  kelp: { cell: 8, chance: 0.45, sMin: 1.2, sMax: 3.0, cap: 60000, seed: 1616, wet: true, hMin: -11, hMax: -0.8, habitat: () => true },
   boulder: { cell: 34, chance: 0.45, sMin: 3, sMax: 8, cap: 6000, seed: 1111, habitat: (h, ny) => h > 6 && (ny < 0.94 || h > 40) },
   outcrop: { cell: 58, chance: 0.5, sMin: 5, sMax: 14, cap: 2400, seed: 1212, habitat: (h, ny) => h > 12 && ny < 0.9 },
 }
@@ -211,7 +252,7 @@ const RESPAWN_MS = 240_000
  *  Distance tests use the cell's bounding box, not its centre. */
 const SUPER = 256
 /** Ground-cover kinds: no shadow casting, distance-culled. */
-const GROUND_COVER = new Set<NodeKind>(['grass', 'fern', 'flower', 'mushroom', 'log', 'bush', 'driedbush', 'reeds', 'pebbles', 'sticks', 'stones'])
+const GROUND_COVER = new Set<NodeKind>(['grass', 'fern', 'flower', 'mushroom', 'log', 'bush', 'driedbush', 'reeds', 'pebbles', 'sticks', 'stones', 'shellbed', 'shorestone', 'kelp', 'seastone'])
 /** small clutter vanishes sooner than bushes — a pebble is nothing at 100 m */
 const COVER_DIST_OVERRIDE: Partial<Record<NodeKind, number>> = { pebbles: 110, sticks: 120, stones: 200, mushroom: 150, flower: 200, grass: 140 }
 /** Cover cells beyond this range from the player are hidden entirely. */
@@ -773,7 +814,12 @@ export class Scatter {
       aspect.set(kind, worst)
     }
     for (const kind of Object.keys(SPECS) as NodeKind[]) {
+      const t0 = performance.now()
+      const n0 = this.nodes.length
       this.place(kind, SPECS[kind], aspect.get(kind) ?? 0.5)
+      // per-kind placement cost: the only honest way to attribute load time on
+      // a loaded machine, where wall-clock time-to-ready swings 3x (M65)
+      if (import.meta.env.DEV) console.log(`place ${kind}: ${this.nodes.length - n0} nodes in ${(performance.now() - t0).toFixed(0)} ms`)
     }
 
     // the terrain's rock albedo, re-tiled onto the props' own UVs (awaited:
@@ -815,6 +861,51 @@ export class Scatter {
               mat.customProgramCacheKey = () => 'rock-triplanar'
               mat.needsUpdate = true
             }
+          : kind === 'shellbed'
+            ? (mat: THREE.MeshStandardMaterial) => {
+                // shell and bleached coral grit: pale, faintly warm, and a
+                // little shiny where the sea has polished it
+                mat.map = null
+                // NB every GROUND_COVER instance is tinted 0.55-0.85 on top of
+                // this, so the albedo has to sit high to read as pale shell
+                // THE GENERATOR BAKES VERTEX COLOURS and `vertexColors: true`
+                // MULTIPLIES them by the albedo — buildStones/buildPebbles bake
+                // ~0.06 grey, so any colour set here could only ever darken
+                // further, which is why the first attempt put a rockfall of
+                // near-black boulders on the beach (M65, caught by reading the
+                // GPU attribute rather than the screenshot). Turning them off
+                // also makes the part eligible for the untextured merge below,
+                // which then bakes THIS colour in; the per-instance tint still
+                // gives each stone its own value.
+                mat.vertexColors = false
+                mat.color.setRGB(1.25, 1.18, 1.02)
+                mat.roughness = 0.62
+              }
+          : kind === 'kelp'
+            ? (mat: THREE.MeshStandardMaterial) => {
+                // kelp is not grass: brown-olive, darker than anything on land
+                mat.map = null
+                mat.vertexColors = false // see shellbed above
+                mat.color.setRGB(0.13, 0.19, 0.1)
+                mat.roughness = 0.75
+              }
+          : kind === 'seastone'
+            ? (mat: THREE.MeshStandardMaterial) => {
+                mat.vertexColors = false // see shellbed above
+                mat.map = null
+                // silt-covered, not chalk: the first pass used the shore's
+                // grey and the seabed read as a field of ice cubes
+                mat.color.setRGB(0.34, 0.3, 0.24)
+                mat.roughness = 0.85
+              }
+          : kind === 'shorestone'
+            ? (mat: THREE.MeshStandardMaterial) => {
+                // wet stone reads darker and cooler than the same stone dry
+                mat.map = null
+                mat.vertexColors = false // see shellbed above
+                mat.color.setRGB(0.66, 0.68, 0.7)
+                mat.roughness = 0.55
+              }
           : kind === 'palm'
             ? (mat: THREE.MeshStandardMaterial) => {
                 // one atlas for trunk and fronds, shipped lime: darken it whole
@@ -1043,7 +1134,11 @@ export class Scatter {
         const x = gx + jx
         const z = gz + jz
         const h = heightAt(x, z)
-        if (h < SEA_LEVEL + 1.1) continue
+        // the declared band first: the cheapest possible rejection (M65)
+        if (spec.hMin !== undefined && h < spec.hMin) continue
+        if (spec.hMax !== undefined && h > spec.hMax) continue
+        // the dry-land floor — WET kinds are the whole point of the exception
+        if (!spec.wet && h < SEA_LEVEL + 1.1) continue
         // never under lake water (backlog #10: trees inside lakes)
         let drowned = false
         for (const lake of worldMeta?.lakes ?? []) {
@@ -1052,7 +1147,7 @@ export class Scatter {
             break
           }
         }
-        if (drowned) continue
+        if (drowned && !spec.wet) continue
         const ny = normalAt(x, z, this.tmpN).y
         if (ny < (kind === 'rock' || kind === 'boulder' || kind === 'outcrop' ? 0.5 : 0.72)) continue
         const dv = Math.hypot(x - VOLCANO.x, z - VOLCANO.z)

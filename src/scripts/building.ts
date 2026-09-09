@@ -7,6 +7,7 @@ import * as THREE from 'three'
 import RAPIER from '@dimforge/rapier3d-compat'
 import { heightAt } from './heightmap'
 import type { Physics } from './physics'
+import { addObstacle } from './obstacles'
 import type { ItemId } from './items'
 import type { Kit } from './kit'
 import { ITEM_MODEL } from './kit'
@@ -218,6 +219,36 @@ export class Building {
         RAPIER.ColliderDesc.cuboid(size.x / 2, size.y / 2, size.z / 2).setTranslation(pos.x, pos.y, pos.z),
       ),
     )
+    this.blockAnimals(p, pos, size)
+  }
+
+  /**
+   * TELL THE ANIMALS IT IS THERE (M65, user-reported: "dinos going through
+   * fences").
+   *
+   * A piece got a RAPIER collider, which stops the PLAYER — the player is the
+   * only physics body in the game. Dinos do not use physics at all: they steer
+   * around `obstacles.ts`, a coarse spatial hash that until now only scatter
+   * registered into. So every wall, fence and workbench you have ever built
+   * was invisible to every animal on the island, and a raptor walked through
+   * your fence as if it were fog. Building a pen was pointless.
+   *
+   * The hash stores CIRCLES, so a long piece is registered as a run of them —
+   * one circle at a wall's centre would leave both ends open. Nothing is ever
+   * demolished, so there is no removal path to keep in step.
+   */
+  private blockAnimals(p: Piece, pos: THREE.Vector3, size: THREE.Vector3): void {
+    // a floor and a roof are walked over and under, not into
+    if (p.kind === 'foundation' || p.kind === 'ceiling') return
+    const long = Math.max(size.x, size.z)
+    const alongX = size.x >= size.z
+    // ~1 m apart, so a run has no gap a nose can find
+    const steps = Math.max(1, Math.round(long / 1.1))
+    const r = Math.max(0.55, Math.min(size.x, size.z) / 2 + 0.35)
+    for (let i = 0; i < steps; i++) {
+      const t = steps === 1 ? 0 : i / (steps - 1) - 0.5
+      addObstacle(pos.x + (alongX ? t * long : 0), pos.z + (alongX ? 0 : t * long), r)
+    }
   }
 
   private applyTransform(mesh: THREE.Mesh, p: Piece): void {

@@ -130,22 +130,32 @@ check(await g('window.__g.game.dinoStates().some(d => d.state === "tamed")'), 'r
 // a loaded machine that gap is long enough to matter: this failed once in nine
 // runs, at a load average of 12 (M64). Inside one evaluate no time passes at
 // all, and six tries covers the rest.
+// ...and REPORT when it does not work. This pair failed twice inside the full
+// suite at load average 28 and passed alone every time — which is exactly the
+// excuse that hid a real harness bug in M53, so the gate now says what it saw
+// (M65): where the animal was, what state it was in, and whether the player
+// was actually within reach when interact() fired.
 const stepAndAct = (idx) => page.evaluate((i) => {
-  window.__g.game.gotoDinoIndex(i)
-  window.__g.game.interact()
+  const g = window.__g
+  g.game.gotoDinoIndex(i)
+  const before = g.player()
+  const d = g.game.dinoStates()[i]
+  g.game.interact()
+  return d ? { state: d.state, saddled: d.saddled, dist: +Math.hypot(d.x - before.x, d.z - before.z).toFixed(2) } : null
 }, idx)
+let lastSeen = null
 for (let i = 0; i < 6; i++) {
-  await stepAndAct(ourRaptor)
+  lastSeen = await stepAndAct(ourRaptor)
   await page.waitForTimeout(250)
   if (await g('window.__g.game.dinoStates().some(d => d.saddled)')) break
 }
-check(await g('window.__g.game.dinoStates().some(d => d.saddled)'), 'raptor saddled')
+check(await g('window.__g.game.dinoStates().some(d => d.saddled)'), `raptor saddled${await g('window.__g.game.dinoStates().some(d => d.saddled)') ? '' : ` — last saw ${JSON.stringify(lastSeen)}`}`)
 for (let i = 0; i < 6; i++) {
-  await stepAndAct(ourRaptor) // mount
+  lastSeen = await stepAndAct(ourRaptor) // mount
   await page.waitForTimeout(200)
   if (await g('window.__g.game.riding()')) break
 }
-check(await g('window.__g.game.riding()'), 'mounted')
+check(await g('window.__g.game.riding()'), `mounted${await g('window.__g.game.riding()') ? '' : ` — last saw ${JSON.stringify(lastSeen)}`}`)
 // ride out: the mount stands where it was tamed, so a tree or rock may block
 // one heading — try the four in turn
 let rode = 0

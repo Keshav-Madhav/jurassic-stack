@@ -13,6 +13,7 @@ import { heightAt, VOLCANO, worldMeta } from './heightmap'
 import { makeStone } from './stone-material'
 import type { Physics } from './physics'
 import { registerWarmRoot } from './uploads'
+import { addObstacle } from './obstacles'
 
 type RuinModel = 'Column' | 'Arch' | 'Statue'
 
@@ -198,9 +199,16 @@ export class Ruins {
         // physics: standing columns/statues get cylinders; arch spans and
         // toppled pieces stay walkable
         if (!plan.toppled && (plan.model === 'Column' || plan.model === 'Statue')) {
+          const r = Math.max(0.35, size.x * s * 0.3)
           physics.world.createCollider(
-            RAPIER.ColliderDesc.cylinder(plan.h / 2, Math.max(0.35, size.x * s * 0.3)).setTranslation(x, ground + plan.h / 2, z),
+            RAPIER.ColliderDesc.cylinder(plan.h / 2, r).setTranslation(x, ground + plan.h / 2, z),
           )
+          // ...and tell the ANIMALS, which do not use physics at all — they
+          // steer around obstacles.ts, whose own comment has said "tree
+          // trunks, rocks, ruin columns" since M25 while ruins never actually
+          // registered. Dinos walked through every column on the island (M65,
+          // the same hole as the player's fences).
+          addObstacle(x, z, r + 0.3)
         }
       }
     }

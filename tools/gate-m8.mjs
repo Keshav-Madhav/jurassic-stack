@@ -216,6 +216,31 @@ if (dune && meadow) {
   check(t.rebuilt < Math.max(20, t.count * 0.25), `without thrashing the builder (${t.rebuilt} rebuilt of ${t.count})`)
 }
 
+// THE WET GROUND (M65, user-reported: "not enough rocks pebbles ... on land or
+// even underwater"). A global `h < SEA_LEVEL + 1.1` floor in scatter's place()
+// excluded EVERY kind from the tideline and the whole seabed, so the spawn
+// beach — the first thing a player ever sees — was a featureless orange plane
+// and the sea floor was bare brown.
+{
+  const nodesAt = async (x, z) => {
+    await page.evaluate(([px, pz]) => { window.__g.game.setGod(true); window.__g.teleport(px, pz) }, [x, z])
+    await page.waitForTimeout(4000)
+    return page.evaluate(([px, pz]) => ({ h: +window.__g.groundAt(px, pz).toFixed(1), n: window.__g.game.nodesNear(px, pz, 40) }), [x, z])
+  }
+  const beach = await nodesAt(0, 1640)
+  const shingle = (beach.n.shellbed ?? 0) + (beach.n.shorestone ?? 0)
+  check(beach.h < 2.4, `the spawn beach is the wet band (${beach.h} m)`)
+  check(shingle > 40, `and it has shingle on it (${shingle} pieces within 40 m)`)
+  const sea = await nodesAt(0, 1720)
+  check(sea.h < 0, `the sea floor is below the water (${sea.h} m)`)
+  check((sea.n.seastone ?? 0) > 20, `the sea floor has shingle (${sea.n.seastone ?? 0})`)
+  check((sea.n.kelp ?? 0) > 10, `and kelp growing on it (${sea.n.kelp ?? 0})`)
+  // ...and none of it strays onto dry land, which would put kelp in a meadow
+  const plain = await nodesAt(-250, 1040)
+  const strays = (plain.n.kelp ?? 0) + (plain.n.seastone ?? 0)
+  check(strays === 0, `and none of it grows inland (${strays} at the plain, ${plain.h} m)`)
+}
+
 await browser.close()
 console.log(failed ? '\nGATE FAILED' : '\nGATE PASSED')
 process.exit(failed ? 1 : 0)

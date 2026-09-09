@@ -37,6 +37,7 @@ import { heightAt, loadHeightmap, worldMeta, SPAWN, skyViewAt } from './heightma
 import { loadNavmesh, findPath, beginNavFrame, navStats, setNavBudget } from './navmesh'
 import { gridBytes } from './heightmap'
 import { terrainEvicted, setTerrainCacheTtl } from './terrain'
+import { nearestObstacle } from './obstacles'
 import { WaterSystem } from './water'
 import { wildPopulation } from './population'
 import { GrassField } from './grass'
@@ -1339,6 +1340,12 @@ async function boot(): Promise<void> {
       riding: () => riding !== null,
       pieces: () => building.pieces.length,
       /** QA: place a buildable at a world point (consumes the item) */
+      /** QA (M65): what the ANIMALS' obstacle hash knows is at (x,z) — the
+       *  thing player structures and ruin columns never registered into */
+      obstacleNear: (x: number, z: number, within = 6) => {
+        const o = nearestObstacle(x, z, within)
+        return o ? { x: +o.x.toFixed(1), z: +o.z.toFixed(1), d: +o.d.toFixed(2) } : null
+      },
       placeAt: (id: string, x: number, z: number) => { if (!ITEMS[id as ItemId]?.placeable) return false; const ok = building.place(id as PieceKind, new THREE.Vector3(x, heightAt(x, z), z)); if (ok) inventory.remove(id as ItemId, 1); return !!ok },
       panelOpen: () => hud.panelOpen,
       iconCount: () => kit.icons.size,
