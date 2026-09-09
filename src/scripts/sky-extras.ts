@@ -85,6 +85,21 @@ function starTexture(): THREE.CanvasTexture {
 
 export class SkyExtras {
   readonly group = new THREE.Group()
+  /** the cloud cards, detached when the camera is under the water (M67): they
+   *  are transparent at renderOrder 5-6 against the water's 1-4 and the water
+   *  writes no depth, so from below they drew straight over the surface and
+   *  you looked up at a clear sky from four metres down. Detached, not hidden
+   *  (M24: three walks every object in the graph either way). */
+  private cloudsShown = true
+  setSubmerged(under: boolean): void {
+    const show = !under
+    if (show === this.cloudsShown) return
+    this.cloudsShown = show
+    for (const m of [this.clouds as THREE.Object3D, this.uprights as THREE.Object3D]) {
+      if (show) this.group.add(m)
+      else m.parent?.remove(m)
+    }
+  }
   private moon: THREE.Mesh
   private moonMat: THREE.MeshBasicMaterial
   private dome: THREE.Mesh

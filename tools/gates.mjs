@@ -61,7 +61,19 @@ for (const name of list) {
   results.push({ ...r, pass, fail, ok, short, want })
   const note = short ? `  ⟨${want - pass} CHECK(S) DID NOT RUN — expected ${want}⟩` : want !== undefined && pass > want ? `  (+${pass - want} new)` : ''
   console.log(`${ok ? ' ok ' : 'FAIL'}  gate-${name.padEnd(10)} ${String(pass).padStart(3)} pass · ${String(fail).padStart(2)} fail${skipped ? ` · ${skipped} skip` : ''} · exit ${r.code} · ${r.secs}s${note}`)
-  if (!ok) for (const line of r.out.split('\n').filter((l) => /^FAIL |Error|error:|\[err\]/.test(l)).slice(0, 12)) console.log(`        ${line}`)
+  if (!ok) {
+    const named = r.out.split('\n').filter((l) => /^FAIL |Error|error:|\[err\]/.test(l)).slice(0, 12)
+    for (const line of named) console.log(`        ${line}`)
+    // A GATE CAN DIE WITH NOTHING TO SAY. gate-m8 once exited 1 after 11 of its
+    // 48 checks with no FAIL and no matching error line, and the runner printed
+    // only the shortfall — which is the same "silence looks like success" trap
+    // this file exists to close (M67). If nothing above matched, show the tail.
+    if (!named.length) {
+      const tail = r.out.trimEnd().split('\n').slice(-6)
+      console.log(`        ⟨no FAIL line — last ${tail.length} lines of output:⟩`)
+      for (const line of tail) console.log(`        | ${line}`)
+    }
+  }
 }
 
 if (rebaseline) {

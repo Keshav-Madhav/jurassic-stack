@@ -321,6 +321,21 @@ export class DayNight {
    *  dimming, not a pop. */
   interior = 0
 
+  /** UNDER THE WATER (M67, 0..1, lerped by the caller like `interior`).
+   *
+   *  Swimming looked exactly like walking: the ocean sheet IS drawn from below
+   *  (it is DoubleSide), but nothing else changed — no murk, no colour cast,
+   *  and the sky's cloud cards drew straight over the surface because they sit
+   *  at renderOrder 5-6 against water's 1-4 and the water writes no depth. So
+   *  four metres under the sea you looked up at a clear blue sky with clouds
+   *  in it. The fix is the feature that was missing rather than a sorting
+   *  patch: the fog goes deep blue-green and closes right in, the print
+   *  darkens, and main.ts detaches the clouds. */
+  submerged = 0
+
+  /** the colour the world goes when you are under it */
+  private static readonly UW = new THREE.Color(0x3d8b93)
+
   private apply(): void {
     const elev = this.sunElevationDeg
     const azimuth = (this.time - 0.25) * Math.PI * 2 * 0.5 + Math.PI * 0.15
@@ -347,11 +362,18 @@ export class DayNight {
 
     // the cave: no sun, almost no sky, and a darker print
     const ins = this.interior
-    this.renderer.toneMappingExposure = grade.exposure * THREE.MathUtils.lerp(1, 0.62, ins)
+    const sub = this.submerged
+    this.renderer.toneMappingExposure = grade.exposure * THREE.MathUtils.lerp(1, 0.62, ins) * THREE.MathUtils.lerp(1, 0.92, sub)
     const fog = this.scene.fog as THREE.Fog
     fog.color.copy(grade.fog)
     fog.near = grade.fogNear * this.fogScale
     fog.far = grade.fogFar * this.fogScale
+    if (sub > 0) {
+      // green-blue and CLOSE: visibility underwater is metres, not kilometres
+      fog.color.lerp(DayNight.UW, sub)
+      fog.near = THREE.MathUtils.lerp(fog.near, 2, sub)
+      fog.far = THREE.MathUtils.lerp(fog.far, 110, sub)
+    }
     // the camera's far plane sits just past the fog: everything beyond is
     // fog-coloured anyway, so the far half of the island stops costing draws
     if (this.camera && Math.abs(this.camera.far - fog.far * 1.08) > 1) {
@@ -360,7 +382,7 @@ export class DayNight {
     }
     this.hemi.color.copy(grade.hemiSky)
     this.hemi.groundColor.copy(grade.hemiGround)
-    this.hemi.intensity = grade.hemiIntensity * THREE.MathUtils.lerp(1, 0.12, ins)
+    this.hemi.intensity = grade.hemiIntensity * THREE.MathUtils.lerp(1, 0.12, ins) * THREE.MathUtils.lerp(1, 0.95, sub)
     this.sunLight.color.copy(grade.sun)
     this.sunLight.intensity = grade.sunIntensity * THREE.MathUtils.lerp(1, 0.06, ins)
     this.sunLight.position.copy(this.focus).addScaledVector(this.sunDir, 420)

@@ -84,6 +84,33 @@ await page.evaluate(() => window.__g.setIntent(0, 0))
 const land = await page.evaluate(() => window.__g.game.swimming())
 check(!land, 'back to walking on the beach')
 
+// UNDER THE WATER LOOKS LIKE UNDER THE WATER (M67). Swimming used to look
+// exactly like walking: the ocean sheet IS drawn from below, but nothing else
+// changed — no murk, no colour cast — and the sky's cloud cards drew straight
+// over the surface (renderOrder 5-6 against water's 1-4, and the water writes
+// no depth), so four metres down you looked up at a clear sky with clouds.
+{
+  const look = async (y) => {
+    await page.evaluate((yy) => {
+      const g = window.__g
+      g.setTime(0.5); g.game.setGod(true); g.teleport(0, 1760); g.setFreeCam(0, yy, 1760, 0, -0.1)
+    }, y)
+    await page.waitForTimeout(2500)
+    return page.evaluate(() => {
+      const f = window.__g.scene.fog
+      return { far: Math.round(f.far), hex: f.color.getHexString(), clouds: !!window.__g.scene.getObjectByName('skyExtras')?.children.length }
+    })
+  }
+  const above = await look(3.0)
+  const below = await look(-4.5)
+  check(above.far > 1000, `above the surface the view is open (fog far ${above.far} m)`)
+  check(below.far < 200, `under it the water closes in (fog far ${below.far} m)`)
+  check(below.hex !== above.hex, `and the world takes the water's colour (#${above.hex} → #${below.hex})`)
+  // back up, and it lifts again rather than sticking
+  const again = await look(3.0)
+  check(again.far > 1000, `surfacing gives the view back (fog far ${again.far} m)`)
+}
+
 await browser.close()
 console.log(failed ? '\nGATE FAILED' : '\nGATE PASSED')
 process.exit(failed ? 1 : 0)

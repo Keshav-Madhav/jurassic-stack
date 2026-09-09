@@ -331,6 +331,8 @@ async function boot(): Promise<void> {
   const post = new Post(renderer, scene, cam.camera)
   // the dark places (PLAN beat 4): the terrain is the floor, this is the roof
   let caveDark = 0
+  /** 0..1, how far under the water the CAMERA is (M67) */
+  let submerged = 0
   const caves = new Caves()
   caves.build()
   scene.add(caves.group)
@@ -2131,6 +2133,18 @@ async function boot(): Promise<void> {
       const wantIn = caves.inside(cf0.x, cf0.z) ? 1 : 0
       caveDark += (wantIn - caveDark) * Math.min(1, dt * 2.2)
       daynight.interior = caveDark
+    }
+    // UNDER THE WATER (M67): the same shape as the cave — a lerp, so surfacing
+    // is a lift rather than a pop. Driven by the CAMERA, not the player: you
+    // see what the camera sees, and in third person the two differ by metres.
+    {
+      const cp = cam.camera.position
+      const level = water.waterLevelAt(cp.x, cp.z)
+      const wantUnder = level !== null && cp.y < level - 0.12 ? 1 : 0
+      submerged += (wantUnder - submerged) * Math.min(1, dt * 6)
+      if (submerged < 0.002) submerged = 0
+      daynight.submerged = submerged
+      skyExtras.setSubmerged(submerged > 0.5)
     }
     // the cold (M50): how high, how dark, and what is keeping it off you
     {
