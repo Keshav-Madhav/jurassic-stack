@@ -326,6 +326,26 @@ class InstancedProp {
   private dummy = new THREE.Object3D()
   private castShadowFlag = true
 
+  /**
+   * THE PROTOTYPE CACHE (M58). A prop's geometry and materials are built from
+   * its source root — normalised to 1 m, re-pivoted onto its base, dropped to
+   * ground, recoloured, alpha-cutout'd, its untextured submeshes merged — and
+   * every one of those steps depends only on the ROOT, not on the cell. There
+   * is one InstancedProp per `kind#variant#cell` and there are hundreds of
+   * cells, so all of that ran hundreds of times over and left the renderer
+   * holding ~3700 geometries and as many materials of maybe twenty distinct
+   * shapes. Built once per prototype now and shared: an InstancedMesh never
+   * writes to its geometry or its material, only to its instance buffers.
+   */
+  private static protos = new Map<string, { geo: THREE.BufferGeometry; mat: THREE.MeshStandardMaterial }[]>()
+
+  /** QA */
+  static protoStats(): { prototypes: number; meshes: number } {
+    let meshes = 0
+    for (const v of InstancedProp.protos.values()) meshes += v.length
+    return { prototypes: InstancedProp.protos.size, meshes }
+  }
+
   constructor(
     root: THREE.Object3D,
     capacity: number,
@@ -334,11 +354,19 @@ class InstancedProp {
     private recolor?: (mat: THREE.MeshStandardMaterial) => void,
     /** ground cover: sink into the ground over the last 60 m before its draw distance (no hard ring) */
     private fadeAt = 0,
+    /** identity of the SHAPE (not the cell): every prop sharing it shares its
+     *  geometry and materials. Omit to build a private set. */
+    protoKey?: string,
   ) {
     this.castShadowFlag = castShadow
     this.parentGroup = group
     this.holder.matrixAutoUpdate = false
     group.add(this.holder)
+    const cached = protoKey ? InstancedProp.protos.get(protoKey) : undefined
+    if (cached) {
+      this.buildMeshes(cached, capacity)
+      return
+    }
     const box = new THREE.Box3().setFromObject(root)
     const size = box.getSize(new THREE.Vector3())
     const s = 1 / (size.y || 1) // normalize to 1 m tall; instance scale = world height
@@ -443,6 +471,12 @@ class InstancedProp {
         parts.push({ geo: one, mat })
       }
     }
+    if (protoKey) InstancedProp.protos.set(protoKey, parts)
+    this.buildMeshes(parts, capacity)
+  }
+
+  /** the only per-cell part: one InstancedMesh per prototype mesh */
+  private buildMeshes(parts: { geo: THREE.BufferGeometry; mat: THREE.MeshStandardMaterial }[], capacity: number): void {
     for (const { geo, mat } of parts) {
       const im = new THREE.InstancedMesh(geo, mat, capacity)
       im.count = 0
@@ -804,7 +838,8 @@ export class Scatter {
             : undefined
       const cover = GROUND_COVER.has(kind)
       const fadeAt = cover ? (COVER_DIST_OVERRIDE[kind] ?? COVER_DRAW_DIST) : 0
-      const prop = new InstancedProp(root, Math.max(ids.length, 1), this.group, !cover, recolor, fadeAt)
+      // every cell of one kind+variant is the same SHAPE — share it (M58)
+      const prop = new InstancedProp(root, Math.max(ids.length, 1), this.group, !cover, recolor, fadeAt, `${kind}#${variant}@${fadeAt}`)
       this.props.set(key, prop)
       ids.forEach((nodeId, i) => {
         const n = this.nodes[nodeId]
@@ -859,7 +894,7 @@ export class Scatter {
         byCell.set(cell, list)
       }
       for (const [cell, ids] of byCell) {
-        const twin = new InstancedProp(farRoot, Math.max(ids.length, 1), this.group, true)
+        const twin = new InstancedProp(farRoot, Math.max(ids.length, 1), this.group, true, undefined, 0, `mid:${kind}`)
         const index = new Map<number, number>()
         ids.forEach((nodeId, i) => {
           const n = this.nodes[nodeId]

@@ -234,6 +234,19 @@ found the other 800 MB, and it is almost all the animals:
 | `cloneUniforms` in `getProgram` | ~40 MB | a uniform set per material instance |
 | `scatter.place` | ~32 MB | the node table |
 
+**M58 took 180 MB of it back, from the props rather than the animals.** There is one `InstancedProp`
+per `kind#variant#cell` and there are hundreds of cells — and each one rebuilt the prop's geometry
+from its source root (normalise to 1 m, re-pivot onto the base, drop to ground, recolour, cutout,
+merge the untextured submeshes) and CLONED ITS MATERIALS. None of that depends on the cell. Built
+once per prototype and shared now, because an InstancedMesh never writes to its geometry or its
+material, only to its instance buffers:
+
+| | before | after |
+|---|---|---|
+| GPU geometries | 3749 | **333** |
+| JS heap after load | 882 MB | **~700 MB** |
+| time to `ready` | 6.2-6.4 s | **4.8-5.0 s** (with M57's calibration cache) |
+
 **The lever, unbuilt: a rig POOL.** Only a few dozen animals are ever drawn as rigs at once
 (`RIG_DIST`, and everything past it is a card or nothing), but all ~200 get a clone and a mixer at
 load. Handing out N rigs per species from a pool as animals wake would cut both of the top two rows
