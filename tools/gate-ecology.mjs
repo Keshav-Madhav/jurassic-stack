@@ -117,6 +117,27 @@ const later = mag[3] - mag[2]
 check(later > early, `the fall accelerates rather than ramps (${early.toFixed(2)} → ${later.toFixed(2)} rad a frame)`)
 check((await page.evaluate(() => window.__g.game.thuds())) > thudsBefore, 'and it lands with a thud')
 
+// LAZY MIXERS, AND THE INVARIANT THAT MAKES THEM SAFE (M60). A mixer with its
+// bound actions costs ~0.8 MB an animal and there are ~200 of them, so they are
+// built shortly BEFORE an animal wakes rather than when its rig is cloned. The
+// saving is only allowed to exist while nothing drawable is ever without one:
+// an animal with a rig and no mixer stands in its bind pose.
+{
+  const at = async (x, z) => {
+    await page.evaluate(([px, pz]) => { window.__g.game.setGod(true); window.__g.teleport(px, pz) }, [x, z])
+    await page.waitForTimeout(4000)
+    return page.evaluate(() => window.__g.game.anim())
+  }
+  const beach = await at(0, 1560)
+  check(beach.unanimated === 0, `nothing drawable is in its bind pose at the beach (${beach.withMixer}/${beach.dinos} animals hold a mixer)`)
+  const wood = await at(-286, 793)
+  check(wood.unanimated === 0, `nor at the wood line (${wood.withMixer}/${wood.dinos})`)
+  const plain = await at(-250, 1040)
+  check(plain.unanimated === 0, `nor at the plain (${plain.withMixer}/${plain.dinos})`)
+  // and the point of the exercise: most animals never need one
+  check(plain.withMixer < plain.dinos * 0.75, `most animals never build one (${plain.withMixer} of ${plain.dinos})`)
+}
+
 await browser.close()
 console.log(failed ? '\nGATE FAILED' : '\nGATE PASSED')
 process.exit(failed ? 1 : 0)

@@ -229,8 +229,8 @@ found the other 800 MB, and it is almost all the animals:
 
 | | Live at sample | What |
 |---|---|---|
-| `Object3D.copy` → `Bone` | **~180 MB** | `SkeletonUtils.clone` — one skeleton per animal, ~200 animals |
-| `dinos.ts load` → `clipAction` → `_bindAction` / `AnimationAction` / interpolants / `parseTrackName` | **~156 MB** | one `AnimationMixer`, up to five bound actions and their interpolants, per animal |
+| `Object3D.copy` → `Bone` | **~180 MB** | `SkeletonUtils.clone` — one skeleton per animal, and the island holds **1515** of them |
+| `dinos.ts load` → `clipAction` → `_bindAction` / `AnimationAction` / interpolants / `parseTrackName` | **~156 MB** | one `AnimationMixer`, up to five bound actions and their interpolants, per animal — **taken in M60** |
 | `cloneUniforms` in `getProgram` | ~40 MB | a uniform set per material instance |
 | `scatter.place` | ~32 MB | the node table |
 
@@ -256,11 +256,18 @@ and there were 3749 of the latter for twenty distinct shapes. **`gate-perf` now 
 ceiling** for exactly this reason: nothing in the gate would have noticed the CPU frame being given
 back, because it only ever measured the GPU.
 
-**The lever, unbuilt: a rig POOL.** Only a few dozen animals are ever drawn as rigs at once
-(`RIG_DIST`, and everything past it is a card or nothing), but all ~200 get a clone and a mixer at
-load. Handing out N rigs per species from a pool as animals wake would cut both of the top two rows
-by roughly 5×. It is a real refactor with real regression risk — the clone pump exists precisely
-because doing this work in play hitches — so it is written down, not attempted in passing.
+**M60 took the mixers (−178 MB).** A mixer with its bound actions is built shortly BEFORE an animal
+wakes now — from a two-a-frame budget in the ring outside the wake radius, the same shape as the
+upload warden and the collider builder — instead of when its rig is cloned. Measured: **333 of 1515
+animals ever build one**, and `gate-ecology` asserts the invariant that makes it safe (nothing
+drawable may be without a mixer, or it stands in its bind pose). Heap after load **704 → 526 MB**.
+
+**The lever, still unbuilt: a rig POOL.** Only a few dozen animals are ever drawn as rigs at once
+(`RIG_DIST`, and everything past it is a card or nothing), but all **1515** get a `SkeletonUtils`
+clone at load — the ~180 MB of `Bone` objects above, and the bulk of what is left. Handing out N
+rigs per species from a pool as animals wake would take most of it. It is a real refactor with real
+regression risk — the clone pump exists precisely because doing this work in play hitches — so it is
+written down, not attempted in passing.
 
 **Done in M57, because it was free:** the rig's scale and foot-lift are properties of the GLB, not of
 the individual, so they are measured once per species instead of once per animal — two

@@ -263,42 +263,18 @@ export class Dino {
     // bone matrices and scaled mammoths to the size of the island (M18).
     this.object.add(model)
 
-    this.mixer = new THREE.AnimationMixer(model)
-    const oc = this.species.oneClip
-    if (oc) {
-      // ONE animation, ONE action, a changing RATE. The first cut gave each
-      // slot its own action on a clone of the same clip; `animate()` then
-      // cross-faded three of them, and averaging one pose against itself at
-      // three different times collapsed the Sauropelta into a flat lump
-      // (M52). A single action, re-timed by state, is what a one-clip rig
-      // actually wants — the pose is never blended with anything.
-      const clip = animations.filter((a) => a.duration > 0.5).sort((a, b) => b.tracks.length - a.tracks.length)[0]
-      if (clip) {
-        const act = this.mixer.clipAction(clip)
-        act.timeScale = oc.idle
-        this.actions.idle = act
-      }
-    } else {
-      for (const slot of ['idle', 'walk', 'run', 'attack', 'ko'] as const) {
-        const clip = animations.find((a) => this.species.clips[slot].test(a.name))
-        if (clip) this.actions[slot] = this.mixer.clipAction(clip)
-      }
-    }
-    for (const re of this.species.flavorClips ?? []) {
-      const clip = animations.find((a) => re.test(a.name))
-      if (clip) {
-        const a = this.mixer.clipAction(clip)
-        a.setLoop(THREE.LoopOnce, 1)
-        this.flavorActions.push(a)
-      }
-    }
-    this.actions.idle?.play()
-    this.actions.walk?.play()
-    if (this.actions.walk) this.actions.walk.weight = 0
-    if (this.actions.run) {
-      this.actions.run.play()
-      this.actions.run.weight = 0
-    }
+    this.clips = animations
+    // THE MIXER IS BUILT ON DEMAND (M60). One `AnimationMixer` with up to five
+    // bound actions, their interpolants and their parsed track names costs
+    // roughly 0.1 MB per animal, and there are 1515 animals on this island —
+    // 156 MB of the heap, named by Chrome's sampling profiler in M57 — and the
+    // vast majority of it belongs to animals the player never goes near
+    // (measured: 333 of 1515 ever build one in a session). Only the FIRST
+    // clone of a species builds one here, because calibration needs a posed
+    // frame; everything else gets one shortly before it wakes, from a budgeted
+    // pass, so no animal is ever drawn in its bind pose.
+    if (!Dino.calib.has(this.species.id)) this.buildAnim()
+
 
     // Size + ground calibration, in ANIMATED pose. Order matters: several
     // Sketchfab rigs carry scale/position tracks on their root nodes, so the
@@ -317,7 +293,7 @@ export class Dino {
     // same reason; this is the other half of that fix.
     let calib = Dino.calib.get(this.species.id)
     if (!calib) {
-      this.mixer.update(0.01)
+      this.mixer?.update(0.01) // built above for the first clone of a species
       this.object.updateMatrixWorld(true)
       const bounds = this.skinnedBounds(model)
       if (bounds) {
@@ -366,6 +342,60 @@ export class Dino {
     if (this.dormant) this.object.remove(model)
   }
 
+
+  /** the rig's clips, kept so the mixer can be built later (M60) */
+  private clips: THREE.AnimationClip[] = []
+
+  /** the frame's allowance for building mixers ahead of the wake radius */
+  static animBudget = 2
+
+  /**
+   * Build this animal's mixer and actions. Idempotent. An animal without one
+   * simply holds its bind pose — and a dormant animal is DETACHED from the
+   * scene (M24), so nothing draws it while it waits.
+   */
+  private buildAnim(): void {
+    if (this.mixer || !this.model) return
+    const model = this.model
+    const animations = this.clips
+    this.mixer = new THREE.AnimationMixer(model)
+    const oc = this.species.oneClip
+    if (oc) {
+      // ONE animation, ONE action, a changing RATE. The first cut gave each
+      // slot its own action on a clone of the same clip; `animate()` then
+      // cross-faded three of them, and averaging one pose against itself at
+      // three different times collapsed the Sauropelta into a flat lump
+      // (M52). A single action, re-timed by state, is what a one-clip rig
+      // actually wants — the pose is never blended with anything.
+      const clip = animations.filter((a) => a.duration > 0.5).sort((a, b) => b.tracks.length - a.tracks.length)[0]
+      if (clip) {
+        const act = this.mixer.clipAction(clip)
+        act.timeScale = oc.idle
+        this.actions.idle = act
+      }
+    } else {
+      for (const slot of ['idle', 'walk', 'run', 'attack', 'ko'] as const) {
+        const clip = animations.find((a) => this.species.clips[slot].test(a.name))
+        if (clip) this.actions[slot] = this.mixer.clipAction(clip)
+      }
+    }
+    for (const re of this.species.flavorClips ?? []) {
+      const clip = animations.find((a) => re.test(a.name))
+      if (clip) {
+        const a = this.mixer.clipAction(clip)
+        a.setLoop(THREE.LoopOnce, 1)
+        this.flavorActions.push(a)
+      }
+    }
+    this.actions.idle?.play()
+    this.actions.walk?.play()
+    if (this.actions.walk) this.actions.walk.weight = 0
+    if (this.actions.run) {
+      this.actions.run.play()
+      this.actions.run.weight = 0
+    }
+  }
+
   /** Warm-up: attach the rig for one compile pass; returns a detach callback (or null if already attached / not loaded). */
   /** the loaded rig, for the load-time warm-up (impostor capture) */
   get rig(): THREE.Object3D | null {
@@ -408,6 +438,17 @@ export class Dino {
       if (addedModel) this.object.remove(model)
       if (parkedObject) this.object.parent?.remove(this.object)
     }
+  }
+
+  /** QA (M60): an animal that can be drawn but has no mixer would stand in its
+   *  bind pose. The invariant is that this is never true; gate-ecology asserts it. */
+  get unanimated(): boolean {
+    return !this.dormant && !!this.model && !this.mixer
+  }
+
+  /** QA: how many animals hold a mixer — the memory this lever is about */
+  get hasAnim(): boolean {
+    return !!this.mixer
   }
 
   /** QA: which clip each slot resolved to (null = the species regex matched nothing) */
@@ -662,6 +703,16 @@ export class Dino {
         if (this.model && !this.model.parent) this.object.add(this.model)
         if (Dino.scene && !this.object.parent) Dino.scene.add(this.object)
       } else {
+        // AHEAD OF THE WAKE RADIUS, A FEW A FRAME. Building the mixer is a few
+        // milliseconds of parsing track names and binding them to bones, and
+        // doing it at the moment of waking would put that in the frame an
+        // animal appears — the exact hitch this project keeps removing. So it
+        // happens in the ring OUTSIDE the wake radius, on a budget, the same
+        // shape as the upload warden and the collider builder (M60).
+        if (!this.mixer && this.model && Dino.animBudget > 0 && this.distToPlayer < DORMANT_WAKE + 90) {
+          Dino.animBudget--
+          this.buildAnim()
+        }
         return
       }
     } else if (wildIdle && this.distToPlayer > DORMANT_SLEEP) {
@@ -671,6 +722,13 @@ export class Dino {
       if (this.carded) { Dino.impostors?.clear(this.species.id, this.index); this.carded = false }
       return
     }
+    // AWAKE MEANS ANIMATED. Everything below this line can be drawn, so the
+    // mixer must exist by now whatever route got us here — waking from
+    // dormancy, being a tame that is never dormant at all, or simply standing
+    // near the player at load. The budgeted pass above is an optimisation on
+    // WHEN this happens, never on whether (M60: without this line the animals
+    // within sleep range of the spawn beach stood in their bind pose).
+    if (!this.mixer && this.model) this.buildAnim()
     // draw bands: the rig inside RIG_DIST, a cross-card impostor to DRAW_DIST,
     // nothing beyond (all with hysteresis). Ridden mounts are always the rig.
     if (this.model && !this.ridden) {

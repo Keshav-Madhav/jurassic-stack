@@ -1373,6 +1373,12 @@ async function boot(): Promise<void> {
       rigAlbedos: () => { const out: Record<string, string[]> = {}; for (const d of dinos) { if (out[d.species.id]) continue; const r = d.albedoReport(); if (r.length) out[d.species.id] = r } return out },
       rigMaterials: () => { const out: Record<string, string[]> = {}; for (const d of dinos) { if (out[d.species.id]) continue; const r = d.materialReport(); if (r.length) out[d.species.id] = r } return out },
       /** QA: draw state of the nearest dino of a species */
+      /** QA (M60): mixers are built lazily; nothing drawable may be without one */
+      anim: () => ({
+        dinos: dinos.length,
+        withMixer: dinos.filter((d) => d.hasAnim).length,
+        unanimated: dinos.filter((d) => d.unanimated).length,
+      }),
       /** QA: what the path queries cost (tools/qa-trek.mjs) */
       nav: () => ({ ...navStats }),
       /** QA: the most expensive single dino update since the last read */
@@ -1915,6 +1921,9 @@ async function boot(): Promise<void> {
     const tD0 = performance.now()
     // the frame's path-query allowance is handed out fresh (navmesh.ts)
     beginNavFrame()
+    // and the frame's allowance for building animation mixers ahead of the
+    // wake radius (dinos.ts, M60)
+    Dino.animBudget = 2
     // WHICH ANIMAL COST THE FRAME. `dinos` spikes to 25-40 ms while walking
     // (M55, tools/qa-trek.mjs) and the section timer cannot say whether that
     // is one animal doing something expensive or forty doing a little. One
