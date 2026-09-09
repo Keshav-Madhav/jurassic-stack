@@ -144,6 +144,11 @@ The worst frame on the island is 31 ms of scatter CPU — the next thing to budg
   frames over 25 ms, new programs and textures, what the path queries cost, and **which single
   animal's update was the most expensive** — plus where the walk got stuck, which is a map note as
   much as a perf one.
+- `tools/qa-mem.mjs` — `__g.mem()`'s breakdown of the JS heap (scene geometry, the detached source
+  roots, instance buffers, the baked grids) plus a reload loop, because a heap that CLIMBS across
+  reloads is a different problem from one that is merely big. For the other 90% of the heap, use
+  Chrome's sampling heap profiler over CDP **against `npm run dev`** — the production bundle's frame
+  names are minified and the profile is unreadable.
 - `tools/gates.mjs` — every gate, one verdict, `gate-perf` last. Counts checks and treats a gate that
   produced none as a failure (a crashed gate used to read exactly like a passing one).
 - **F3 in the HUD** — GPU ms (p10 of ~240 frames), CPU update/draw, calls, tris, pixel count, light
@@ -207,6 +212,38 @@ Two things this project used to do per frame are now baked and read:
 
 The test for anything else: does it change slowly, and does it cost a lot to compute? Then compute a
 few states offline or at load and interpolate — never per frame.
+
+## Memory (M57) — the budget nothing was counting
+
+`renderer.info` covers the GPU. The JS side had one number, `performance.memory`, and no breakdown.
+`__g.mem()` and `tools/qa-mem.mjs` give one now, and **F3 shows used / limit** so a player reporting a
+stuttery machine can say whether the tab is near its ceiling.
+
+**The island costs ~880 MB of JS heap after load** (Chrome's 4.4 GB tab limit), and only **80 MB** of
+that is anything the scene graph can see: scene geometry 20 · instance buffers 28 · the detached
+source GLBs the upload warden keeps 14.5 · the baked grids 17.8 (height 8.4, biomes 4.2, forest 4.2,
+sky view 1.0). Reloading settles at ~1.8 GB and stays there — big, not leaking.
+
+Chrome's **sampling heap profiler** against the dev build (unminified, so the frames have names)
+found the other 800 MB, and it is almost all the animals:
+
+| | Live at sample | What |
+|---|---|---|
+| `Object3D.copy` → `Bone` | **~180 MB** | `SkeletonUtils.clone` — one skeleton per animal, ~200 animals |
+| `dinos.ts load` → `clipAction` → `_bindAction` / `AnimationAction` / interpolants / `parseTrackName` | **~156 MB** | one `AnimationMixer`, up to five bound actions and their interpolants, per animal |
+| `cloneUniforms` in `getProgram` | ~40 MB | a uniform set per material instance |
+| `scatter.place` | ~32 MB | the node table |
+
+**The lever, unbuilt: a rig POOL.** Only a few dozen animals are ever drawn as rigs at once
+(`RIG_DIST`, and everything past it is a card or nothing), but all ~200 get a clone and a mixer at
+load. Handing out N rigs per species from a pool as animals wake would cut both of the top two rows
+by roughly 5×. It is a real refactor with real regression risk — the clone pump exists precisely
+because doing this work in play hitches — so it is written down, not attempted in passing.
+
+**Done in M57, because it was free:** the rig's scale and foot-lift are properties of the GLB, not of
+the individual, so they are measured once per species instead of once per animal — two
+`skinnedBounds` walks of up to 2500 vertices each, times ~200 clones, removed. Time to `ready`
+**6.2-6.4 s → 5.9 s**. (The cull spheres had been cached this way since M18; this is the other half.)
 
 ## Not doing
 

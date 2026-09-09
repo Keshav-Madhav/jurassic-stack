@@ -121,6 +121,9 @@ export class Dino {
   private cardZ = NaN
   private cardHeading = NaN
   private static warmed = new Set<string>()
+  /** the scale and foot-lift each species' rig needs — identical for every
+   *  clone, so it is measured once (M57) */
+  private static calib = new Map<string, { scale: number; dy: number; rawH: number }>()
   private static cullSpheres = new Map<string, THREE.Sphere[]>()
   readonly object = new THREE.Group()
   /** the loaded rig — hidden (not `object`, which doubles as "alive") while dormant */
@@ -303,20 +306,36 @@ export class Dino {
     // bind-pose bbox made trikes and the rex spawn at kaiju scale. Apply one
     // idle frame first, THEN normalize height from the true skinned bounds,
     // then drop feet to ground from those same bounds.
-    this.mixer.update(0.01)
-    this.object.updateMatrixWorld(true)
-    const bounds = this.skinnedBounds(model)
-    if (bounds) {
-      const s = this.species.height / Math.max(0.01, bounds.max.y - bounds.min.y)
-      model.scale.setScalar(s)
+    //
+    // ONCE PER SPECIES, NOT ONCE PER ANIMAL (M57). Both numbers this produces
+    // — the scale that makes the rig `species.height` tall, and the lift that
+    // puts its feet on the object's origin — are properties of the GLB, so
+    // every clone of a species arrives at exactly the same two floats. Each
+    // `skinnedBounds` call walks up to 2500 vertices through `getVertexPosition`
+    // (skinning maths per vertex), and this ran TWICE for each of ~200 clones.
+    // The cull spheres below have been cached per species since M18 for the
+    // same reason; this is the other half of that fix.
+    let calib = Dino.calib.get(this.species.id)
+    if (!calib) {
+      this.mixer.update(0.01)
       this.object.updateMatrixWorld(true)
-      const b2 = this.skinnedBounds(model)
-      if (b2) {
+      const bounds = this.skinnedBounds(model)
+      if (bounds) {
+        const s = this.species.height / Math.max(0.01, bounds.max.y - bounds.min.y)
+        model.scale.setScalar(s)
+        this.object.updateMatrixWorld(true)
+        const b2 = this.skinnedBounds(model)
         const groundY = this.object.getWorldPosition(new THREE.Vector3()).y
-        model.position.y -= b2.min.y - groundY
+        const dy = b2 ? -(b2.min.y - groundY) : 0
+        model.position.y += dy
+        calib = { scale: s, dy, rawH: +(bounds.max.y - bounds.min.y).toFixed(2) }
+        Dino.calib.set(this.species.id, calib)
       }
-      this.debugCalib = { rawH: +(bounds.max.y - bounds.min.y).toFixed(2), scale: +s.toFixed(3) }
+    } else {
+      model.scale.setScalar(calib.scale)
+      model.position.y += calib.dy
     }
+    if (calib) this.debugCalib = { rawH: calib.rawH, scale: +calib.scale.toFixed(3) }
     // per-mesh culling spheres from the posed skin, inflated for the animation's
     // reach — computed ONCE per species (it walks every skinned vertex; doing it
     // for 1500 clones stretched the load-time frames to 50 ms) and copied

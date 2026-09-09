@@ -35,6 +35,7 @@ import { HELD_SIZE } from './player'
 import { saveGame, loadGame, SAVE_VERSION, type SaveFile } from './save'
 import { heightAt, loadHeightmap, worldMeta, SPAWN, skyViewAt } from './heightmap'
 import { loadNavmesh, findPath, beginNavFrame, navStats, setNavBudget } from './navmesh'
+import { gridBytes } from './heightmap'
 import { WaterSystem } from './water'
 import { wildPopulation } from './population'
 import { GrassField } from './grass'
@@ -1021,6 +1022,46 @@ async function boot(): Promise<void> {
     },
     fps: () => hud.fps,
     /** ms per frame spent in JS (sim+update) vs the render call — tells CPU-bound from GPU-bound */
+    /** QA: where the JS heap goes. Memory is a budget too, and until M57 the
+     *  only number anyone had was `performance.memory` — one figure with no
+     *  breakdown. Geometry is counted once per BufferGeometry, so shared
+     *  geometry is not double-charged. */
+    mem: () => {
+      const seen = new Set<string>()
+      const geoBytes = (g: THREE.BufferGeometry | undefined): number => {
+        if (!g || seen.has(g.uuid)) return 0
+        seen.add(g.uuid)
+        let n = g.index?.array.byteLength ?? 0
+        for (const a of Object.values(g.attributes)) n += (a as THREE.BufferAttribute).array?.byteLength ?? 0
+        for (const list of Object.values(g.morphAttributes)) for (const a of list) n += a.array?.byteLength ?? 0
+        return n
+      }
+      const walk = (root: THREE.Object3D): { geo: number; inst: number } => {
+        let geo = 0, inst = 0
+        root.traverse((o) => {
+          const m = o as THREE.Mesh & { isInstancedMesh?: boolean; instanceMatrix?: THREE.BufferAttribute; instanceColor?: THREE.BufferAttribute }
+          geo += geoBytes(m.geometry as THREE.BufferGeometry | undefined)
+          if (m.isInstancedMesh) inst += (m.instanceMatrix?.array.byteLength ?? 0) + (m.instanceColor?.array.byteLength ?? 0)
+        })
+        return { geo, inst }
+      }
+      const inScene = walk(scene)
+      let rootGeo = 0
+      for (const r of warmRoots) rootGeo += walk(r).geo
+      const grids = gridBytes()
+      const perf = performance as Performance & { memory?: { usedJSHeapSize: number; jsHeapSizeLimit: number } }
+      const MB = (n: number) => +(n / 1e6).toFixed(1)
+      return {
+        heapMB: perf.memory ? MB(perf.memory.usedJSHeapSize) : 0,
+        limitMB: perf.memory ? MB(perf.memory.jsHeapSizeLimit) : 0,
+        sceneGeoMB: MB(inScene.geo),
+        instanceMB: MB(inScene.inst),
+        detachedRootGeoMB: MB(rootGeo),
+        gridsMB: MB(Object.values(grids).reduce((a, b) => a + b, 0)),
+        grids: Object.fromEntries(Object.entries(grids).map(([k, v]) => [k, MB(v)])),
+        roots: warmRoots.length,
+      }
+    },
     perf: () => ({ update: +perfUpdate.toFixed(2), render: +perfRender.toFixed(2), dinos: +perfSec.dinos.toFixed(2), scatter: +perfSec.scatter.toFixed(2), grass: +perfSec.grass.toFixed(2), terrain: +perfSec.terrain.toFixed(2), physics: +perfSec.physics.toFixed(2) }),
     terrainWorker: () => terrain.workerState(),
     /** QA: fog distance multiplier (aerials use 6) */
@@ -2236,6 +2277,13 @@ async function boot(): Promise<void> {
   // it. A player on another machine screenshots this and we learn what their
   // hardware actually does — which is why the GPU's name is on it.
   let perfAccum = 0
+  /** Chrome-only, and deliberately blunt: used / limit, in MB. */
+  function jsHeapLine(): string {
+    const m = (performance as Performance & { memory?: { usedJSHeapSize: number; jsHeapSizeLimit: number } }).memory
+    if (!m) return 'not reported by this browser'
+    return `${Math.round(m.usedJSHeapSize / 1e6)} / ${Math.round(m.jsHeapSizeLimit / 1e6)} MB`
+  }
+
   function perfTick(dt: number): void {
     perfAccum += dt
     if (perfAccum < 0.5) return
@@ -2253,6 +2301,9 @@ async function boot(): Promise<void> {
       ['pixels', `${px.x}×${px.y} @${pixelRatio.toFixed(2)} (${(px.x * px.y / 1e6).toFixed(1)} Mpx)`],
       ['lights lit/slots', `${lights.debug().filter((l) => l.intensity > 0).length} lit · ${lights.slots} slots · ${lights.emitterCount} sources`],
       ['dinos awake / cards', `${awake.length} / ${cards}`],
+      // memory is a budget too, and a player reporting a stuttery machine can
+      // now say whether it is close to the tab's ceiling (M57)
+      ['JS heap', jsHeapLine()],
       ['', ''],
       ['gpu', GpuTimer.rendererName(renderer.getContext() as WebGL2RenderingContext)],
     ])

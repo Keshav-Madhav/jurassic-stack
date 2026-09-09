@@ -109,7 +109,8 @@ const bootRoll = await page.evaluate(() => {
   for (const l of window.__links ?? []) { const k = `${l.type} · ${l.name}`; c[k] = (c[k] ?? 0) + 1 }
   return Object.entries(c).sort((a, b) => b[1] - a[1])
 })
-console.log(`load linked ${boot} programs:`)
+const bootDel = await page.evaluate(() => window.__deletes ?? 0)
+console.log(`load linked ${boot} programs and DELETED ${bootDel} of them:`)
 for (const [name, n] of bootRoll) console.log(`   ${String(n).padStart(3)} × ${name}`)
 console.log()
 

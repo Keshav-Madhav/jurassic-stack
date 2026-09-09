@@ -176,6 +176,17 @@ export function ambientAt(x: number, z: number): number {
  *  — the water shader reads the ground under each fragment for shore fades
  *  and foam. uv = ((x + HALF) / res + 0.5) / 2048. */
 let heightTex: THREE.DataTexture | null = null
+/** QA: what the baked grids cost in JS memory (tools/qa-mem.mjs). Memory is a
+ *  budget like any other, and nothing was counting it (M57). */
+export function gridBytes(): Record<string, number> {
+  return {
+    height: grid?.byteLength ?? 0,
+    biomes: biomes?.byteLength ?? 0,
+    forest: forest?.byteLength ?? 0,
+    skyview: skyview?.byteLength ?? 0,
+  }
+}
+
 export function heightTexture(): THREE.DataTexture {
   if (heightTex) return heightTex
   if (!grid) throw new Error('heightTexture before loadHeightmap()')
