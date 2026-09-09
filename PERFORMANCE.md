@@ -287,6 +287,25 @@ the individual, so they are measured once per species instead of once per animal
 `skinnedBounds` walks of up to 2500 vertices each, times ~200 clones, removed. Time to `ready`
 **6.2-6.4 s → 5.9 s**. (The cull spheres had been cached this way since M18; this is the other half.)
 
+### Where the memory line ended (re-profiled after M58–M63)
+
+The same sampling profile, run again on the finished work. Every one of the original top rows has
+collapsed, and the ranking is now something else entirely:
+
+| | M57 | now |
+|---|---|---|
+| `Bone` (skeleton clones) | ~180 MB | **3.8 MB** |
+| `AnimationMixer` bindings | ~156 MB | **1.2 MB** |
+| `cloneUniforms` | ~40 MB | **2.1 MB** |
+| **`scatter.place` — the node table** | ~32 MB | **32 MB** (untouched, now the largest) |
+| JS heap after load | 882 MB | **~325-350 MB** |
+
+**The node table is the next lever and it is deliberately not taken.** Tens of thousands of scatter
+nodes as JS objects (`{x, y, z, scale, rotY, tint, …}`); parallel typed arrays would take most of
+the 32 MB and speed the visibility pass. But every consumer — raycast, harvest, damage, colliders,
+save/restore — indexes `this.nodes[…]`, so it is a broad refactor for 30 MB against a heap that is
+already down 60%. Bad trade today; written down for when it is not.
+
 ## The terrain LOD cache (M62) — and two wrong answers before the right one
 
 Every `(chunk, LOD)` geometry was cached for the life of the session. A LOD0 chunk is 4225 vertices
