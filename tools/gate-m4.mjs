@@ -164,6 +164,33 @@ check(!(await g('window.__g.game.riding()')), 'dismounted')
   await page.evaluate(([x, z]) => window.__g.game.hitNode('tree', 1, x, z), [t.x, t.z])
   const mid = await page.evaluate(([x, z]) => window.__g.game.nodeState('tree', x, z), [t.x, t.z])
   check(mid.wound > 0 && mid.drawnTint < before.drawnTint, `a struck tree darkens (tint ${before.drawnTint} → ${mid.drawnTint})`)
+  // ...AND NO OTHER TREE DOES. Since M58 every cell of a kind shares ONE
+  // geometry and ONE material set, which is only safe because damage is
+  // per-INSTANCE colour and never material state. If that were ever to change,
+  // hitting one tree would darken every tree on the island — so count how many
+  // instance colours in the whole scatter actually moved. It should be a
+  // handful (this trunk's submeshes), not hundreds.
+  {
+    const snap = () => page.evaluate(() => {
+      const out = []
+      window.__g.scene.getObjectByName('scatter').traverse((o) => {
+        if (o.isInstancedMesh && o.instanceColor) out.push(Array.from(o.instanceColor.array.slice(0, o.count * 3)))
+      })
+      return out
+    })
+    const a = await snap()
+    await page.evaluate(([x, z]) => window.__g.game.hitNode('tree', 1, x, z), [t.x, t.z])
+    await page.waitForTimeout(300)
+    const b = await snap()
+    let moved = 0
+    for (let m = 0; m < Math.min(a.length, b.length); m++) {
+      const A = a[m], B = b[m]
+      for (let i = 0; i < Math.min(A.length, B.length); i += 3) {
+        if (A[i] !== B[i] || A[i + 1] !== B[i + 1] || A[i + 2] !== B[i + 2]) moved++
+      }
+    }
+    check(moved > 0 && moved < 12, `one blow moves ONE tree's instance colours, not the island's (${moved} instances)`)
+  }
   check((await g('window.__g.game.count("wood")')) > wood0, 'and the swing already paid a chip of wood')
   await page.evaluate(([x, z]) => window.__g.game.hitNode('tree', 9, x, z), [t.x, t.z])
   const felled = await page.evaluate(([x, z]) => window.__g.game.nodeState('tree', x, z), [t.x, t.z])

@@ -360,7 +360,17 @@ export class Dino {
       Dino.warmed.add(this.species.id)
       Dino.onFirstRig(this.species.id, model, this)
     }
+    // A CLONE THAT LANDS ON AN ANIMAL YOU CAN SEE MUST ARRIVE ANIMATED.
+    // `setRig` leaves the model ATTACHED unless the animal is dormant, and the
+    // clone pump runs on its own requestAnimationFrame — so a rig could land
+    // after the frame's dino updates and before the render, and be drawn once
+    // in its BIND POSE before `update()` reached the guard that builds the
+    // mixer. One frame, at 380 m, a few pixels wide — and still a hole in the
+    // invariant, caught by flying across the island and watching `unanimated`
+    // rather than by any gate (M63). A dormant animal still waits: it is
+    // detached, nothing can draw it, and that is where the saving lives.
     if (this.dormant) this.object.remove(model)
+    else this.buildAnim()
   }
 
 
