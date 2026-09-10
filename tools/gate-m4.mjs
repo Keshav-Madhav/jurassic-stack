@@ -5,6 +5,7 @@
 //   npm run build && npx vite preview --port 4173 &
 //   node tools/gate-m4.mjs [url]
 import { chromium } from 'playwright-core'
+import { wipeAndReload } from './_page.mjs'
 
 const url = process.argv[2] ?? 'http://localhost:4173'
 let failed = false
@@ -26,8 +27,7 @@ const g = (expr) => page.evaluate(expr)
 await page.goto(url, { waitUntil: 'networkidle' })
 await ready()
 // fresh world (also proves reload works even before the loop starts)
-await page.evaluate(() => window.__g.game.wipeAndReload()).catch(() => {})
-await page.waitForTimeout(500)
+await wipeAndReload(page)
 await ready()
 // The homestead tier is tablet-gated since M68 and this gate is about BUILDING
 // a hut, not about finding the recipe for one. Grant the tablets a player

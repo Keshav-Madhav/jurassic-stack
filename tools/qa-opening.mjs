@@ -21,6 +21,7 @@
 //
 //   node tools/qa-opening.mjs [url] [--budget=600]
 import { chromium } from 'playwright-core'
+import { wipeAndReload } from './_page.mjs'
 
 const args = process.argv.slice(2)
 const url = args.find((a) => !a.startsWith('--')) ?? 'http://localhost:4173'
@@ -34,9 +35,7 @@ await page.goto(url, { waitUntil: 'networkidle' })
 await page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 90000 })
 
 // a brand new island: no save, nothing learned, nothing in the pack
-await page.evaluate(() => window.__g.game.wipeAndReload())
-await page.waitForTimeout(2500)
-await page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 90000 })
+await wipeAndReload(page)
 await page.waitForTimeout(2500)
 
 const T0 = Date.now()

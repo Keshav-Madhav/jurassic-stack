@@ -2,6 +2,7 @@
 // one-hit harvest, instant-KO + instant-tame, survival untouched after toggle-off.
 //   node tools/gate-creative.mjs [url]
 import { chromium } from 'playwright-core'
+import { wipeAndReload } from './_page.mjs'
 const url = process.argv[2] ?? 'http://localhost:4173'
 let failed = false
 const check = (ok, msg) => { console.log(`${ok ? 'PASS' : 'FAIL'} ${msg}`); if (!ok) failed = true }
@@ -10,9 +11,7 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 720 } })
 page.on('pageerror', (e) => { console.error('page error:', e.message); failed = true })
 await page.goto(url, { waitUntil: 'networkidle' })
 await page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 60000 })
-await page.evaluate(() => window.__g.game.wipeAndReload()).catch(() => {})
-await page.waitForTimeout(500)
-await page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 60000 })
+await wipeAndReload(page)
 await page.waitForTimeout(1500)
 const g = (expr) => page.evaluate(expr)
 

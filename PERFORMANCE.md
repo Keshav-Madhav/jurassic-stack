@@ -352,6 +352,18 @@ it rendered charcoal grey on charcoal grey. Broken water is a cloud of scatterin
 stays bright in shade — which is why you can see a waterfall from a mile away — so the term is the
 physically honest one, not a fudge.
 
+## The interiors (M73)
+
+Two changes that cost nothing and one that pays. The pine floor is a second colour pair in
+`terrain-paint.ts` chosen by `forestKindAt` — one byte-grid tap per vertex, on a path that already
+does four of them, and `terrain-worker.ts` calls `loadHeightmap` so it has `forest.bin` too: no
+seam between main-thread and worker-built chunks. The marsh's `humid` blend is one `biomeAt` tap
+per frame, on the line that already does the water query.
+
+The one that pays: grass under pines drops from 45% of candidates to 14%, and the swamp's fog far
+goes 1500 m → 300 m, which is a real cut in what the camera's far plane admits there (the far
+plane tracks fog far × 1.08).
+
 ## Not doing
 
 - N8AO / anything that renders the scene a second time — see the GTAO measurement above.

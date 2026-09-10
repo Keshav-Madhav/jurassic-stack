@@ -2,6 +2,7 @@
 // a chest that actually holds things across a reload.
 //   node tools/gate-homestead.mjs [url]
 import { chromium } from 'playwright-core'
+import { wipeAndReload } from './_page.mjs'
 
 const url = process.argv[2] ?? 'http://localhost:4173'
 let failed = false
@@ -13,8 +14,7 @@ page.on('pageerror', (e) => console.error('[err]', e.message.slice(0, 160)))
 const ready = () => page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 90000 })
 await page.goto(url, { waitUntil: 'networkidle' })
 await ready()
-await page.evaluate(() => window.__g.game.wipeAndReload()).catch(() => {})
-await page.waitForTimeout(1500)
+await wipeAndReload(page)
 await ready()
 // The homestead tier is tablet-gated since M68, and the checks BELOW are about
 // the tier itself — the bench rule, the chest, the save — not about finding it.
@@ -141,8 +141,7 @@ check(woodInChest === woodBefore - 1, `the chest still holds ${woodBefore - 1} w
   }
 
   // a fresh island knows nothing
-  await page.evaluate(() => window.__g.game.wipeAndReload())
-  await page.waitForTimeout(2500)
+  await wipeAndReload(page)
   await ready()
   await page.waitForTimeout(3000)
   const fresh = await eng()

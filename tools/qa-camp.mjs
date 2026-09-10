@@ -3,6 +3,7 @@
 // (icons, cursor), and check the panel closes on Tab/Esc/✕.
 //   node tools/qa-camp.mjs [url] [prefix]
 import { chromium } from 'playwright-core'
+import { wipeAndReload } from './_page.mjs'
 const url = process.argv[2] ?? 'http://localhost:4173'
 const prefix = process.argv[3] ?? 'shots/camp'
 const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-gl=angle'] })
@@ -10,9 +11,7 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 720 } })
 page.on('pageerror', (e) => console.error('[err]', e.message.slice(0, 200)))
 await page.goto(url, { waitUntil: 'networkidle' })
 await page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 60000 })
-await page.evaluate(() => window.__g.game.wipeAndReload()).catch(() => {})
-await page.waitForTimeout(1500)
-await page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 60000 })
+await wipeAndReload(page)
 await page.waitForTimeout(3000)
 const g = (expr) => page.evaluate(expr)
 await g('window.__g.game.setGod(true); window.__g.setTime(0.5); window.__g.teleport(-30, 1430)')

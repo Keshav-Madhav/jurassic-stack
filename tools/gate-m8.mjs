@@ -1,6 +1,7 @@
 // M8 opener gate: keystones exist at the five pre-caldera ruin sites, collect
 // works, persists through save/reload, and the wayfinder targets sanely.
 import { chromium } from 'playwright-core'
+import { wipeAndReload } from './_page.mjs'
 const url = process.argv[2] ?? 'http://localhost:4173'
 let failed = false
 const check = (ok, msg) => { console.log(`${ok ? 'PASS' : 'FAIL'} ${msg}`); if (!ok) failed = true }
@@ -9,9 +10,7 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 720 } })
 page.on('pageerror', (e) => { console.error('page error:', e.message); failed = true })
 await page.goto(url, { waitUntil: 'networkidle' })
 await page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 60000 })
-await page.evaluate(() => window.__g.game.wipeAndReload()).catch(() => {})
-await page.waitForTimeout(500)
-await page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 60000 })
+await wipeAndReload(page)
 await page.waitForTimeout(1500)
 const g = (expr) => page.evaluate(expr)
 
@@ -98,9 +97,7 @@ const climb = await page.evaluate(() => {
 check(climb.end - climb.start > 90 && climb.worstDrop < 1.5 && climb.worstStep < 6, `ravine climbs ${climb.start.toFixed(0)}→${climb.end.toFixed(0)} m, worst drop ${climb.worstDrop.toFixed(2)}, worst step ${climb.worstStep.toFixed(2)} (per ~5 m)`)
 check(!(await g('window.__g.game.beaconLit()')), 'beacon cold with the door just opened')
 // a fresh save: the beacon must refuse without the keystones
-await page.evaluate(() => window.__g.game.wipeAndReload()).catch(() => {})
-await page.waitForTimeout(1500)
-await page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 60000 })
+await wipeAndReload(page)
 await page.waitForTimeout(800)
 await page.evaluate(() => { const b = window.__g.game.beaconSite(); window.__g.teleport(b.x, b.z + 9) })
 await page.waitForTimeout(400)
@@ -272,9 +269,7 @@ if (dune && meadow) {
 // to put down, and therefore not a choice at all. These checks are that
 // sentence, in order.
 {
-  await page.evaluate(() => window.__g.game.wipeAndReload())
-  await page.waitForTimeout(2500)
-  await page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 90000 })
+  await wipeAndReload(page)
   await page.waitForTimeout(3000)
   const hudLine = () => page.evaluate(() => {
     const el = document.getElementById('hud-wayfinder')
@@ -282,7 +277,14 @@ if (dune && meadow) {
   })
   const toast = () => page.evaluate(() => document.getElementById('hud-toast')?.textContent ?? '')
 
-  // a fresh island: the relic is on the beach and you are not carrying it
+  // a fresh island: the relic is on the beach and you are not carrying it.
+  // ...and PROVE the island is fresh first (M73). This block used to inherit
+  // the previous one's `give('wayfinder', 1)` whenever the reload had not
+  // landed yet, and then reported it as five separate Wayfinder failures —
+  // "no bearing on the HUD", "N guides you nowhere", "pressing E takes it"
+  // — none of which was about the Wayfinder at all.
+  check((await page.evaluate(() => window.__g.game.count('wayfinder'))) === 0,
+    'the island really is wiped: an empty pack before any of this')
   const relic = await page.evaluate(() => window.__g.game.wayfinder())
   check(relic.taken === false, 'a fresh island has the Wayfinder still lying where it washed up')
   const spawn = await page.evaluate(() => window.__g.game.spawn())
