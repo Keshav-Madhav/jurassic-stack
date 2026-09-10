@@ -5,7 +5,7 @@ export type ItemId =
   | 'hatchet' | 'spear' | 'furcoat' | 'fur'
   | 'campfire' | 'torch' | 'foundation' | 'wall' | 'ceiling' | 'bedroll' | 'workbench' | 'chest'
   | 'fence' | 'canopy'
-  | 'saddle'
+  | 'saddle' | 'wayfinder'
 
 export interface ItemDef {
   id: ItemId
@@ -39,6 +39,10 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   fence: { id: 'fence', name: 'Fence', icon: '🚧', placeable: true },
   canopy: { id: 'canopy', name: 'Canopy', icon: '⛺', placeable: true },
   saddle: { id: 'saddle', name: 'Saddle', icon: '🪑' },
+  // the relic, not a recipe: found once on the first beach, and the only
+  // thing in the game that can be given AWAY to change how the game plays
+  // (a chest full of Wayfinder is a sandbox — PLAN, M71)
+  wayfinder: { id: 'wayfinder', name: 'Wayfinder', icon: '🧭' },
 }
 
 export interface Recipe {

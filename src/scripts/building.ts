@@ -259,7 +259,9 @@ export class Building {
 
   /** the kit model for a piece, sized to the piece's box */
   private kitMesh(p: Piece, size: THREE.Vector3): THREE.Object3D {
-    const file = ITEM_MODEL[p.kind as ItemId]
+    // every PieceKind has a kit model (the Wayfinder is the one item without
+    // one, and it is not placeable) — M71
+    const file = ITEM_MODEL[p.kind as ItemId]!
     switch (p.kind) {
       case 'foundation': case 'ceiling': return this.kit!.instance(file, { width: CELL })
       case 'wall': return this.kit!.instance(file, { height: WALL_H })

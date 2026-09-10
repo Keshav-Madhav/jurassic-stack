@@ -255,13 +255,69 @@ if (dune && meadow) {
   check((await c(0, 0, 0, 100)) === 'S', `+z is SOUTH (got ${await c(0, 0, 0, 100)})`)
   check((await c(0, 0, 100, -100)) === 'NE', `+x -z is NE (got ${await c(0, 0, 100, -100)})`)
   check((await c(0, 0, -100, 100)) === 'SW', `-x +z is SW (got ${await c(0, 0, -100, 100)})`)
-  // and the real toast agrees with it end to end
-  await page.evaluate(() => { window.__g.game.setGod(true); window.__g.teleport(-120, 1500) })
+  // and the real toast agrees with it end to end. NB the Wayfinder is a
+  // carried relic since M71, so this has to be holding one — pressing N
+  // empty-handed correctly refuses now.
+  await page.evaluate(() => { window.__g.game.setGod(true); window.__g.game.give('wayfinder', 1); window.__g.teleport(-120, 1500) })
   await page.waitForTimeout(1500)
   await page.keyboard.press('KeyN')
   await page.waitForTimeout(350)
   const said = await page.evaluate(() => document.getElementById('hud-toast')?.textContent ?? '')
   check(/Wayfinder: .+ (N|NE|E|SE|S|SW|W|NW) · \d+m/.test(said), `the Wayfinder still reads out a bearing ("${said}")`)
+}
+
+// THE WAYFINDER IS AN ITEM YOU CAN PUT DOWN (M71). PLAN has always described
+// it as a relic — "carry it = guided playthrough; leave it in a chest = pure
+// sandbox" — and it was the N key and a toast since M20: always on, impossible
+// to put down, and therefore not a choice at all. These checks are that
+// sentence, in order.
+{
+  await page.evaluate(() => window.__g.game.wipeAndReload())
+  await page.waitForTimeout(2500)
+  await page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 90000 })
+  await page.waitForTimeout(3000)
+  const hudLine = () => page.evaluate(() => {
+    const el = document.getElementById('hud-wayfinder')
+    return el && !el.hidden ? el.textContent : null
+  })
+  const toast = () => page.evaluate(() => document.getElementById('hud-toast')?.textContent ?? '')
+
+  // a fresh island: the relic is on the beach and you are not carrying it
+  const relic = await page.evaluate(() => window.__g.game.wayfinder())
+  check(relic.taken === false, 'a fresh island has the Wayfinder still lying where it washed up')
+  const spawn = await page.evaluate(() => window.__g.game.spawn())
+  const away = Math.hypot(relic.x - spawn.x, relic.z - spawn.z)
+  check(away > 20 && away < 140, `it is a short walk from where you wake, not underfoot (${Math.round(away)} m)`)
+  check((await hudLine()) === null, 'and no bearing on the HUD until you hold it')
+  await page.keyboard.press('KeyN')
+  await page.waitForTimeout(400)
+  check((await toast()).includes('no Wayfinder'), 'N without the relic guides you nowhere')
+
+  // pick it up
+  await page.evaluate(() => { const g = window.__g; g.game.setGod(true); const w = g.game.wayfinder(); g.teleport(w.x, w.z + 1.5) })
+  await page.waitForTimeout(2000)
+  await page.evaluate(() => window.__g.game.interact())
+  await page.waitForTimeout(900)
+  check((await page.evaluate(() => window.__g.game.count('wayfinder'))) === 1, 'walking up to it and pressing E takes it')
+  check((await page.evaluate(() => window.__g.game.wayfinder().taken)) === true, 'and it is gone from the sand')
+  await page.waitForTimeout(700)
+  const carried = await hudLine()
+  check(!!carried && /🧭\s+(N|NE|E|SE|S|SW|W|NW)\s+\d+m/.test(carried), `carrying it puts a live bearing on the HUD ("${carried}")`)
+
+  // ...and the HUD and the key cannot disagree, because they read one function
+  await page.keyboard.press('KeyN')
+  await page.waitForTimeout(400)
+  const said = await toast()
+  const t = await page.evaluate(() => window.__g.game.wayfinderTarget())
+  check(said.includes(t.dir) && said.includes(String(t.d)), `the key agrees with the HUD (${t.dir} ${t.d}m)`)
+
+  // STOW IT — the sandbox switch, and the whole point of making it an item
+  await page.evaluate(() => window.__g.game.take('wayfinder', 1))
+  await page.waitForTimeout(900)
+  check((await hudLine()) === null, 'stowing it in a chest takes the bearing off the HUD')
+  await page.keyboard.press('KeyN')
+  await page.waitForTimeout(400)
+  check((await toast()).includes('not carrying'), 'and N goes quiet — the island stops telling you where to go')
 }
 
 await browser.close()

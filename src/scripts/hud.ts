@@ -17,6 +17,7 @@ export class Hud {
   private timeEl: HTMLElement
   private hpEl: HTMLElement
   private compassEl!: HTMLElement
+  private wayEl!: HTMLElement
   private modeEl!: HTMLElement
   private hotbarEl: HTMLElement
   private promptEl: HTMLElement
@@ -51,6 +52,7 @@ export class Hud {
         <span id="hud-time"></span>
         <span id="hud-hp"></span>
         <span id="hud-compass"></span>
+        <span id="hud-wayfinder" hidden></span>
         <span id="hud-mode" hidden>CREATIVE</span>
       </div>
       <button id="hud-gear" title="Settings (O)" aria-label="Settings">⚙</button>
@@ -76,6 +78,7 @@ export class Hud {
     this.timeEl = root.querySelector('#hud-time')!
     this.hpEl = root.querySelector('#hud-hp')!
     this.compassEl = root.querySelector('#hud-compass')!
+    this.wayEl = root.querySelector('#hud-wayfinder')!
     this.modeEl = root.querySelector('#hud-mode')!
     this.hotbarEl = root.querySelector('#hud-hotbar')!
     this.promptEl = root.querySelector('#hud-prompt')!
@@ -153,6 +156,14 @@ export class Hud {
   }
 
   private hintTimer = 0
+  /** THE WAYFINDER'S LIVE BEARING (M71), shown only while the relic is in the
+   *  pack. `null` hides it — which is what stowing it in a chest looks like. */
+  setWayfinder(text: string | null): void {
+    if (text === null) { this.wayEl.hidden = true; return }
+    this.wayEl.hidden = false
+    if (this.wayEl.textContent !== text) this.wayEl.textContent = text
+  }
+
   /** the onboarding line: lower, wider, warm — holds 5.5 s */
   hint(msg: string): void {
     const el = this.root.querySelector('#hud-hint') as HTMLElement

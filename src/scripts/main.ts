@@ -28,6 +28,7 @@ import { DinoImpostors } from './dino-impostors'
 import { Survival, FOODS, type FoodId } from './survival'
 import { Onboarding } from './onboarding'
 import { Engrams, ENGRAMS } from './engrams'
+import { Wayfinder } from './wayfinder'
 import { Inventory } from './inventory'
 import { Chests } from './chests'
 import { ITEMS, RECIPES, type ItemId } from './items'
@@ -156,6 +157,13 @@ async function boot(): Promise<void> {
   // THE RUINS ARE THE TECH TREE (M68): the homestead tier is found, not
   // levelled into. A save written before tablets existed keeps everything it
   // could already make — see Engrams.restore.
+  // THE WAYFINDER (M71): on the WET SAND, not in the meadow you wake in.
+  // Dropped a few steps from spawn it was invisible in knee-high grass at 17 m
+  // — a relic nobody can see is not a relic. The tideline (M65's shellbed
+  // band, z >= 1620 here) is bare pale sand, and it is where a player goes
+  // first anyway, because they are thirsty. You wake, you walk to the water,
+  // and the thing that washed up with you is lying there.
+  const wayfinder = new Wayfinder(SPAWN.x + 9, SPAWN.z + 72, lights)
   const engrams = new Engrams()
   engrams.restore(save?.engrams as string[] | undefined, !!save && save.engrams === undefined)
   engrams.onLearn = (e) => {
@@ -238,6 +246,10 @@ async function boot(): Promise<void> {
   const keystones = new Keystones(lights)
   keystones.build()
   scene.add(keystones.group)
+  wayfinder.build()
+  wayfinder.group.name = 'wayfinder'
+  scene.add(wayfinder.group)
+  if (save?.wayfinderTaken) wayfinder.take()
   keystones.group.name = 'keystones'
   if (save?.keystones) keystones.restore(save.keystones as string[])
   keystones.onCollect = () => {
@@ -342,6 +354,8 @@ async function boot(): Promise<void> {
   const post = new Post(renderer, scene, cam.camera)
   // the dark places (PLAN beat 4): the terrain is the floor, this is the roof
   let caveDark = 0
+  /** seconds since the Wayfinder's HUD bearing was last recomputed (M71) */
+  let wayTick = 0
   /** 0..1, how far under the water the CAMERA is (M67) */
   let submerged = 0
   const caves = new Caves()
@@ -817,6 +831,14 @@ async function boot(): Promise<void> {
       return true
     }
     // keystones (the arc's thread)
+    // the Wayfinder, lying in the sand
+    if (wayfinder.takeNear(f0.x, f0.z)) {
+      inventory.add('wayfinder', 1)
+      sfx.play('ui-confirm', { volume: 0.8 })
+      hud.toast('🧭 A bronze rose, half-buried. It turns toward something inland.', 6)
+      hud.hint('N asks the Wayfinder where to go. Leave it in a chest to go your own way.')
+      return true
+    }
     const got = keystones.collectNear(f0.x, f0.z, 4, f0.y + 1.3)
     if (got) {
       const n = keystones.collectedCount
@@ -927,6 +949,40 @@ async function boot(): Promise<void> {
     return COMPASS[Math.round(ang / 45) % 8]
   }
 
+  /**
+   * WHAT THE WAYFINDER IS POINTING AT, or null when there is nothing left to
+   * seek. Extracted from the N key in M71 so the live HUD bearing and the
+   * key's toast cannot drift apart — the same class of bug as the compass
+   * itself, which pointed east for west for months because the maths had no
+   * second reader.
+   */
+  const wayfinderTarget = (): { x: number; z: number; label: string } | null => {
+    const f = feetPos()
+    const gate = worldMeta?.ruinSites.find((r) => r.tag === 'caldera-gate')
+    // A TABLET YOU HAVE NOT READ OUTRANKS A KEYSTONE (M68) — but only while it
+    // is genuinely nearer. The tablets are what open the game up (a bed, a
+    // bench, a saddle); the keystones are the arc's thread, and someone
+    // hunting stones should not be sent 2 km sideways for a recipe.
+    const tablet = engrams.nearestUnread(f.x, f.z, (tag) => {
+      const r = worldMeta!.ruinSites.find((q) => q.tag === tag)
+      return r ? { x: r.x, z: r.z + 3.5 } : null
+    })
+    const stone = !keystones.enough ? keystones.nearestMissing(f.x, f.z) : null
+    const stoneD = stone ? Math.hypot(stone.x - f.x, stone.z - f.z) : Infinity
+    // OPENING vs ARC. Twelve keystones against seven tablets means a keystone
+    // almost always wins on distance and the tablets would never be pointed at
+    // — which defeats them, because a player who does not know they exist will
+    // not go looking. While you are still in the opening (under three read) it
+    // answers the question you actually have: a bed, a bench, a saddle. After
+    // that it hands back to the arc and picks whichever is nearer.
+    const useTablet = tablet !== null && (engrams.count < 3 || tablet.d < stoneD)
+    if (useTablet) return { x: tablet!.x, z: tablet!.z, label: `a tablet (${ITEMS[tablet!.e.recipe].name.toLowerCase()})` }
+    if (stone) return { x: stone.x, z: stone.z, label: 'keystone' }
+    if (doorOpen && !beaconLit) return { x: beaconSite.x, z: beaconSite.z, label: 'the beacon' }
+    if (gate) return { x: gate.x, z: gate.z, label: 'the caldera gate' }
+    return null
+  }
+
   let lastSpaceAt = 0
   addEventListener('keydown', (e) => {
     // NOTHING RESPONDS UNTIL THE WORLD IS UP. The boot card sits at z-index 20
@@ -982,33 +1038,20 @@ async function boot(): Promise<void> {
       lastSpaceAt = now
     }
     if (e.code === 'KeyN') {
+      // CARRYING IT IS THE WHOLE POINT (M71). Without the relic there is no
+      // guidance at all — which is what makes leaving it in a chest a real
+      // choice rather than a setting nobody would find.
+      if (!inventory.count('wayfinder')) {
+        hud.toast(wayfinder.isTaken ? 'You are not carrying the Wayfinder.' : 'You have no Wayfinder — something glints in the sand near where you woke.')
+        return
+      }
       const f = feetPos()
-      const gate = worldMeta?.ruinSites.find((r) => r.tag === 'caldera-gate')
-      // A TABLET YOU HAVE NOT READ OUTRANKS A KEYSTONE (M68) — but only while
-      // it is genuinely nearer. The tablets are what open the game up (a bed,
-      // a bench, a saddle); the keystones are the arc's thread, and someone
-      // hunting stones should not be sent 2 km sideways for a recipe.
-      const tablet = engrams.nearestUnread(f.x, f.z, (tag) => {
-        const r = worldMeta!.ruinSites.find((q) => q.tag === tag)
-        return r ? { x: r.x, z: r.z + 3.5 } : null
-      })
-      const stone = !keystones.enough ? keystones.nearestMissing(f.x, f.z) : null
-      const stoneD = stone ? Math.hypot(stone.x - f.x, stone.z - f.z) : Infinity
-      // OPENING vs ARC. There are twelve keystones and seven tablets, so on
-      // pure distance a keystone almost always wins and the tablets would
-      // never be pointed at once — which defeats them, because a player who
-      // does not know they exist will not go looking. So while you are still
-      // in the opening (under three read) the Wayfinder answers the question
-      // you actually have — "what do I do?" — with a bed, a bench, a saddle.
-      // After that it hands back to the arc and simply picks whichever is
-      // nearer.
-      const opening = engrams.count < 3
-      const useTablet = tablet !== null && (opening || tablet.d < stoneD)
-      const target = useTablet ? tablet : stone ?? (doorOpen && !beaconLit ? beaconSite : gate ?? null)
+      const target = wayfinderTarget()
       if (target) {
         const d = Math.hypot(target.x - f.x, target.z - f.z)
-        const label = useTablet ? `a tablet (${ITEMS[tablet!.e.recipe].name.toLowerCase()})` : stone ? 'keystone' : doorOpen && !beaconLit ? 'the beacon' : 'the caldera gate'
-        hud.toast(`Wayfinder: ${label} ${compass(f.x, f.z, target.x, target.z)} · ${Math.round(d)}m`)
+        hud.toast(`Wayfinder: ${target.label} ${compass(f.x, f.z, target.x, target.z)} · ${Math.round(d)}m`)
+      } else {
+        hud.toast('The Wayfinder turns idly. There is nothing left to seek.')
       }
     }
     if (e.code === 'KeyE') interact()
@@ -1043,6 +1086,7 @@ async function boot(): Promise<void> {
     survival: survival.serialize(),
     hints: onboarding.serialize(),
     engrams: engrams.serialize(),
+    wayfinderTaken: wayfinder.isTaken,
     }
   }
   setInterval(() => void saveGame(collectSave()), 30_000)
@@ -1631,6 +1675,17 @@ async function boot(): Promise<void> {
         playerHp = Math.max(1, Math.min(100, playerHp + f.hp))
         return true
       },
+      /** QA (M71): the Wayfinder relic — where it lies and whether it is lifted */
+      wayfinder: () => wayfinder.debug(),
+      /** QA (M71): what the relic is pointing at right now */
+      wayfinderTarget: () => {
+        const t = wayfinderTarget()
+        if (!t) return null
+        const f = feetPos()
+        return { ...t, dir: compass(f.x, f.z, t.x, t.z), d: Math.round(Math.hypot(t.x - f.x, t.z - f.z)) }
+      },
+      /** QA: put an item out of the pack, as moving it into a chest does */
+      take: (id: ItemId, n = 1) => inventory.remove(id, n),
       /** QA (M68): the tablets — what has been read, what is known */
       engrams: () => engrams.debug(),
       /** QA: where the tablets are, for the opening run (tools/qa-opening.mjs) */
@@ -2158,6 +2213,20 @@ async function boot(): Promise<void> {
     scatter.pumpColliders(physics)
     scatter.updateHits(dt) // the wobble when you hit something, and felled trees going over
     advanceWind(dt) // the one clock every wind-bent material shares (M66)
+    wayfinder.update(dt)
+    // THE LIVE BEARING (M71): twice a second, and only while the relic is in
+    // the pack. Stow it in a chest and the line goes away — which is what
+    // "leave it behind to go pure sandbox" looks like on screen.
+    wayTick += dt
+    if (wayTick >= 0.5) {
+      wayTick = 0
+      if (!inventory.count('wayfinder')) hud.setWayfinder(null)
+      else {
+        const t = wayfinderTarget()
+        const wf = feetPos()
+        hud.setWayfinder(t ? `🧭 ${compass(wf.x, wf.z, t.x, t.z)} ${Math.round(Math.hypot(t.x - wf.x, t.z - wf.z))}m` : '🧭 —')
+      }
+    }
     // LOD bands and cover culling re-evaluate when the viewer has moved 3 m
     // (12K prop groups a frame was 2 ms of the same answer)
     {

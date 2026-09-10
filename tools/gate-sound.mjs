@@ -96,16 +96,28 @@ const preHit = (await sfx()).plays
 const fleshWas = preHit['hit-flesh'] ?? 0
 const hurtWas = preHit['dino-hurt'] ?? 0
 // step to the animal before EVERY swing: a raptor that wanders two metres
-// while you wind up turns this check into a coin toss
+// while you wind up turns this check into a coin toss.
+//
+// AND PROVE THE BLOW LANDED ON *IT*, from the animal's own torpor — not from
+// the sound. `hit-flesh` is played by three different things (a swing landing,
+// harvesting a carcass, and any body hitting the ground anywhere via
+// Dino.onThud), and the swing itself prefers a carcass in reach over a live
+// animal. So a run could play five hit-flesh, zero dino-hurt, and look like a
+// broken sound when nothing had been hit at all (M53 caught half of this; the
+// other half surfaced in M71). The animal's torpor cannot be faked.
+const torporOf = () => page.evaluate((k) => window.__g.game.dinoStates()[k]?.torpor ?? -1, idx)
+const torpor0 = await torporOf()
 for (let i = 0; i < 5; i++) {
   await page.evaluate((k) => window.__g.game.gotoDinoIndex(k), idx)
   await page.waitForTimeout(250)
   await g('window.__g.game.swing()')
   await page.waitForTimeout(450)
 }
+const torpor1 = await torporOf()
 s = await sfx()
 const flesh = (s.plays['hit-flesh'] ?? 0) - fleshWas
 const hurt = (s.plays['dino-hurt'] ?? 0) - hurtWas
+check(torpor1 > torpor0, `the swings actually landed on the raptor (torpor ${torpor0} → ${torpor1})`)
 check(flesh >= 3, `hitting an animal lands in hide, not wood (${flesh} of 5 swings)`)
 check(hurt >= 1, `the animal answers when it is hit (${hurt})`)
 

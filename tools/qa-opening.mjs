@@ -84,24 +84,44 @@ async function survive() {
 async function walkTo(tx, tz, stopAt = 2.2, secs = 120) {
   const t0 = Date.now()
   const trail = []
+  // WALK ROUND IT, LIKE A PERSON (M71) — see the same note in qa-trek.mjs. The
+  // capsule slides off a trunk perfectly well; a bot that re-aims dead at the
+  // target every tick just presses back into the same tree for ever.
+  let detour = 0
+  let detourSide = 1
+  let detours = 0
   for (;;) {
     if (out()) return 'budget'
-    const r = await g(([x, z]) => {
+    const r = await g(([x, z, det, side]) => {
       const w = window.__g
       const p = w.player()
       const dx = x - p.x, dz = z - p.z
       const d = Math.hypot(dx, dz) || 1
-      w.setIntent((dx / d) * 8, (dz / d) * 8)
-      w.setCam(Math.atan2(-dx, -dz), 0.06)
+      let ux = dx / d, uz = dz / d
+      if (det > 0) {
+        const a = side * 1.31 // 75° off the line, still making ground forward
+        const cx = Math.cos(a), sn = Math.sin(a)
+        const rx = ux * cx - uz * sn, rz = ux * sn + uz * cx
+        ux = rx; uz = rz
+      }
+      w.setIntent(ux * 8, uz * 8)
+      w.setCam(Math.atan2(-ux, -uz), 0.06)
       return { x: p.x, z: p.z, d }
-    }, [tx, tz])
+    }, [tx, tz, detour, detourSide])
+    if (detour > 0) detour--
     if (r.d < stopAt) { await g(() => window.__g.setIntent(0, 0)); return 'there' }
     if (Date.now() - t0 > secs * 1000) { await g(() => window.__g.setIntent(0, 0)); return 'slow' }
     trail.push(r)
     if (trail.length % 12 === 0) await survive()
-    if (trail.length > 14) {
+    if (trail.length > 14 && detour === 0) {
       const then = trail[trail.length - 14]
-      if (Math.hypot(r.x - then.x, r.z - then.z) < 3) { await g(() => window.__g.setIntent(0, 0)); return 'stuck' }
+      if (Math.hypot(r.x - then.x, r.z - then.z) < 3) {
+        detours++
+        if (detours > 6) { await g(() => window.__g.setIntent(0, 0)); return 'stuck' }
+        detour = 6
+        detourSide = -detourSide
+        trail.length = 0
+      }
     }
     await page.waitForTimeout(320)
   }

@@ -138,7 +138,10 @@ The worst frame on the island is 31 ms of scatter CPU — the next thing to budg
   program cache key against the nearest key already compiled. **Use this, not
   `renderer.info.programs.length`, which counts entries and not compiles (H8).**
 - `tools/qa-jitter.mjs` — the same, for standing/walking/sprinting/flying/spinning.
-- `tools/qa-trek.mjs` — **one continuous run across the island, no teleports.** Every other instrument
+- `tools/qa-trek.mjs` — **one continuous run across the island, no teleports.** Its walker takes a
+  75° detour when progress stalls (M71): steering dead at the target and nothing else reported two
+  "navigation walls" that turned out to be a pine thicket and a boulder the capsule slides off
+  perfectly well. A bot that cannot walk round a tree produces map bugs that are not there. Every other instrument
   here teleports, which is right for isolating a region's first-sight cost and wrong for the only
   question a player asks: does it stutter while I am running? Reports per leg: mean and worst frame,
   frames over 25 ms, new programs and textures, what the path queries cost, and **which single

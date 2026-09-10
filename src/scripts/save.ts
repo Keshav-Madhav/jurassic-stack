@@ -31,6 +31,9 @@ export interface SaveFile {
    *  from before tablets existed, which is granted the lot — see
    *  Engrams.restore. An empty array is a new game that has found none. */
   engrams?: string[]
+  /** has the Wayfinder relic been lifted off the beach? (M71) — separate from
+   *  whether it is in your pack, which is just an inventory count */
+  wayfinderTaken?: boolean
   /** island days lived (fractional) */
   days?: number
   inventory: unknown

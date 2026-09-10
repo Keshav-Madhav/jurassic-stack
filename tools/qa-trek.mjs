@@ -75,19 +75,38 @@ for (let i = 1; i < ROUTE.length; i++) {
   const trail = []
   let stuck = false
   let cut = false
+  let detours = 0
+  // WALK ROUND IT, LIKE A PERSON (M71). Steering straight at the target and
+  // nothing else reported two "navigation walls" in the foothills — and both
+  // were this bot, not the island. The capsule slides off a trunk perfectly
+  // well (measured: 8 m sideways in 4 s against a tree at 20°), but a bot that
+  // re-aims dead at the target every tick just presses back into the same pine
+  // for ever. `detour` steers perpendicular for a few ticks when progress
+  // stalls, alternating sides, which is what a player does without thinking.
+  let detour = 0
+  let detourSide = 1
   let legOver25 = 0, legOver50 = 0, legMax = 0, legWorst = null, legFrames = 0, legSum = 0
   // steer every 400 ms: point the camera down the line of travel, because what
   // is in the frustum is what has to stream
   for (;;) {
-    const at = await page.evaluate(([px, pz, v]) => {
+    const at = await page.evaluate(([px, pz, v, det, side]) => {
       const g = window.__g
       const p = g.player()
       const dx = px - p.x, dz = pz - p.z
       const d = Math.hypot(dx, dz) || 1
-      g.setIntent((dx / d) * v, (dz / d) * v)
-      g.setCam(Math.atan2(-dx, -dz), 0.02)
+      let ux = dx / d, uz = dz / d
+      if (det > 0) {
+        // 75° off the straight line, so it still makes ground toward the target
+        const a = side * 1.31
+        const cx = Math.cos(a), sn = Math.sin(a)
+        const rx = ux * cx - uz * sn, rz = ux * sn + uz * cx
+        ux = rx; uz = rz
+      }
+      g.setIntent(ux * v, uz * v)
+      g.setCam(Math.atan2(-ux, -uz), 0.02)
       return { x: p.x, z: p.z, d }
-    }, [tx, tz, speed])
+    }, [tx, tz, speed, detour, detourSide])
+    if (detour > 0) detour--
     if (last) metres += Math.hypot(at.x - last.x, at.z - last.z)
     last = at
     const st = await page.evaluate(() => window.__g.frameStats())
@@ -102,9 +121,16 @@ for (let i = 1; i < ROUTE.length; i++) {
     // the water, which is what the first run of this tool did (five of eight
     // legs timed out and the numbers came from a player who was not moving).
     trail.push(at)
-    if (trail.length > 12) {
+    if (trail.length > 12 && detour === 0) {
       const then = trail[trail.length - 12]
-      if (Math.hypot(at.x - then.x, at.z - then.z) < 4) { stuck = true; break }
+      if (Math.hypot(at.x - then.x, at.z - then.z) < 4) {
+        // blocked: try sidling round it before declaring the island impassable
+        detours++
+        if (detours > 6) { stuck = true; break }
+        detour = 6
+        detourSide = -detourSide
+        trail.length = 0
+      }
     }
     if (Date.now() - t0 > 150000) { cut = true; break }
     await page.waitForTimeout(400)
@@ -127,7 +153,7 @@ for (let i = 1; i < ROUTE.length; i++) {
   if (legMax > worstEver.ms) worstEver = { ms: legMax, leg: name }
   totalOver25 += legOver25
   totalOver50 += legOver50
-  console.log(`→ ${name.padEnd(16)} ${String(Math.round((Date.now() - t0) / 1000)).padStart(3)}s · mean ${(legSum / Math.max(1, legFrames)).toFixed(1)} ms · worst ${String(legMax).padStart(6)} ms · frames>25ms ${String(legOver25).padStart(3)} · +${d.pro} progs +${d.tex} tex · paths ${d.navCalls} in ${d.navMs.toFixed(0)} ms (peak ${d.navPeak}/frame, ${d.navDenied} deferred)${stuck ? `  ⟨STUCK at ${Math.round(last.x)},${Math.round(last.z)}, ${Math.round(last.d)} m short — stepped over⟩` : cut ? `  ⟨still walking, ${Math.round(last.d)} m short at the 150 s cap — stepped over⟩` : ''}`)
+  console.log(`→ ${name.padEnd(16)} ${String(Math.round((Date.now() - t0) / 1000)).padStart(3)}s · mean ${(legSum / Math.max(1, legFrames)).toFixed(1)} ms · worst ${String(legMax).padStart(6)} ms · frames>25ms ${String(legOver25).padStart(3)} · +${d.pro} progs +${d.tex} tex · paths ${d.navCalls} in ${d.navMs.toFixed(0)} ms (peak ${d.navPeak}/frame, ${d.navDenied} deferred)${stuck ? `  ⟨STUCK at ${Math.round(last.x)},${Math.round(last.z)}, ${Math.round(last.d)} m short after ${detours} detours — stepped over⟩` : cut ? `  ⟨still walking, ${Math.round(last.d)} m short at the 150 s cap — stepped over⟩` : ''}`)
   if (d.terrain && (d.terrain.count || d.terrain.rebuilt)) console.log(`     terrain cache: ${d.terrain.count} LODs freed (${d.terrain.mb} MB), ${d.terrain.rebuilt} REBUILT`)
   if (d.worstDino && d.worstDino.ms > 4) console.log(`     dearest single animal: ${d.worstDino.ms.toFixed(1)} ms — ${d.worstDino.species} (${d.worstDino.state}${d.worstDino.dormant ? ', dormant' : ''}) at ${d.worstDino.dist} m`)
   if (stuck || cut) { await page.evaluate(([px, pz]) => window.__g.teleport(px, pz), [tx, tz]); await page.waitForTimeout(2500) }

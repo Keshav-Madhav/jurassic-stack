@@ -8,8 +8,11 @@ import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import type { ItemId } from './items'
 import { registerWarmRoot } from './uploads'
 
-/** item → kit model (public/models/kit/<file>.glb) */
-export const ITEM_MODEL: Record<ItemId, string> = {
+/** item → kit model (public/models/kit/<file>.glb).
+ *  PARTIAL since M71: the Wayfinder is a relic built in code (wayfinder.ts),
+ *  not a kit asset, so it has no entry and falls back to its emoji in the
+ *  hotbar — every consumer already guards on a missing file. */
+export const ITEM_MODEL: Partial<Record<ItemId, string>> = {
   wood: 'kenney-tree-log',
   stone: 'kenney-resource-stone',
   fiber: 'pp-Rope',

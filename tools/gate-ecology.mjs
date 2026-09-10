@@ -82,13 +82,24 @@ await g('window.__g.game.setCreative(true); window.__g.game.setGod(true)')
 await page.waitForTimeout(400)
 const pRaptor = await page.evaluate(() => { const p = window.__g.player(); return window.__g.game.spawnDino('raptor', p.x + 3, p.z - 1) })
 await page.waitForTimeout(2500)
-await page.evaluate((i) => window.__g.game.gotoDinoIndex(i), pRaptor)
-await page.waitForTimeout(300)
-await g('window.__g.game.swing()')
-await page.waitForTimeout(400)
-await g('window.__g.game.interact()')
-await page.waitForTimeout(600)
-const tamed = await page.evaluate((i) => window.__g.game.dinoStates()[i].state, pRaptor)
+// STEP AND ACT IN THE SAME EVALUATE, AND RETRY. A raptor moves, and this used
+// to walk up to it, wait 300 ms, swing, wait 400 ms and feed — three wall-clock
+// gaps for it to wander out of reach in. On a loaded machine the swing then
+// missed, the noise provoked it, and the check reported "flee" as though
+// taming were broken. Identical to the saddle race in gate-m4 (M64), and the
+// same fix: no time passes inside one evaluate.
+let tamed = 'never ran'
+for (let attempt = 0; attempt < 6; attempt++) {
+  tamed = await page.evaluate((i) => {
+    const w = window.__g
+    w.game.gotoDinoIndex(i)
+    w.game.swing()      // creative: an instant KO
+    w.game.interact()   // creative: an instant tame
+    return w.game.dinoStates()[i].state
+  }, pRaptor)
+  if (tamed === 'tamed') break
+  await page.waitForTimeout(500)
+}
 check(tamed === 'tamed', `a raptor is tamed for the guard test (${tamed})`)
 
 await g('window.__g.game.setCreative(false)')
@@ -101,8 +112,15 @@ await g('window.__g.game.swing()') // the player swings first: the tames should 
 await page.waitForTimeout(2500)
 const guarding = await page.evaluate((i) => window.__g.game.dinoStates()[i].guarding, pRaptor)
 check(guarding === true, 'the tame takes up the fight when you swing first')
-await page.waitForTimeout(6000)
-const hpAfter = await page.evaluate((i) => window.__g.game.dinoStates()[i].hp, foe)
+// POLL FOR THE BITE, do not guess how long it takes. The tame has to path to
+// the carno and close the distance, and a fixed 6 s window is a bet on how
+// busy the machine is — it lost once at load average 7 (M71). Waiting up to
+// 20 s asserts exactly the same thing and stops betting.
+let hpAfter = hpBefore
+for (let i = 0; i < 20 && hpAfter >= hpBefore; i++) {
+  await page.waitForTimeout(1000)
+  hpAfter = await page.evaluate((k) => window.__g.game.dinoStates()[k].hp, foe)
+}
 check(hpAfter < hpBefore, `the tame actually bites: the carno is ${hpBefore} → ${hpAfter} hp`)
 
 
