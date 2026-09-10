@@ -109,6 +109,53 @@ for (const t of targets) {
     console.log(`PASS spawn → ${t.name}: ${path.length} waypoints`)
   }
 }
+// ---------- WHAT SHARE OF THE ISLAND CAN ANYTHING ACTUALLY REACH? (M74)
+//
+// The reachability validator only ever asked about the ~24 ruin sites, and
+// they all passed, so nothing ever reported that the ANSWER ELSEWHERE was
+// mostly "no". Measured this round: of fourteen well-spread high points that
+// a slope-only flood fill called walkable, recast admits exactly ONE — the
+// crater bench, and only because the Ravine was carved to it. Both mountain
+// ranges are navmesh voids: no polygons at all, so no path, no dino, no
+// player route. The keystones are all under 92 m on a map whose peaks pass
+// 400 because the lowlands are all there is to place them in.
+//
+// That was invisible for seventy rounds because nothing counted it. This
+// samples the island on a 32 m lattice and reports the reachable share by
+// altitude band, so the next bake that walls something off says so.
+{
+  const STEP = 32
+  const bands = [[0, 25], [25, 50], [50, 100], [100, 150], [150, 250], [250, 999]]
+  const tally = bands.map(() => ({ land: 0, ok: 0 }))
+  for (let z = -half; z <= half; z += STEP) {
+    for (let x = -half; x <= half; x += STEP) {
+      const h = grid[Math.round((z + half) / res) * side + Math.round((x + half) / res)] * scale
+      if (h < 1) continue // sea
+      const bi = bands.findIndex(([lo, hi]) => h >= lo && h < hi)
+      if (bi < 0) continue
+      tally[bi].land++
+      // a polygon within 8 m horizontally is the same test the validator uses
+      const { success: near } = query.findClosestPoint({ x, y: h, z }, { halfExtents: HALF_EXT })
+      if (near) tally[bi].ok++
+    }
+  }
+  // NB this counts whether a polygon EXISTS under a sample, not whether it
+  // is connected to spawn — one computePath per sample would cost minutes.
+  // Presence is the generous reading, so the true figure is worse, and the
+  // alpine bands are damning even so.
+  console.log('\nland with navmesh under it, by altitude (32 m lattice):')
+  let tl = 0, tk = 0
+  for (let i = 0; i < bands.length; i++) {
+    const { land, ok } = tally[i]
+    if (!land) continue
+    tl += land; tk += ok
+    const pct = Math.round((ok / land) * 100)
+    const bar = '#'.repeat(Math.round(pct / 5)).padEnd(20, '.')
+    console.log(`  ${String(bands[i][0]).padStart(3)}-${String(bands[i][1] === 999 ? '+' : bands[i][1]).padEnd(3)} m  ${bar} ${String(pct).padStart(3)}%  (${ok}/${land} samples)`)
+  }
+  console.log(`  island total: ${Math.round((tk / tl) * 100)}% of dry land has navmesh under it`)
+}
+
 // written even when reachability fails, so the failing mesh can be probed
 // (a stale navmesh.bin sent one debugging session down the wrong hole)
 const data = exportNavMesh(navMesh)
