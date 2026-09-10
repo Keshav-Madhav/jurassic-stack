@@ -161,4 +161,7 @@ ids; `tools/gate-sound.mjs` proves each one actually reaches the speakers.
 Pitch is a function of the animal: a rex speaks a fifth below a raptor (`rate = 1.55 - height×0.16`)
 and carries twice as far. There is no CC0 fire loop in these packs and a short loop tiles audibly,
 so the campfire crackle is built from pitched-up wood ticks at random intervals — a crackle IS a
-sparse train of little impacts (`Sfx.crackle`).
+sparse train of little impacts (`Sfx.crackle`). The **waterfall** (M72) is the same argument and
+lives in `ambience.ts` rather than here: falling water genuinely IS broadband noise with a
+bandpass on it, so it is two taps of the wind's own noise buffer, with the filter's centre
+frequency rising as you approach — a fall gets brighter close up, not just louder.

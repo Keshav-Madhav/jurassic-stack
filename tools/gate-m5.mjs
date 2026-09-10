@@ -111,6 +111,52 @@ check(!land, 'back to walking on the beach')
   check(again.far > 1000, `surfacing gives the view back (fog far ${again.far} m)`)
 }
 
+// THE WELLSPRING FALL (M72). PLAN has promised since the island v2 that the
+// river "pours out of its mouth from a spring pool a few dozen metres up —
+// from the beach it looks like the river comes out of the sea cliffs", and
+// what the world actually had was a dammed pool ninety metres behind a forty
+// metre cliff with nothing running between them. These checks are about the
+// three things that can silently stop being true: the channel reaching the
+// lip with water in it, the sheet hanging on real rock, and the landing.
+{
+  const falls = await page.evaluate(() => window.__g.game.falls())
+  check(falls.length > 0, `the island has a waterfall (${falls.length})`)
+  const f = falls[0]
+  check(f.drop > 20, `and it is a real drop, not a step (${f.drop} m)`)
+  check(f.foot < 1.0, `it lands in water, not on sand (foot ${f.foot} m)`)
+
+  // the SPILL is a river you can stand in: the gorge above the lip
+  await page.evaluate(() => { window.__g.game.setGod(true); window.__g.teleport(1123, -1290) })
+  await page.waitForTimeout(1600)
+  const inChannel = await page.evaluate(() => {
+    const g = window.__g
+    const p = g.player()
+    return { level: g.game.waterLevelAt(p.x, p.z), ground: g.groundAt(p.x, p.z), flow: g.game.riverFlowAt(p.x, p.z) }
+  })
+  check(inChannel.level !== null && inChannel.level > inChannel.ground + 0.5,
+    `the spill channel holds water (${inChannel.level === null ? 'DRY' : (inChannel.level - inChannel.ground).toFixed(1) + ' m deep'})`)
+  check(inChannel.flow !== null, 'and it runs — there is a current in it')
+  // ...and it is ABOVE the sea, which is the whole point of the Wellspring
+  check(inChannel.ground > 25, `thirty metres up, not at sea level (${inChannel.ground.toFixed(0)} m)`)
+
+  // the sheet hangs on rock: every row of the traced profile must sit at or
+  // below the ground it was traced from, or the water is inside the cliff
+  const hang = await page.evaluate((name) => {
+    const g = window.__g
+    const fd = g.game.falls().find((q) => q.name === name)
+    let worst = -Infinity
+    for (const p of fd.path) worst = Math.max(worst, p.y - g.groundAt(p.x, p.z))
+    return worst
+  }, f.name)
+  check(hang < 3.5, `the sheet follows the rock it was traced on (worst ${hang.toFixed(1)} m proud of it)`)
+
+  // and it is DETACHED when you are nowhere near it (M24)
+  await page.evaluate(() => { const s = window.__g.game.spawn(); window.__g.teleport(s.x, s.z) })
+  await page.waitForTimeout(1800)
+  check((await page.evaluate(() => window.__g.game.falls()))[0].attached === false,
+    'and from the spawn beach, 3 km away, it is not in the scene at all')
+}
+
 await browser.close()
 console.log(failed ? '\nGATE FAILED' : '\nGATE PASSED')
 process.exit(failed ? 1 : 0)

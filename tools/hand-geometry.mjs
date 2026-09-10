@@ -247,6 +247,27 @@ export const RIVER = {
       ford: { x: -500, z: 350 },
     },
     {
+      // THE SPILL — the Wellspring's second outlet. PLAN has always said the
+      // river "pours out of its mouth from a spring pool a few dozen metres
+      // up — from the beach it looks like the river comes out of the sea
+      // cliffs", and until M72 the pool just sat there: a dammed bowl 90 m
+      // behind a 40 m sea cliff with nothing running between them.
+      // A short overflow north out of the pool, down the shelf's own fall
+      // line, to a lip on the cliff's inner edge. Everything below the lip is
+      // rendering, not carving — the cliff is the point and a river bed cut
+      // into it would turn it into a ramp.
+      name: 'spill', flow: 1, halfWidth: 7, source: 'wellspring', slot: true, cut: 6.5,
+      path: [
+        // eleven points over 100 m: the bed may only step 0.5 m per point, so
+        // the spacing IS the gradient — the gorge needs ~6 m of it to bite
+
+        { x: 1112, z: -1235 }, { x: 1113, z: -1246 }, { x: 1115, z: -1257 },
+        { x: 1117, z: -1268 }, { x: 1120, z: -1279 }, { x: 1123, z: -1289 },
+        { x: 1127, z: -1299 }, { x: 1131, z: -1309 }, { x: 1135, z: -1318 },
+        { x: 1139, z: -1325 }, { x: 1143, z: -1331 },
+      ],
+    },
+    {
       // OUTFLOW — from the Knot south-east in real S-bends through the swamp's
       // delta to the Estuary Bay
       name: 'outflow', flow: 1, halfWidth: 12,
@@ -262,6 +283,29 @@ export const RIVER = {
     },
   ],
 }
+
+// ---------- WATERFALLS: hand-placed lips, traced descents ----------
+// A fall is not a shape you draw — it is a lip and a direction, and the rock
+// decides the rest. The bake walks the baked ground from `lip` along `aim`
+// and records the profile it falls down, so the sheet can never hang in the
+// air or bury itself: whatever the cliff turned out to be after erosion is
+// what the water runs on. `width` is the sheet at the lip.
+export const FALLS = [
+  {
+    // THE WELLSPRING FALL — the spill leaves the shelf here and drops the
+    // full height of the bluff into the cove. The one the coast trace has
+    // called "the notch where the gorge meets the sea" since M10.
+    name: 'wellspring-fall',
+    lip: { x: 1143, z: -1331 },
+    aim: { x: 0.71, z: -0.71 }, // north-east, square at the cliff face (the steepest line off the lip: 39 m → 1 m in eight)
+    width: 11,
+    spill: 'spill', // the river part that feeds it
+    // A fall digs its own landing. Without this the sheet ended on shingle
+    // 1.4 m above the sea with the waterline 38 m away — thirty metres of
+    // water arriving on dry sand.
+    plunge: { x: 1154, z: -1342, r: 14, floor: -2.6 }
+  },
+]
 
 // ---------- STANDING WATER: traced shorelines ----------
 // The Reservoir and the Wellspring are part of the river's story; the two

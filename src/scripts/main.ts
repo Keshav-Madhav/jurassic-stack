@@ -42,6 +42,7 @@ import { terrainEvicted, setTerrainCacheTtl } from './terrain'
 import { nearestObstacle } from './obstacles'
 import { advanceWind, windTime, windScale } from './wind'
 import { WaterSystem } from './water'
+import { Waterfalls } from './waterfall'
 import { wildPopulation } from './population'
 import { GrassField } from './grass'
 import { SkyExtras } from './sky-extras'
@@ -118,6 +119,11 @@ async function boot(): Promise<void> {
   water.build()
   scene.add(water.group)
   water.group.name = 'water'
+
+  const waterfalls = new Waterfalls()
+  waterfalls.build(worldMeta?.falls ?? [])
+  scene.add(waterfalls.group)
+  waterfalls.group.name = 'waterfalls'
 
   const physics = new Physics()
   await physics.init()
@@ -1677,6 +1683,8 @@ async function boot(): Promise<void> {
       },
       /** QA (M71): the Wayfinder relic — where it lies and whether it is lifted */
       wayfinder: () => wayfinder.debug(),
+      falls: () => waterfalls.debug(),
+      fallSound: () => ambience.fallLevel,
       /** QA (M71): what the relic is pointing at right now */
       wayfinderTarget: () => {
         const t = wayfinderTarget()
@@ -1761,7 +1769,7 @@ async function boot(): Promise<void> {
     const reattach = scatter.showAll()
     const reattachRuins = ruins.showAll()
     scene.traverse((o) => { if (!o.visible) { o.visible = true; toggled.push(o) } })
-    const detach: (() => void)[] = []
+    const detach: (() => void)[] = [waterfalls.attachForWarmup()]
     const seen = new Set<string>()
     const warmRigs: [string, THREE.Object3D][] = []
     for (const d of dinos) {
@@ -2242,6 +2250,7 @@ async function boot(): Promise<void> {
     perfSec.grass = perfSec.grass * 0.95 + (performance.now() - tS) * 0.05
     frameSec.grass = performance.now() - tS
     water.update(dt)
+    ambience.falls(waterfalls.update(dt, cam.camera.position))
     daynight.camera = cam.camera
     daynight.setFocus(focus.x, focus.z)
     daynight.advance(dt)

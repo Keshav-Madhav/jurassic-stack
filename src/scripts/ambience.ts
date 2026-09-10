@@ -9,6 +9,10 @@ export class Ambience {
   private windFilter: BiquadFilterNode | null = null
   private birdGain: GainNode | null = null
   private bugGain: GainNode | null = null
+  private fallGain: GainNode | null = null
+  private fallFilter: BiquadFilterNode | null = null
+  /** QA (gate-sound): the falls' current mix level, 0 when out of earshot */
+  fallLevel = 0
   private singers = [3400, 3900, 4300, 4700].map((f) => ({ f, next: 0 }))
   private nextBird = 0
   private t = 0
@@ -79,6 +83,39 @@ export class Ambience {
     this.bugGain = ctx.createGain()
     this.bugGain.gain.value = 0
     this.bugGain.connect(this.master)
+
+    // FALLING WATER (M72). There is no CC0 waterfall loop in the packs, and
+    // one short enough to ship tiles audibly — but a waterfall genuinely IS
+    // broadband noise with a bandpass on it, so synthesising it is the
+    // honest answer here in the same way `crackle` is in sfx.ts. Two taps of
+    // the same noise buffer: a low roar and a hiss, mixed by distance in
+    // falls() so approaching one gets brighter, not just louder.
+    const fallSrc = ctx.createBufferSource()
+    fallSrc.buffer = buf
+    fallSrc.loop = true
+    this.fallFilter = ctx.createBiquadFilter()
+    this.fallFilter.type = 'bandpass'
+    this.fallFilter.frequency.value = 300
+    this.fallFilter.Q.value = 0.35
+    this.fallGain = ctx.createGain()
+    this.fallGain.gain.value = 0
+    fallSrc.connect(this.fallFilter).connect(this.fallGain).connect(this.master)
+    fallSrc.start()
+  }
+
+  /** How near the nearest waterfall is, in metres (Infinity = none in the
+   *  world). Called once a frame; the ramp is what stops it clicking when the
+   *  camera teleports. */
+  falls(distance: number): void {
+    if (!this.fallGain || !this.fallFilter || !this.ctx) return
+    const RANGE = 140
+    const near = Number.isFinite(distance) ? Math.max(0, 1 - distance / RANGE) : 0
+    // squared: a waterfall is loud at its foot and a rumour at a hundred metres
+    this.fallLevel = near * near
+    const now = this.ctx.currentTime
+    this.fallGain.gain.setTargetAtTime(this.fallLevel * 0.34, now, 0.25)
+    // close up you hear the hiss of the spray; far off, only the roar
+    this.fallFilter.frequency.setTargetAtTime(240 + this.fallLevel * 900, now, 0.3)
   }
 
   private chirp(): void {

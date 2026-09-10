@@ -15,7 +15,7 @@
 // river path becomes a bed, and then lets erosion age it.
 import { writeFileSync, mkdirSync } from 'node:fs'
 import {
-  HALF, SPAWN, VOLCANO, COAST, RANGES, HOLM, SHELVES, RIVER, RIVER_PATHS, LAKES, FORESTS, CLEARINGS, RUINS, BIOMES, RAVINE, CAVES,
+  HALF, SPAWN, VOLCANO, COAST, RANGES, HOLM, SHELVES, RIVER, RIVER_PATHS, LAKES, FALLS, FORESTS, CLEARINGS, RUINS, BIOMES, RAVINE, CAVES,
   shoreDist, distToPath, closedPath,
 } from './hand-geometry.mjs'
 import { encodeRowDelta } from './world-io.mjs'
@@ -350,11 +350,15 @@ const RIVER_BEDS = RIVER.parts.map((part) => {
   if (!part.flow) return path.map(() => RING_BED)
   const beds = []
   const startsAtKnot = Math.hypot(path[0].x - RIVER.knot.x, path[0].z - RIVER.knot.z) < 1
-  let prev = startsAtKnot ? RING_BED : (wellspring ? wellspring.level - 2.4 : Infinity)
+  // a leg either drops out of the ring, or out of the standing water it names
+  // (`source`), or — the original inflow — out of the Wellspring by default
+  const from = part.source ? LAKES.find((l) => l.name === part.source) : wellspring
+  let prev = startsAtKnot ? RING_BED : (from ? from.level - 2.4 : Infinity)
   for (let i = 0; i < path.length; i++) {
     // points inside standing water (the pool, the Reservoir) read the carved
     // basin, not the bank — they don't constrain the profile
-    const terrain = inStandingWater(path[i].x, path[i].z) ? Infinity : hAt(path[i].x, path[i].z) - BED_UNDER
+    const under = part.cut ?? BED_UNDER
+    const terrain = inStandingWater(path[i].x, path[i].z) ? Infinity : hAt(path[i].x, path[i].z) - under
     let bed = i === 0 ? Math.min(prev, terrain) : Math.min(terrain, prev - 0.5)
     // floor: through the swamp the river runs at the marsh's water table
     // (one sheet, not a trench under it); to the sea it may dig to -2.5
@@ -396,15 +400,19 @@ for (let iz = 0; iz < SIDE; iz++) {
       const bed = beds[seg] * (1 - t) + beds[Math.min(seg + 1, beds.length - 1)] * t
       const frac = (seg + t) / (path.length - 1)
       const canyon = !!part.canyon && frac > part.canyon[0] && frac < part.canyon[1]
-      const sigma = canyon ? hw * 1.2 : hw * 1.7
+      // `slot`: a gorge, not a valley — steep walls right up to the bed and
+      // no shoulder at all. The Wellspring's spill crosses a shelf that is
+      // nearly level with the pool, and the ordinary 1.7-sigma bell spread a
+      // 3 m cut over 40 m of ground: a damp smear, not a channel you can see
+      const sigma = part.slot ? hw * 1.05 : canyon ? hw * 1.2 : hw * 1.7
       const wBed = Math.exp(-(d * d) / (2 * sigma * sigma))
-      const wValley = (canyon ? 0.15 : 0.35) * Math.exp(-(d * d) / (2 * (hw * 5.5) * (hw * 5.5)))
+      const wValley = (part.slot ? 0.1 : canyon ? 0.15 : 0.35) * Math.exp(-(d * d) / (2 * (hw * 5.5) * (hw * 5.5)))
       const i0 = idx(ix, iz)
       const target = Math.min(H[i0], bed)
       H[i0] = H[i0] * (1 - wBed) + target * wBed - wValley * 2.0
       if (canyon) {
         H[i0] += 7 * Math.exp(-((d - hw * 2.4) * (d - hw * 2.4)) / (2 * 10 * 10)) // rim lift
-      } else if (d < hw * 3.6) {
+      } else if (!part.slot && d < hw * 3.6) {
         // bank cap: where a bend cuts through a hill the walls soften instead
         // of towering — banks cap ~5 m over the bed (the ring keeps a firm
         // 6 m moat wall into the Holm plateau). FEATHERED at its outer edge:
@@ -469,6 +477,53 @@ for (const part of RIVER.parts) {
     }
   }
 }
+// THE PLUNGE POOLS: a fall scours a basin at its foot. Carved with the river
+// (so erosion can soften the rim) and re-asserted after it (so droplets can't
+// silt it back up), exactly as the Ravine's floor and the cave chambers are.
+function carveFalls() {
+  for (const f of FALLS) {
+    const pl = f.plunge
+    if (!pl) continue
+    for (let iz = 0; iz < SIDE; iz++) {
+      for (let ix = 0; ix < SIDE; ix++) {
+        const x = worldX(ix), z = worldZ(iz)
+        const d = Math.hypot(x - pl.x, z - pl.z)
+        if (d > pl.r) continue
+        const i0 = idx(ix, iz)
+        const bowl = lerp(pl.floor, H[i0], smoothstep(pl.r * 0.35, pl.r, d))
+        if (H[i0] > bowl) H[i0] = bowl
+      }
+    }
+  }
+  // AND HOLD THE LIP. Droplets cut hardest where a channel meets a hole, and
+  // once the pool was there erosion took the lip from 29.5 m down to 24.8 —
+  // the sheet would have started five metres inside the rock. The river
+  // re-assert can only ever LOWER a bed, so it cannot undo this; the lip is
+  // asserted here, and only on its inland side so the cliff face is never
+  // rebuilt.
+  for (const f of FALLS) {
+    if (!f.spill) continue
+    const si = RIVER.parts.findIndex((p) => p.name === f.spill)
+    if (si < 0) continue
+    const beds = RIVER_BEDS[si]
+    const bed = beds[beds.length - 1]
+    const hw = RIVER.parts[si].halfWidth
+    const al = Math.hypot(f.aim.x, f.aim.z) || 1
+    const ax = f.aim.x / al, az = f.aim.z / al
+    for (let iz = 0; iz < SIDE; iz++) {
+      for (let ix = 0; ix < SIDE; ix++) {
+        const x = worldX(ix), z = worldZ(iz)
+        const dx = x - f.lip.x, dz = z - f.lip.z
+        if (dx * ax + dz * az > 1) continue // seaward of the lip: that is the fall
+        const d = Math.hypot(dx, dz)
+        if (d > hw) continue
+        const i0 = idx(ix, iz)
+        if (H[i0] < bed) H[i0] = lerp(bed, H[i0], smoothstep(hw * 0.5, hw, d))
+      }
+    }
+  }
+}
+carveFalls()
 console.timeEnd('rivers')
 
 // ---------- THE RAVINE: a slot up the volcano's flank into the crater ----------
@@ -734,6 +789,7 @@ for (let iz = 0; iz < SIDE; iz++) {
 }
 // the Ravine's floor and the crater bench: re-laid (see carveRavine)
 carveRavine(true)
+carveFalls() // and the plunge pools
 // AND THE CAVES. Erosion fills a carved bowl the way it fills any hollow —
 // the first bake asked for a 139 m floor and got 146 back (M51). A cave you
 // cannot stand up in is not a cave, so the chamber floor and the throat are
@@ -890,6 +946,45 @@ for (const site of RUIN_SITES) {
   }
 }
 
+// ---------- WATERFALLS: walk the baked rock down from each hand-placed lip ----------
+// The lip and the direction are drawn by hand; the PROFILE is whatever the
+// cliff turned out to be after carving, erosion and the re-asserts. Tracing
+// it here (rather than in the renderer) means the sheet is cut from the same
+// bytes the player stands on, so it can neither hang in the air nor bury
+// itself in the rock when a bake moves the face by a metre.
+const FALL_SURFACE_ABOVE_BED = 1.35 // water.ts's RIVER_SURFACE_ABOVE_BED
+const FALL_DEFS = FALLS.map((f) => {
+  const si = RIVER.parts.findIndex((p) => p.name === f.spill)
+  const beds = si >= 0 ? RIVER_BEDS[si] : null
+  // the water arrives at the lip on its channel's surface, not on the rock
+  const topY = beds ? beds[beds.length - 1] + FALL_SURFACE_ABOVE_BED : hAt(f.lip.x, f.lip.z)
+  const len = Math.hypot(f.aim.x, f.aim.z) || 1
+  const ax = f.aim.x / len, az = f.aim.z / len
+  const pts = [{ x: f.lip.x, y: +topY.toFixed(2), z: f.lip.z }]
+  let x = f.lip.x, z = f.lip.z, y = topY
+  let flat = 0
+  for (let i = 1; i <= 240 && flat < 6; i++) {
+    x += ax; z += az
+    const y2 = Math.min(y, hAt(x, z)) // water never climbs
+    flat = y - y2 < 0.2 ? flat + 1 : 0
+    y = y2
+    pts.push({ x: +x.toFixed(2), y: +y.toFixed(2), z: +z.toFixed(2) })
+    if (y <= SEA + 0.1) break
+  }
+  // trim the run-out: the sheet ends where the water stops falling, not where
+  // the ground finally levels — a 6 m horizontal skirt at the bottom reads as
+  // a slick on the sand, not a waterfall
+  while (pts.length > 2 && pts[pts.length - 1].y >= pts[pts.length - 2].y - 0.35) pts.pop()
+  const foot = pts[pts.length - 1]
+  return {
+    name: f.name, width: f.width, spill: f.spill ?? null,
+    top: pts[0], foot, drop: +(pts[0].y - foot.y).toFixed(1), path: pts,
+  }
+})
+for (const f of FALL_DEFS) {
+  console.log(`  ${f.name}: ${f.drop} m, ${f.top.y.toFixed(1)} → ${f.foot.y.toFixed(1)} over ${f.path.length - 1} m of ground`)
+}
+
 // ---------- validators ----------
 const fail = (msg) => {
   console.error(`VALIDATOR FAIL: ${msg}`)
@@ -994,6 +1089,34 @@ for (const lake of LAKES_ACTIVE) {
   }
 }
 
+// the falls: a hand-placed lip that turned out to be flat ground is a bug in
+// the trace, not scenery — and one whose foot hangs above the water is a
+// sheet ending in mid-air
+for (const f of FALL_DEFS) {
+  if (f.drop < 10) fail(`fall ${f.name}: only ${f.drop} m of drop — the lip is not on a cliff`)
+  if (f.path.length < 2) fail(`fall ${f.name}: no descent traced`)
+  if (f.foot.y > SEA + 4) fail(`fall ${f.name}: foot at ${f.foot.y.toFixed(1)} m, nothing to land in`)
+  // the plunge pool is carved with a disc and a disc has no idea where the
+  // cliff is: the first cut reached 10 m back under the lip and took the top
+  // of the fall away with it (29.5 m of rock became 5.5)
+  // sampled three metres INLAND of the lip: the lip cell itself straddles the
+  // edge, and a 2 m bilinear tap there is half cliff face by construction
+  const def = FALLS.find((q) => q.name === f.name)
+  const al = Math.hypot(def.aim.x, def.aim.z) || 1
+  const lipGround = hAt(f.top.x - (def.aim.x / al) * 3, f.top.z - (def.aim.z / al) * 3)
+  if (lipGround < f.top.y - 2.2) fail(`fall ${f.name}: the lip is undercut — ground ${lipGround.toFixed(1)} m under a water surface of ${f.top.y.toFixed(1)}`)
+  // the sheet must not be a slide: the drop has to beat the horizontal run
+  const run = Math.hypot(f.foot.x - f.top.x, f.foot.z - f.top.z)
+  if (run > f.drop * 1.2) fail(`fall ${f.name}: ${run.toFixed(0)} m of run for ${f.drop} m of drop — that is a rapid, not a fall`)
+  // and the channel above it must actually reach the lip with water in it
+  if (f.spill) {
+    const part = RIVER.parts.find((p) => p.name === f.spill)
+    const end = part.path[part.path.length - 1]
+    const d = Math.hypot(end.x - f.top.x, end.z - f.top.z)
+    if (d > 6) fail(`fall ${f.name}: its channel ${f.spill} ends ${d.toFixed(0)} m from the lip`)
+  }
+}
+
 // ---------- outputs ----------
 mkdirSync('public/world', { recursive: true })
 const out = new Int16Array(SIDE * SIDE)
@@ -1022,6 +1145,7 @@ const meta = {
     bakedMouthY: +hAt(c.mouth.x, c.mouth.z).toFixed(1),
   })),
   forests: FORESTS, clearings: CLEARINGS,
+  falls: FALL_DEFS,
   bakedAt: new Date().toISOString(),
 }
 writeFileSync('public/world/world-meta.json', JSON.stringify(meta, null, 2))

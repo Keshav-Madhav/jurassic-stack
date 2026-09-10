@@ -21,6 +21,14 @@ const shots = [
   ['swamp', 760, 1.7, 700, 0.3, 0.02, 0.5],
   ['estuary', 1150, 1.7, 1380, -0.4, 0.02, 0.5],
   ['beach', 0, 1.7, 1585, 3.14, 0.0, 0.5], // spawn beach facing the sea
+  // THE WELLSPRING FALL (M72): the gorge above it, the lip, the cove beach it
+  // is meant to be seen from, and the foot of the sheet
+  ['gorge', 1123, 1.7, -1290, -0.45, -0.08, 0.5], // in the spill channel, looking down it to the lip
+  ['fall-cove', 1234, 1.7, -1305, 1.27, 0.14, 0.5], // the cove sand — PLAN's "from the beach"
+  ['fall-foot', 1180, 2.5, -1360, 2.32, 0.5, 0.5], // in the water at the plunge, looking up the sheet
+  ['fall-sea', 1260, 25, -1400, 2.21, -0.07, 0.5], // off the cove, the whole bluff
+  ['fall-near', 1170, 20, -1355, 2.31, -0.15, 0.5], // level with the middle of the sheet, close
+  ['fall-crest', 1133, 2.0, -1312, -0.53, -0.35, 0.5] // in the channel at the lip, looking over
 ]
 for (const [name, x, y, z, yaw, pitch, t] of shots) {
   await page.evaluate(([xx, yy, zz, ya, pi, tt]) => {

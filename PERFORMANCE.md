@@ -337,6 +337,21 @@ Result: **56.5 MB handed back on a walk, 62-90 MB on a full tour**, geometry cou
 of climbing. `gate-m8` asserts the cache frees a real share of the live count, is not still growing
 while you stand still, and is not thrashing the builder.
 
+## Waterfalls (M72)
+
+A fall is two meshes and six sprites, and it is **detached from the scene beyond 620 m** (M24's
+rule) — so from spawn, 3.5 km away, it costs nothing at all. What that would have cost instead is
+a compile: a detached material compiles the first frame it is drawn, so walking up to the cliff
+would have hitched at exactly the place the feature is about. `Waterfalls.attachForWarmup()` puts
+every fall in the scene for the boot compile pass, the same way one rig of each dino species is
+attached for it, and `for (const undo of detach) undo()` takes them back out.
+
+The sheet's fragment shader adds a self-lit term. That is not laziness about lighting: the
+Wellspring bluff faces north-east and is in shadow at noon, and a `MeshStandardMaterial` sheet on
+it rendered charcoal grey on charcoal grey. Broken water is a cloud of scattering droplets and
+stays bright in shade — which is why you can see a waterfall from a mile away — so the term is the
+physically honest one, not a fudge.
+
 ## Not doing
 
 - N8AO / anything that renders the scene a second time — see the GTAO measurement above.

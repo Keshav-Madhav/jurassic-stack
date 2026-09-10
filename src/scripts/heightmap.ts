@@ -54,6 +54,19 @@ export interface RiverPart {
 }
 export interface RiverDef { knot: { x: number; z: number }; level: number; parts: RiverPart[] }
 export interface SwampDef { level: number; shore: [number, number][] }
+/** A waterfall, traced down the baked rock by tools/bake-island.mjs. `path`
+ *  is the profile the sheet hangs on, lip first, one point per metre of
+ *  horizontal run — so on a sheer face two points can be thirty metres apart
+ *  in y and one apart in xz. */
+export interface FallDef {
+  name: string
+  width: number
+  spill: string | null
+  top: { x: number; y: number; z: number }
+  foot: { x: number; y: number; z: number }
+  drop: number
+  path: { x: number; y: number; z: number }[]
+}
 export interface WorldMeta {
   side: number
   res: number
@@ -74,6 +87,7 @@ export interface WorldMeta {
   coast?: [number, number][]
   forests?: { name: string; kind: 'broadleaf' | 'pine' | 'mixed'; density: number; edge?: number; shore: [number, number][] }[]
   clearings?: [number, number][][]
+  falls?: FallDef[]
 }
 
 let grid: Int16Array | null = null
