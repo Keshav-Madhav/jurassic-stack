@@ -22,7 +22,7 @@ const browser = await chromium.launch({
 })
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } })
 page.on('pageerror', (e) => console.error('[err]', e.message.slice(0, 160)))
-await page.goto(url, { waitUntil: 'networkidle' })
+await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 })
 await page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 90000 })
 // the gesture the browser wants
 await page.mouse.click(640, 400)

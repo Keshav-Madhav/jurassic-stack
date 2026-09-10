@@ -10,7 +10,7 @@ const page = await browser.newPage({ viewport: { width: 1280, height: 720 } })
 const errors = []
 page.on('pageerror', (e) => errors.push('pageerror: ' + e.message.slice(0, 200)))
 page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') errors.push(`${m.type()}: ${m.text().slice(0, 200)}`) })
-await page.goto(url, { waitUntil: 'networkidle' })
+await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 })
 await page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 90000 })
 await page.mouse.click(640, 400)
 const snap = async (label) => {
@@ -64,7 +64,7 @@ await g('window.__g.game.save()')
 await page.waitForTimeout(600)
 const afterBuild = await snap('after building + UI')
 
-await page.reload({ waitUntil: 'networkidle' })
+await page.reload({ waitUntil: 'domcontentloaded', timeout: 120000 })
 await page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 90000 })
 await page.waitForTimeout(3000)
 const afterReload = await snap('after reload')

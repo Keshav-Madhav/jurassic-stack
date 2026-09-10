@@ -69,7 +69,7 @@ await page.addInitScript(() => {
   patch(window.WebGLRenderingContext?.prototype)
 })
 
-await page.goto(url, { waitUntil: 'networkidle' })
+await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 })
 await page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 60000 })
 await page.waitForTimeout(30000) // the load's own compiles, uploads and streaming
 

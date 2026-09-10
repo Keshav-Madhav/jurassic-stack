@@ -24,7 +24,7 @@ const ready = async () => {
 }
 const g = (expr) => page.evaluate(expr)
 
-await page.goto(url, { waitUntil: 'networkidle' })
+await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 })
 await ready()
 // fresh world (also proves reload works even before the loop starts)
 await wipeAndReload(page)
@@ -247,7 +247,7 @@ check(!(await g('window.__g.game.riding()')), 'dismounted')
 const savedWood = await g('window.__g.game.count("wood")')
 await page.evaluate(() => window.__g.game.save()) // explicit: pagehide races reload
 await page.waitForTimeout(200)
-await page.reload({ waitUntil: 'networkidle' })
+await page.reload({ waitUntil: 'domcontentloaded', timeout: 120000 })
 await ready()
 check((await g('window.__g.game.count("wood")')) === savedWood, `inventory survived reload (wood=${savedWood})`)
 check((await g('window.__g.game.pieces()')) >= 3, 'structures survived reload')

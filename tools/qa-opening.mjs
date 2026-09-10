@@ -31,7 +31,7 @@ const browser = await chromium.launch({ channel: 'chrome', headless: true, args:
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } })
 const errors = []
 page.on('pageerror', (e) => errors.push(e.message.slice(0, 160)))
-await page.goto(url, { waitUntil: 'networkidle' })
+await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 })
 await page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 90000 })
 
 // a brand new island: no save, nothing learned, nothing in the pack

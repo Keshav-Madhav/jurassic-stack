@@ -7,7 +7,7 @@ let failed = false
 const check = (ok, msg) => { console.log(`${ok ? 'PASS' : 'FAIL'} ${msg}`); if (!ok) failed = true }
 const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-gl=angle'] })
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } })
-await page.goto(url, { waitUntil: 'networkidle' })
+await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 })
 await page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 60000 })
 // the 1500 rigs clone in over ~10 s; wait until every species has a loaded rig
 await page.waitForFunction('Object.keys(window.__g.game.animAudit()).length >= 11', null, { timeout: 40000 }).catch(() => {})
@@ -112,16 +112,35 @@ await g('window.__g.game.swing()') // the player swings first: the tames should 
 await page.waitForTimeout(2500)
 const guarding = await page.evaluate((i) => window.__g.game.dinoStates()[i].guarding, pRaptor)
 check(guarding === true, 'the tame takes up the fight when you swing first')
-// POLL FOR THE BITE, do not guess how long it takes. The tame has to path to
-// the carno and close the distance, and a fixed 6 s window is a bet on how
-// busy the machine is — it lost once at load average 7 (M71). Waiting up to
-// 20 s asserts exactly the same thing and stops betting.
+// POLL FOR THE BITE, and watch the tame CLOSE — do not guess how long it
+// takes. M71 replaced a fixed 6 s window with a 20 s one, which is a longer
+// bet, not a different kind of thing: 20 s of wall clock at load average 8
+// is a handful of simulated seconds, and it lost in the full suite run right
+// after the other five gates had heated the machine (`268 → 268 hp`), while
+// passing standalone a minute later.
+//
+// So watch the thing itself. A bite needs the tame to reach the carno, and
+// the distance between them is observable — if it is still shrinking the
+// fight has not started yet and more time is the right answer; if it stalls
+// at 30 m the tame is stuck and no amount of waiting will help. The failure
+// now says WHICH of those happened instead of "hp unchanged".
+const distNow = () => page.evaluate(([a, b2]) => {
+  const g = window.__g
+  const p1 = g.game.dinoPos(a), p2 = g.game.dinoPos(b2)
+  return p1 && p2 ? Math.hypot(p1.x - p2.x, p1.z - p2.z) : Infinity
+}, [pRaptor, foe])
 let hpAfter = hpBefore
-for (let i = 0; i < 20 && hpAfter >= hpBefore; i++) {
+let closest = await distNow()
+let stalled = 0
+for (let i = 0; i < 45 && hpAfter >= hpBefore; i++) {
   await page.waitForTimeout(1000)
   hpAfter = await page.evaluate((k) => window.__g.game.dinoStates()[k].hp, foe)
+  const d = await distNow()
+  // "closing" counts as progress; 12 s with no new closest is a real stall
+  if (d < closest - 0.5) { closest = d; stalled = 0 } else if (++stalled > 12) break
 }
-check(hpAfter < hpBefore, `the tame actually bites: the carno is ${hpBefore} → ${hpAfter} hp`)
+check(hpAfter < hpBefore,
+  `the tame actually bites: the carno is ${hpBefore} → ${hpAfter} hp (closed to ${closest.toFixed(1)} m)`)
 
 
 // --- M41: a body goes down like a body ---

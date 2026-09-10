@@ -6,7 +6,7 @@ import { chromium } from 'playwright-core'
 const b = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-gl=angle', '--disable-gpu-vsync', '--disable-frame-rate-limit'] })
 const page = await b.newPage({ viewport: { width: 2560, height: 1440 } })
 page.on('pageerror', (e) => console.error('[err]', e.message.slice(0, 200)))
-await page.goto(process.argv[2] ?? 'http://localhost:4173', { waitUntil: 'networkidle' })
+await page.goto(process.argv[2] ?? 'http://localhost:4173', { waitUntil: 'domcontentloaded', timeout: 120000 })
 await page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 90000 })
 await page.evaluate(() => { window.__g.setAdaptive(false); window.__g.setPixelRatio(1); window.__g.setGpuProbe(true) })
 for (const [x, z, yaw, name] of [[-286, 793, 1.35, 'wood-line'], [0, 1560, 0, 'spawn']]) {

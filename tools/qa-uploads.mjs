@@ -19,7 +19,7 @@ const LAP = [[0, 1560], [-286, 793], [-250, 1040], [700, 900], [300, -560], [0, 
 const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-gl=angle', '--disable-gpu-vsync', '--disable-frame-rate-limit'] })
 const page = await browser.newPage({ viewport: { width: small ? 1280 : 2560, height: small ? 720 : 1440 } })
 page.on('pageerror', (e) => console.error('[err]', e.message.slice(0, 160)))
-await page.goto(url, { waitUntil: 'networkidle' })
+await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 })
 await page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 60000 })
 await page.waitForTimeout(30000)
 

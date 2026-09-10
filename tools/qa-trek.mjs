@@ -42,7 +42,7 @@ const browser = await chromium.launch({ channel: 'chrome', headless: true, args:
 const page = await browser.newPage({ viewport: { width: small ? 1280 : 2560, height: small ? 720 : 1440 } })
 const errors = []
 page.on('pageerror', (e) => errors.push(e.message.slice(0, 200)))
-await page.goto(url, { waitUntil: 'networkidle' })
+await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 })
 await page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 60000 })
 await page.waitForTimeout(20000) // let the load settle: this is about the WALK
 

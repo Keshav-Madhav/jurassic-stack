@@ -46,3 +46,26 @@ export async function reload(page, timeout = 120000) {
     { timeout },
   )
 }
+
+// ---------------------------------------------------------------------------
+// AND THE SAME MISTAKE ON THE WAY IN (M73b).
+//
+// Every tool opened with `page.goto(url, { waitUntil: 'networkidle' })` and
+// then, on the very next line, waited for `window.__g.ready === true`. The
+// second wait is the real one — the game says when it is ready — so the
+// first was pure redundancy, and it was the fragile half: `networkidle`
+// wants a 500 ms gap with no requests in flight, and a page that streams a
+// 8 MB heightmap, a 5 MB navmesh and 30 MB of dino GLBs off a cold CDN edge
+// may not get one inside the 30 s default. `goto` then throws before the
+// ready-poll it was standing in front of ever runs.
+//
+// `tools/deploy-check.mjs` worked this out on its own some rounds ago and
+// carries the comment to prove it — and the lesson never left that file.
+// Thirty-four tools, thirty-nine call sites, all now
+// `{ waitUntil: 'domcontentloaded', timeout: 120000 }`: get the document,
+// then wait for the fact.
+//
+// Rule of thumb for this whole directory, and the third time it has been
+// written down (M64's saddle, M73b's reload, this): NEVER wait for a proxy
+// when the thing itself is observable. `waitForTimeout` and `networkidle`
+// are both guesses about a machine you do not control.

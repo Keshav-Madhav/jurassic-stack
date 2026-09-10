@@ -8,7 +8,7 @@ const url = process.argv[2] ?? 'http://localhost:4173'
 const prefix = process.argv[3] ?? 'shots/ecology'
 const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-gl=angle'] })
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } })
-await page.goto(url, { waitUntil: 'networkidle' })
+await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 })
 await page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 60000 })
 await page.waitForTimeout(6000)
 const AX = -240, AZ = 1000 // the plain-circle ruin's meadow

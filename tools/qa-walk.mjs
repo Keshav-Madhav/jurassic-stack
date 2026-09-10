@@ -10,7 +10,7 @@ const time = Number(process.argv[4] ?? 0.5)
 const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-gl=angle'] })
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } })
 page.on('pageerror', (e) => console.error('[err]', e.message.slice(0, 200)))
-await page.goto(url, { waitUntil: 'networkidle' })
+await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 })
 await page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 60000 })
 await page.waitForTimeout(6000)
 const spots = [

@@ -1,7 +1,7 @@
 import { chromium } from 'playwright-core'
 const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-gl=angle'] })
 const page = await browser.newPage({ viewport: { width: 1280, height: 720 } })
-await page.goto('http://localhost:4173', { waitUntil: 'networkidle' })
+await page.goto('http://localhost:4173', { waitUntil: 'domcontentloaded', timeout: 120000 })
 await page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 60000 })
 await page.waitForTimeout(6000)
 for (const [label, x, z, yaw] of [['wood line', -286, 793, 1.35], ['spawn', 0, 1560, 0], ['ring', 300, 300, 2.0]]) {

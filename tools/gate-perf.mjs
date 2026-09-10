@@ -37,7 +37,7 @@ const SPOTS = [
 const browser = await chromium.launch({ channel: 'chrome', headless: true, args: ['--use-gl=angle', '--disable-gpu-vsync', '--disable-frame-rate-limit'] })
 const page = await browser.newPage({ viewport: { width: W, height: H } })
 page.on('pageerror', (e) => console.error('[err]', e.message.slice(0, 160)))
-await page.goto(url, { waitUntil: 'networkidle' })
+await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 })
 await page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 60000 })
 await page.waitForTimeout(12000) // startup streaming settles
 const px = await page.evaluate(() => {

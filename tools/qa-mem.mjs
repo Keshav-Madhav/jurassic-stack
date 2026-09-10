@@ -18,12 +18,12 @@ const settle = async () => {
   await page.waitForTimeout(8000)
   return page.evaluate(() => window.__g.mem())
 }
-await page.goto(url, { waitUntil: 'networkidle' })
+await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 120000 })
 const first = await settle()
 console.log(JSON.stringify(first, null, 1))
 console.log(`\naccounted for: ${(first.sceneGeoMB + first.instanceMB + first.detachedRootGeoMB + first.gridsMB).toFixed(1)} of ${first.heapMB} MB\n`)
 for (let i = 2; i <= reloads; i++) {
-  await page.reload({ waitUntil: 'networkidle' })
+  await page.reload({ waitUntil: 'domcontentloaded', timeout: 120000 })
   const m = await settle()
   console.log(`load ${i}: heap ${String(m.heapMB).padStart(6)} / ${m.limitMB} MB · scene geo ${m.sceneGeoMB} · roots ${m.detachedRootGeoMB} · instances ${m.instanceMB}`)
 }

@@ -89,7 +89,7 @@ await page.waitForTimeout(400)
 check((await g('window.__g.cam.fov')) === 85, `field of view applied (${base.fov}° → ${await g('window.__g.cam.fov')}°)`)
 
 // ...and it is all still true after a reload
-await page.reload({ waitUntil: 'networkidle' })
+await page.reload({ waitUntil: 'domcontentloaded', timeout: 120000 })
 await ready()
 await page.waitForTimeout(2000)
 const after = await g('({ pr: window.__g.pixelRatio(), fov: window.__g.cam.fov, grass: !!window.__g.scene.getObjectByName("grass") })')
