@@ -129,6 +129,20 @@ await page.waitForTimeout(300)
 s = await sfx()
 check((s.plays['ui-open'] ?? 0) > 0 && (s.plays['ui-close'] ?? 0) > 0, 'the pack opens and closes with a sound')
 
+// THE MARSH HAS FROGS (M73). One wind, one bird table and one cricket bed
+// covered the whole island — every biome sounded like the plains.
+{
+  await page.evaluate(() => { const g = window.__g; g.setTime(0.5); g.game.setGod(true); g.teleport(760, 700) })
+  await page.waitForTimeout(6000)
+  const frogs = await page.evaluate(() => window.__g.game.frogs())
+  check(frogs > 0, `the swamp croaks at you (${frogs} calls in six seconds)`)
+  const before = frogs
+  await page.evaluate(() => { const g = window.__g; g.teleport(-250, 1040) })
+  await page.waitForTimeout(6000)
+  const after = await page.evaluate(() => window.__g.game.frogs())
+  check(after - before < frogs, `and the plains do not (${after - before} more calls out there)`)
+}
+
 // --- nothing missing ---
 s = await sfx()
 check(s.missing.length === 0, `every sample loaded (${s.missing.length ? s.missing.join(', ') : 'no misses'})`)

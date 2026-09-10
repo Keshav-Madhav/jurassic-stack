@@ -3,7 +3,7 @@
 // meshes) and by terrain-worker.ts (which builds LOD upgrades off the main
 // thread so a gallop across chunk borders never hitches the frame).
 import * as THREE from 'three'
-import { heightAt, normalAt, forestMaskAt, biomeAt, shoreDist, BIOME, VOLCANO, worldMeta, HALF_SIZE, SEA_LEVEL, ambientAt } from './heightmap'
+import { heightAt, normalAt, forestMaskAt, forestKindAt, FOREST_KIND, biomeAt, shoreDist, BIOME, VOLCANO, worldMeta, HALF_SIZE, SEA_LEVEL, ambientAt } from './heightmap'
 
 export const CHUNK_SIZE = 128
 export const CHUNKS_PER_SIDE = (HALF_SIZE * 2) / CHUNK_SIZE // 32
@@ -31,6 +31,10 @@ const C_ALPINE = new THREE.Color(0x6a6350) // high scree and thin turf between t
 // eye-level shot — a floor of litter is brown, and 2× brighter than this was)
 const C_FLOOR = new THREE.Color(0x6a5438) // forest floor: dirt + leaf litter
 const C_FLOOR_LIT = new THREE.Color(0x8a7048)
+// needle litter (M73): redder and duller than leaf litter, and it wins over
+// the grass underneath much harder — nothing much grows in a pine wood
+const C_NEEDLE = new THREE.Color(0x5c4028)
+const C_NEEDLE_LIT = new THREE.Color(0x7d5c36)
 const C_MUD = new THREE.Color(0x76624a) // wet banks
 const C_SHORE_SAND = new THREE.Color(0x8f7a52)
 const C_SWAMP = new THREE.Color(0x46502e) // murky marsh ground
@@ -153,6 +157,15 @@ function varTFor(x: number, z: number): number {
 }
 
 /** Ground color by height/slope + two-frequency variation noise. */
+/** QA (gate-m8): the ground colour the mesh is actually painted with, at a
+ *  point. Exported so a gate can compare two woods' floors through the same
+ *  function the terrain uses, rather than re-deriving the rule and testing
+ *  its own copy of it. */
+export function groundColorProbe(x: number, z: number): [number, number, number] {
+  const c = groundColorAt(x, z, heightAt(x, z), normalAt(x, z, new THREE.Vector3()).y, new THREE.Color())
+  return [c.r, c.g, c.b]
+}
+
 function groundColorAt(x: number, z: number, h: number, ny: number, out: THREE.Color): THREE.Color {
   // cheap deterministic variation (hash-free trig noise is fine for color)
   const n1 = Math.sin(x * 0.021 + Math.sin(z * 0.017) * 2.1) * Math.cos(z * 0.019 - Math.sin(x * 0.023))
@@ -192,8 +205,18 @@ function groundColorAt(x: number, z: number, h: number, ny: number, out: THREE.C
     if (forest > -0.35) {
       // (0.85 → 0.7: some green survives under the canopy — a wood is not a
       // dirt lot, and the mid-band tree twins over black ground looked dead)
-      const t = THREE.MathUtils.clamp((forest + 0.35) / 0.6, 0, 1) * 0.7
-      out.lerp(_c.copy(C_FLOOR).lerp(C_FLOOR_LIT, 0.5 + varT * 0.5), t)
+      // A PINE FLOOR IS NOT A BROADLEAF FLOOR (M73). Standing in the north
+      // pines and standing in the Southwood looked identical from the knees
+      // down: the same litter, the same surviving green. Needles acidify the
+      // soil and smother the undergrowth, so a pine floor is rust-brown,
+      // drier, and much LESS green than a leaf floor — and the difference is
+      // most of what tells you which wood you are in.
+      const pine = forestKindAt(x, z) === FOREST_KIND.PINE
+      const t = THREE.MathUtils.clamp((forest + 0.35) / 0.6, 0, 1) * (pine ? 0.92 : 0.7)
+      const floor = pine
+        ? _c.copy(C_NEEDLE).lerp(C_NEEDLE_LIT, 0.5 + varT * 0.5)
+        : _c.copy(C_FLOOR).lerp(C_FLOOR_LIT, 0.5 + varT * 0.5)
+      out.lerp(floor, t)
     }
     // wet banks: mud then a sand lip against rivers and lakes (backlog #1)
     const wd = waterEdgeDist(x, z)

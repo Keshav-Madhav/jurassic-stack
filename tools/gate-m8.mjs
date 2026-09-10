@@ -320,6 +320,63 @@ if (dune && meadow) {
   check((await toast()).includes('not carrying'), 'and N goes quiet — the island stops telling you where to go')
 }
 
+// THE INTERIORS (M73). PLAN's last content line is "waterfalls + swamp/pine
+// interiors", and the flora has been placed since M10f — so what these check
+// is not "is anything there" but "does being in there feel like anywhere".
+// Both failures they guard were measured, not imagined: the pine floor was
+// the Southwood's floor exactly, and standing in the middle of the marsh you
+// could see 1500 m to the far hills.
+{
+  const at = async (x, z, wait = 2200) => {
+    await page.evaluate(([xx, zz]) => {
+      const g = window.__g
+      g.setTime(0.5); g.game.setGod(true); g.teleport(xx, zz)
+      g.setFreeCam(xx, g.groundAt(xx, zz) + 1.7, zz, 0.4, 0.02)
+    }, [x, z])
+    await page.waitForTimeout(wait)
+    return page.evaluate(() => window.__g.game.air())
+  }
+  // the plains: open country, the view runs to the horizon
+  const plains = await at(-250, 1040)
+  check(plains.humid === 0 && plains.fogFar > 1200, `on the plains the view is open (fog far ${plains.fogFar} m)`)
+  // the marsh: close, and the air takes a colour
+  const marsh = await at(760, 700, 7000)
+  check(marsh.humid > 0.9, `the swamp closes in around you (humid ${marsh.humid})`)
+  check(marsh.fogFar < 400, `and you cannot see the far hills any more (fog far ${marsh.fogFar} m, was ${plains.fogFar})`)
+  check(marsh.fog !== plains.fog, `the air itself takes the marsh's colour (#${plains.fog} → #${marsh.fog})`)
+  // ...and it LIFTS on the way out rather than sticking (the cave/underwater bug shape)
+  const out = await at(-250, 1040, 7000)
+  check(out.humid < 0.05 && out.fogFar > 1200, `and walking out of it gives the view back (fog far ${out.fogFar} m)`)
+
+  // THE PINE FLOOR IS NOT A BROADLEAF FLOOR. Sampled through the same
+  // function the terrain mesh is painted with, so this is the ground the
+  // player actually sees, not a parallel guess.
+  const floor = await page.evaluate(() => {
+    const g = window.__g
+    // UNDER THE CANOPY ONLY. The first cut averaged a 120 m box and got
+    // 0.031 vs 0.032 — a check that passes by a hair is not a check. Half
+    // that box is glade, edge and open ground, where both woods correctly
+    // paint the same lawn; the claim is about the ground under closed trees,
+    // so that is what gets sampled.
+    const mean = (x, z, r = 90) => {
+      let R = 0, G = 0, B = 0, n = 0
+      for (let dz = -r; dz <= r; dz += 10) for (let dx = -r; dx <= r; dx += 10) {
+        if (g.game.forestAt(x + dx, z + dz).mask < 0.3) continue
+        const c = g.game.groundColorAt(x + dx, z + dz)
+        R += c[0]; G += c[1]; B += c[2]; n++
+      }
+      return n ? [R / n, G / n, B / n, n] : null
+    }
+    return { pine: mean(385, -652), leaf: mean(50, 1193) }
+  })
+  const green = (c) => c[1] - (c[0] + c[2]) / 2
+  check(floor.pine && floor.leaf && floor.pine[3] > 40 && floor.leaf[3] > 40,
+    `both woods have closed canopy to sample (${floor.pine?.[3]} pine cells, ${floor.leaf?.[3]} leaf)`)
+  check(green(floor.pine) < green(floor.leaf) * 0.72,
+    `the pine floor is needles, not lawn (greenness ${green(floor.pine).toFixed(3)} vs the Southwood's ${green(floor.leaf).toFixed(3)})`)
+  check(floor.pine[0] > floor.pine[2], 'and it is rust-brown — more red in it than blue')
+}
+
 await browser.close()
 console.log(failed ? '\nGATE FAILED' : '\nGATE PASSED')
 process.exit(failed ? 1 : 0)

@@ -336,6 +336,17 @@ export class DayNight {
   /** the colour the world goes when you are under it */
   private static readonly UW = new THREE.Color(0x3d8b93)
 
+  /** 0..1 — how deep in the swamp you are (M73). PLAN's last content line is
+   *  "swamp/pine interiors", and what the swamp was missing was not flora
+   *  (M10f placed that) but AIR: standing in the middle of a marsh you could
+   *  see clear to the far hills, so it read as a pond with trees round it
+   *  rather than as somewhere you would be reluctant to walk into. Same shape
+   *  as `submerged` — a lerp, so leaving it lifts rather than pops. */
+  humid = 0
+
+  /** the colour the air goes in the marsh: warm, green, and close */
+  private static readonly HUMID = new THREE.Color(0x8a9a6b)
+
   private apply(): void {
     const elev = this.sunElevationDeg
     const azimuth = (this.time - 0.25) * Math.PI * 2 * 0.5 + Math.PI * 0.15
@@ -368,6 +379,14 @@ export class DayNight {
     fog.color.copy(grade.fog)
     fog.near = grade.fogNear * this.fogScale
     fog.far = grade.fogFar * this.fogScale
+    // the marsh haze goes on FIRST, so going under the water in the swamp
+    // still ends up underwater-coloured rather than half marsh
+    const hum = this.humid
+    if (hum > 0) {
+      fog.color.lerp(DayNight.HUMID, hum * 0.55)
+      fog.near = THREE.MathUtils.lerp(fog.near, 18, hum)
+      fog.far = THREE.MathUtils.lerp(fog.far, 300, hum)
+    }
     if (sub > 0) {
       // green-blue and CLOSE: visibility underwater is metres, not kilometres
       fog.color.lerp(DayNight.UW, sub)

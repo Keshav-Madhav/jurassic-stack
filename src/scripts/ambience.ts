@@ -13,6 +13,12 @@ export class Ambience {
   private fallFilter: BiquadFilterNode | null = null
   /** QA (gate-sound): the falls' current mix level, 0 when out of earshot */
   fallLevel = 0
+  /** 0..1, set once a frame — where you are standing (M73) */
+  private inSwamp = 0
+  private inPines = 0
+  private nextFrog = 0
+  /** QA (gate-sound): how many frog calls the marsh has made */
+  frogs = 0
   private singers = [3400, 3900, 4300, 4700].map((f) => ({ f, next: 0 }))
   private nextBird = 0
   private t = 0
@@ -116,6 +122,41 @@ export class Ambience {
     this.fallGain.gain.setTargetAtTime(this.fallLevel * 0.34, now, 0.25)
     // close up you hear the hiss of the spray; far off, only the roar
     this.fallFilter.frequency.setTargetAtTime(240 + this.fallLevel * 900, now, 0.3)
+  }
+
+  /** Where you are standing, 0..1 each. The wood and the marsh do not sound
+   *  like the plains and they did (M73): one wind, one bird table, one
+   *  cricket bed for the entire island. */
+  setPlace(swamp: number, pines: number): void {
+    this.inSwamp = swamp
+    this.inPines = pines
+  }
+
+  /** A frog: two short croaks a fifth apart, low and buzzy. Sawtooth through
+   *  a lowpass, because a croak is a rough-edged pulse and a sine is a flute. */
+  private frog(): void {
+    const ctx = this.ctx!
+    const now = ctx.currentTime
+    const f0 = 120 + Math.random() * 90
+    const croaks = 1 + (Math.random() < 0.55 ? 1 : 0)
+    for (let i = 0; i < croaks; i++) {
+      const t0 = now + i * (0.17 + Math.random() * 0.1)
+      const o = ctx.createOscillator()
+      o.type = 'sawtooth'
+      o.frequency.setValueAtTime(f0 * (i ? 1.5 : 1), t0)
+      const lp = ctx.createBiquadFilter()
+      lp.type = 'lowpass'
+      lp.frequency.value = 900
+      lp.Q.value = 3
+      const g = ctx.createGain()
+      g.gain.setValueAtTime(0, t0)
+      g.gain.linearRampToValueAtTime(0.045, t0 + 0.02)
+      g.gain.exponentialRampToValueAtTime(0.001, t0 + 0.15)
+      o.connect(lp).connect(g).connect(this.bugGain!)
+      o.start(t0)
+      o.stop(t0 + 0.2)
+    }
+    this.frogs++
   }
 
   private chirp(): void {
@@ -228,8 +269,13 @@ export class Ambience {
     const daylight = Math.max(0, Math.sin((time - 0.25) * Math.PI * 2)) // 0 at night → 1 at noon
     // wind breathes
     const breath = 0.6 + 0.4 * Math.sin(this.t * 0.37) * Math.sin(this.t * 0.11 + 1)
-    this.windGain.gain.value = (0.08 + 0.16 * windiness) * breath
-    this.windFilter.frequency.value = 300 + 400 * breath * windiness
+    // WIND IN NEEDLES IS NOT WIND IN LEAVES (M73). A broadleaf canopy
+    // clatters — broadband, low; a conifer hisses, because a needle is a
+    // thin edge and it whistles. Same noise source, the filter moved up an
+    // octave and a half and opened a little. In the marsh the opposite: dead
+    // still air under a closed canopy, so the wind almost stops.
+    this.windGain.gain.value = (0.08 + 0.16 * windiness) * breath * (1 - 0.55 * this.inSwamp) * (1 + 0.25 * this.inPines)
+    this.windFilter.frequency.value = (300 + 400 * breath * windiness) * (1 + 1.7 * this.inPines)
     // birds by day, at random
     if (daylight > 0.15 && this.t > this.nextBird) {
       this.chirp()
@@ -245,6 +291,16 @@ export class Ambience {
           if (Math.random() < 0.35 + 0.65 * night) this.cricket(s.f)
           s.next = this.t + 0.6 + Math.random() * 1.8
         }
+      }
+    }
+    // THE MARSH HAS FROGS, and unlike the crickets they do not wait for dark
+    // — a swamp is loud at noon. The bug bus carries them, so the settings
+    // volume already reaches them.
+    if (this.inSwamp > 0.25) {
+      this.bugGain.gain.setTargetAtTime(Math.max(0.5 * night, 0.5 * this.inSwamp), this.ctx.currentTime, 0.5)
+      if (this.t > this.nextFrog) {
+        this.frog()
+        this.nextFrog = this.t + (0.5 + Math.random() * 2.2) / this.inSwamp
       }
     }
   }

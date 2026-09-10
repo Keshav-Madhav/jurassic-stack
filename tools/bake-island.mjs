@@ -911,6 +911,49 @@ const forest = new Uint8Array(SIDE * SIDE)
       }
     }
     console.log(`  forest: ${FORESTS.length} woods, ${CLEARINGS.length} glades, ${((cells * RES * RES) / 1e6).toFixed(2)} km² wooded + ${((copse * RES * RES) / 1e6).toFixed(2)} km² of copses`)
+    // CAN THIS WOOD ACTUALLY HOLD TREES? (M73)
+    // The forest polygons are hand-traced as shapes on a map. The rules that
+    // decide whether a tree may STAND somewhere — the 0.72 normal floor, the
+    // pine treeline at 210 m, the volcano's bare skirt — were written
+    // separately in scatter.ts, and nothing ever checked the two against each
+    // other. Measured: `horns-pines` is 42% inside the cone's ash exclusion,
+    // `range-pines-west` is 47% too steep and 21% above the treeline. Four
+    // named woods are less than two-thirds plantable and one is half.
+    // This does not redraw anyone's hand geometry — the trace is the author's
+    // (the hand-made mandate). It puts the number on screen at bake time and
+    // fails only a wood that is mostly unplantable, which none is today.
+    for (const f of FORESTS) {
+      const xs = f.shore.map((p) => p[0]), zs = f.shore.map((p) => p[1])
+      let n = 0, plant = 0, steep = 0, high = 0, ash = 0
+      const cap = f.kind === 'pine' ? 210 : f.kind === 'redwood' ? 1e9 : 130
+      for (let z = Math.min(...zs); z <= Math.max(...zs); z += 10) {
+        for (let x = Math.min(...xs); x <= Math.max(...xs); x += 10) {
+          if (shoreDist(x, z, f.shore) >= 0) continue
+          n++
+          const h = hAt(x, z)
+          const dv = Math.hypot(x - VOLCANO.x, z - VOLCANO.z)
+          const isAsh = dv < 300 || (dv < 700 && h > 60)
+          // the same normal the scatter tests, from the same grid
+          const e = 2
+          const gx = (hAt(x + e, z) - hAt(x - e, z)) / (2 * e)
+          const gz = (hAt(x, z + e) - hAt(x, z - e)) / (2 * e)
+          const isSteep = 1 / Math.sqrt(1 + gx * gx + gz * gz) < 0.72
+          const isHigh = h > cap
+          if (isAsh) ash++
+          if (isSteep) steep++
+          if (isHigh) high++
+          if (!isAsh && !isSteep && !isHigh && h > 6) plant++
+        }
+      }
+      const pct = (v) => Math.round((v / n) * 100)
+      if (pct(plant) < 75) {
+        console.log(`    ${f.name}: only ${pct(plant)}% of it can hold a tree (${pct(steep)}% too steep, ${pct(high)}% over the ${cap} m line, ${pct(ash)}% volcanic ash)`)
+      }
+      if (pct(plant) < 35) {
+        console.error(`VALIDATOR FAIL: forest ${f.name} is ${pct(plant)}% plantable — that polygon is drawn over ground no tree can stand on`)
+        process.exitCode = 1
+      }
+    }
   }
 }
 const forestDensityAt = (x, z) => (forest[idx(Math.round((x + HALF) / RES), Math.round((z + HALF) / RES))] >> 2) / 63

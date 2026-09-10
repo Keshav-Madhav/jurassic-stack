@@ -1,7 +1,7 @@
 // Grass tile generation — pure data (matrices + colours) from the baked
 // grids, so it can run in the terrain worker. grass.ts owns the meshes.
 import * as THREE from 'three'
-import { heightAt, normalAt, biomeAt, forestMaskAt, BIOME, VOLCANO, worldMeta, ambientAt, caveAt } from './heightmap'
+import { heightAt, normalAt, biomeAt, forestMaskAt, forestKindAt, FOREST_KIND, BIOME, VOLCANO, worldMeta, ambientAt, caveAt } from './heightmap'
 
 export const GRASS_TILE = 64
 
@@ -32,6 +32,8 @@ const TINT: Record<number, readonly [number, number, number]> = {
   [BIOME.ALPINE]: [1.3, 1.0, 1.35], // sage, and short
   [BIOME.SWAMP]: [0.84, 1, 0.72], // deep olive
 }
+/** under pines: the little that grows is dark and blue-green, not lawn */
+const TINT_PINE: readonly [number, number, number] = [0.7, 0.9, 0.78]
 
 function underWater(x: number, z: number, h: number): boolean {
   const meta = worldMeta
@@ -96,7 +98,13 @@ export function buildGrassTile(tx: number, tz: number, spacing: number): { matri
       if (biome === BIOME.ALPINE && r2 > 0.3) continue
       // thinner under a closed canopy (the floor is dirt and litter there)
       const f = forestMaskAt(x, z)
-      if (f > 0.2 && r3 > 0.45) continue
+      const pineFloor = f > -0.1 && forestKindAt(x, z) === FOREST_KIND.PINE
+      // ...and much thinner under PINES (M73): the north pines grew the same
+      // knee-high lawn as the Southwood, which is the one thing a conifer
+      // wood never has. Needles smother it — a quarter of the blades, and
+      // shorter ones, so the litter shows through and the wood reads dry
+      if (pineFloor && r3 > 0.14) continue
+      if (!pineFloor && f > 0.2 && r3 > 0.45) continue
       if (normalAt(x, z, _n).y < 0.7) continue
       if (nearWater && underWater(x, z, h)) continue
       // A DUNE TUFT IS NOT A LAWN. Everything below used to grow the same
@@ -104,7 +112,7 @@ export function buildGrassTile(tx: number, tz: number, spacing: number): { matri
       // desert read as a meadow that happened to be standing on sand (M56,
       // from the walk shots). Dry country grows shorter, straw-coloured
       // grass; the alpine's is short and sage; the swamp's is a deep olive.
-      const grow = biome === BIOME.DESERT ? 0.68 : biome === BIOME.ALPINE ? 0.82 : 1
+      const grow = biome === BIOME.DESERT ? 0.68 : biome === BIOME.ALPINE ? 0.82 : pineFloor ? 0.7 : 1
       const scale = (0.55 + r4 * 0.6) * grow
       _p.set(x, h - 0.04, z)
       _q.setFromAxisAngle(_up, r2 * Math.PI)
@@ -115,7 +123,7 @@ export function buildGrassTile(tx: number, tz: number, spacing: number): { matri
       if (caveAt(x, z, 4)) continue // no grass under a roof (M51)
       // the baked sky view again: grass in a hollow is grass in shade (M47)
       const dry = biome === BIOME.DESERT
-      const tint = TINT[biome] ?? TINT_DEFAULT
+      const tint = pineFloor ? TINT_PINE : TINT[biome] ?? TINT_DEFAULT
       const k = (dry ? 0.78 + r4 * 0.3 : biome === BIOME.PLAINS ? 0.85 + r4 * 0.25 : 0.55 + r4 * 0.35) * ambientAt(x, z)
       colors[count * 3] = k * tint[0]
       colors[count * 3 + 1] = k * tint[1]

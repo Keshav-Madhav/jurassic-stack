@@ -35,10 +35,11 @@ import { ITEMS, RECIPES, type ItemId } from './items'
 import { Hud } from './hud'
 import { HELD_SIZE } from './player'
 import { saveGame, loadGame, SAVE_VERSION, type SaveFile } from './save'
-import { heightAt, loadHeightmap, worldMeta, SPAWN, skyViewAt } from './heightmap'
+import { heightAt, loadHeightmap, worldMeta, SPAWN, skyViewAt, normalAt, biomeAt, BIOME, forestKindAt, forestMaskAt, FOREST_KIND } from './heightmap'
 import { loadNavmesh, findPath, beginNavFrame, navStats, setNavBudget } from './navmesh'
 import { gridBytes } from './heightmap'
 import { terrainEvicted, setTerrainCacheTtl } from './terrain'
+import { groundColorProbe } from './terrain-paint'
 import { nearestObstacle } from './obstacles'
 import { advanceWind, windTime, windScale } from './wind'
 import { WaterSystem } from './water'
@@ -364,6 +365,7 @@ async function boot(): Promise<void> {
   let wayTick = 0
   /** 0..1, how far under the water the CAMERA is (M67) */
   let submerged = 0
+  let humid = 0
   const caves = new Caves()
   caves.build()
   scene.add(caves.group)
@@ -1316,6 +1318,8 @@ async function boot(): Promise<void> {
       },
       scatterDebug: () => scatter.debugSummary(),
       nodesNear: (x: number, z: number, r: number) => scatter.nodesNear(x, z, r),
+      forests: () => worldMeta?.forests ?? [],
+      normalY: (x: number, z: number) => normalAt(x, z, new THREE.Vector3()).y,
       /** QA (M69): what the CROSSHAIR is on right now — the exact raycast the
        *  swing uses, without swinging. The only way to tell "the player cannot
        *  aim at this" apart from "the swing is broken". */
@@ -1684,6 +1688,10 @@ async function boot(): Promise<void> {
       /** QA (M71): the Wayfinder relic — where it lies and whether it is lifted */
       wayfinder: () => wayfinder.debug(),
       falls: () => waterfalls.debug(),
+      frogs: () => ambience.frogs,
+      groundColorAt: (x: number, z: number) => groundColorProbe(x, z),
+      forestAt: (x: number, z: number) => ({ mask: +forestMaskAt(x, z).toFixed(3), kind: forestKindAt(x, z) }),
+      air: () => ({ humid: +daynight.humid.toFixed(3), submerged: +submerged.toFixed(3), fogFar: Math.round((scene.fog as THREE.Fog).far), fog: (scene.fog as THREE.Fog).color.getHexString() }),
       fallSound: () => ambience.fallLevel,
       /** QA (M71): what the relic is pointing at right now */
       wayfinderTarget: () => {
@@ -2255,6 +2263,7 @@ async function boot(): Promise<void> {
     daynight.setFocus(focus.x, focus.z)
     daynight.advance(dt)
     skyExtras.update(dt, cam.camera, daynight.keyDir, daynight.nightness, daynight.keyColor, daynight.fogFar)
+    ambience.setPlace(humid, forestKindAt(focus.x, focus.z) === FOREST_KIND.PINE ? Math.max(0, Math.min(1, (forestMaskAt(focus.x, focus.z) + 0.35) / 0.6)) : 0)
     ambience.update(dt, daynight.time)
     tS = performance.now()
     terrain.update(freeCam ? freeCam.x : focus.x, freeCam ? freeCam.z : focus.z)
@@ -2318,6 +2327,13 @@ async function boot(): Promise<void> {
       if (submerged < 0.002) submerged = 0
       daynight.submerged = submerged
       skyExtras.setSubmerged(submerged > 0.5)
+      // THE MARSH AIR (M73). Same lerp, driven by the camera for the same
+      // reason. `biomeAt` is a single byte-grid tap, so this is cheaper than
+      // the water query already above it.
+      const wantHumid = biomeAt(cp.x, cp.z) === BIOME.SWAMP ? 1 : 0
+      humid += (wantHumid - humid) * Math.min(1, dt * 1.2)
+      if (humid < 0.002) humid = 0
+      daynight.humid = humid
     }
     // THE TABLETS (M68): read themselves when you stand close enough. Cheap —
     // seven distance tests, only until all seven are read — and checked on the
