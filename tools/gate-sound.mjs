@@ -136,11 +136,17 @@ check((s.plays['ui-open'] ?? 0) > 0 && (s.plays['ui-close'] ?? 0) > 0, 'the pack
   await page.waitForTimeout(6000)
   const frogs = await page.evaluate(() => window.__g.game.frogs())
   check(frogs > 0, `the swamp croaks at you (${frogs} calls in six seconds)`)
-  const before = frogs
+  // ...and let the air DRY before counting. `humid` decays on a lerp, so for
+  // two or three seconds after you leave the marsh it is still above the
+  // frogs' threshold and one more can call — which is correct behaviour and
+  // made the old check ("fewer than the swamp managed") fail on a quiet
+  // swamp: 1 call out here against 1 in there.
   await page.evaluate(() => { const g = window.__g; g.teleport(-250, 1040) })
+  await page.waitForFunction('window.__g.game.air().humid < 0.05', null, { timeout: 15000 })
+  const before = await page.evaluate(() => window.__g.game.frogs())
   await page.waitForTimeout(6000)
   const after = await page.evaluate(() => window.__g.game.frogs())
-  check(after - before < frogs, `and the plains do not (${after - before} more calls out there)`)
+  check(after === before, `and the dry plains are silent (${after - before} calls in six seconds out there)`)
 }
 
 // --- nothing missing ---

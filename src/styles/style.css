@@ -251,3 +251,66 @@ body.locked #hud-gear { opacity: 0; pointer-events: none; }
   opacity: 0.7; white-space: nowrap;
 }
 #hud-settings .reset:hover { opacity: 1; background: rgba(255, 255, 255, 0.12); }
+
+/* ---------- THE MAP (M76) ---------- */
+/* The minimap sits above the hotbar on the right, clear of the vitals on the
+   left. It is a porthole, not a panel: a ring, a soft shadow, no chrome. */
+/* FIXED, not absolute: #hud is a 12px-tall strip pinned to the top of the
+   screen, so `inset: 0` against it puts the sheet's centre on the title bar
+   and throws the minimap clean off the viewport. Every other HUD child that
+   is not in the top strip — the vitals, the hotbar — is `fixed` for exactly
+   this reason. */
+#hud-map { position: fixed; inset: 0; pointer-events: none; }
+#map-mini {
+  position: fixed; right: 18px; bottom: 96px;
+  width: 158px; height: 158px;
+  border-radius: 50%;
+  border: 2px solid rgba(238, 222, 190, 0.5);
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.5), inset 0 0 24px rgba(0, 0, 0, 0.45);
+  background: rgba(24, 20, 14, 0.6);
+}
+/* the big sheet dims the world behind it and centres a paper square */
+#map-full {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 12px;
+  background: rgba(10, 8, 5, 0.72);
+  pointer-events: auto;
+}
+#map-full .sheet {
+  position: relative;
+  padding: 12px;
+  background: linear-gradient(160deg, #2a2318, #1b160f);
+  border: 1px solid rgba(226, 205, 166, 0.35);
+  border-radius: 6px;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.6);
+}
+#map-big {
+  display: block;
+  width: min(74vh, 74vw); height: min(74vh, 74vw);
+  border-radius: 3px;
+  background: #16304a;
+}
+#map-label {
+  position: absolute; left: 18px; top: 18px;
+  padding: 4px 9px;
+  font: 12px ui-monospace, monospace;
+  color: #f0e2c6;
+  background: rgba(20, 15, 8, 0.66);
+  border: 1px solid rgba(226, 205, 166, 0.28);
+  border-radius: 4px;
+}
+#map-legend {
+  font: 12px ui-monospace, monospace;
+  color: rgba(240, 230, 210, 0.85);
+  background: rgba(20, 15, 8, 0.6);
+  border: 1px solid rgba(226, 205, 166, 0.2);
+  border-radius: 4px;
+  padding: 5px 12px;
+}
+#map-legend b { color: #ffd24a; }
+#map-legend i { color: rgba(240, 230, 210, 0.55); font-style: normal; }
+/* the pack owns the screen when it is up, and the porthole is redundant
+   while the whole island is on the table */
+#hud.panel-open #map-mini,
+#hud-map.open #map-mini { opacity: 0; }

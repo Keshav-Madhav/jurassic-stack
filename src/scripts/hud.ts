@@ -71,7 +71,7 @@ export class Hud {
       <div id="hud-panel" hidden></div>
       <div id="hud-perf" hidden></div>
       <div id="hud-credits" hidden></div>
-      <div id="hud-help">WASD · SHIFT sprint · LMB use · E interact · F eat · N wayfinder · TAB pack · O settings · C creative</div>
+      <div id="hud-help">WASD · SHIFT sprint · LMB use · E interact · F eat · M map · N wayfinder · TAB pack · O settings · C creative</div>
     `
     this.fpsEl = root.querySelector('#hud-fps')!
     this.posEl = root.querySelector('#hud-pos')!

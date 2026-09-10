@@ -77,17 +77,37 @@ check(await page.evaluate(() => window.__g.game.craft('saddle')), 'crafted saddl
 await g('window.__g.setIntent(0,0)')
 await g('const sp = window.__g.game.spawn(); window.__g.teleport(sp.x + 30, sp.z - 80)')
 await page.waitForTimeout(300)
-let expected = 0
-for (const item of ['foundation', 'wall', 'ceiling', 'campfire']) {
-  const placed = await page.evaluate((it) => {
-    const gg = window.__g.game
-    if (!gg.selectItem(it)) return -1
-    gg.swing()
-    return gg.pieces()
-  }, item)
-  expected++
+// A HUT IS FOUR PIECES THAT HAVE TO MEET (M76). This used to aim once and
+// then swing four times, trusting all four to land in the same 3 m cell —
+// and a wall needs a foundation in ITS OWN cell, so the moment M75's ranges
+// moved the ground a few centimetres the aim crossed a cell boundary and
+// the wall and the ceiling stopped attaching.
+//
+// Worse, nothing said so: the check was `pieces() >= expected` against a
+// running count, and a workbench placed earlier in this gate had already
+// pushed the count up — so a wall that never appeared still read PASS. It
+// asserts the piece BY KIND now, which is the thing the sentence claims.
+const kinds = () => page.evaluate(() => window.__g.game.pieceList().map((p) => p.kind))
+{
+  await page.evaluate(() => { window.__g.game.selectItem('foundation'); window.__g.game.swing() })
   await page.waitForTimeout(600)
-  check(placed >= expected, `placed ${item} (pieces=${placed})`)
+  check((await kinds()).includes('foundation'), 'placed the foundation where the crosshair was')
+  // ...then build ON it, at its own cell centre, instead of hoping the aim
+  // has not drifted. `placeAt` is the same `building.place` the swing calls.
+  const f = (await page.evaluate(() => window.__g.game.pieceList())).find((p) => p.kind === 'foundation')
+  for (const item of ['wall', 'ceiling', 'campfire']) {
+    const ok = await page.evaluate(([it, x, z]) => window.__g.game.placeAt(it, x, z), [item, f.x, f.z])
+    await page.waitForTimeout(400)
+    check(ok !== false && (await kinds()).includes(item), `placed the ${item} on it`)
+  }
+  const built = await kinds()
+  check(['foundation', 'wall', 'ceiling', 'campfire'].every((k) => built.includes(k)),
+    `the hut stands: ${built.join(' + ')}`)
+  // PUT THE BUILDING MATERIAL AWAY. A placeable in hand makes every swing a
+  // PLACEMENT, so the checks further down that expect a swing to land a blow
+  // quietly stopped landing one. The old loop hid this by ending on the last
+  // campfire in the pack, which cleared the hand by running out.
+  await page.evaluate(() => window.__g.game.selectItem('hatchet'))
 }
 
 // ---------- every rig at its species height ----------

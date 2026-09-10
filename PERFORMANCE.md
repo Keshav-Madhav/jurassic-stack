@@ -364,6 +364,18 @@ The one that pays: grass under pines drops from 45% of candidates to 14%, and th
 goes 1500 m → 300 m, which is a real cut in what the camera's far plane admits there (the far
 plane tracks fog far × 1.08).
 
+## The map (M76)
+
+The island raster is 2048x2048 = 16 MB of canvas, built ONCE and then only blitted. Building it
+costs ~17 M `heightAt` calls (four per pixel for the hillshade), so it is painted **96 rows a
+frame** — about twenty frames — rather than in one pass that would hitch at exactly the moment the
+player is looking at the HUD. After that the minimap is one `drawImage` of a sub-rect plus a
+handful of dots, and the full sheet is one `drawImage` plus the pins.
+
+The creative overlay walks `scatter.nodes` (tens of thousands) once a frame while the minimap is
+up, filtered by a bounding-box test before anything else. It draws only rock/boulder/outcrop/bush:
+pebbles and sticks carpet the island and cost the most to draw for the least meaning.
+
 ## Not doing
 
 - N8AO / anything that renders the scene a second time — see the GTAO measurement above.

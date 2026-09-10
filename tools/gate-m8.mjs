@@ -379,6 +379,43 @@ if (dune && meadow) {
   check(floor.pine[0] > floor.pine[2], 'and it is rust-brown — more red in it than blue')
 }
 
+// THE MAP (M76). A minimap that is always there and the whole island on M,
+// and the split between what survival shows and what creative shows IS the
+// feature — a map that handed you every ruin in survival would give the arc
+// away, and one that showed nothing in creative would be no use for building.
+{
+  const map = () => page.evaluate(() => window.__g.game.map())
+  await page.waitForFunction('window.__g.game.map().built >= 1', null, { timeout: 60000 })
+  check((await map()).built >= 1, 'the island raster finishes painting')
+  check((await map()).open === false, 'and the sheet starts closed, with only the porthole up')
+
+  // the porthole is a real element on screen, not a hidden canvas
+  const mini = await page.evaluate(() => {
+    const el = document.getElementById('map-mini')
+    if (!el) return null
+    const r = el.getBoundingClientRect()
+    return { w: Math.round(r.width), h: Math.round(r.height), onScreen: r.top > 0 && r.bottom < innerHeight + 1 && r.left > 0 }
+  })
+  check(mini !== null && mini.w > 80 && mini.onScreen,
+    `the minimap is on screen (${mini ? `${mini.w}×${mini.h}` : 'MISSING'})`)
+
+  await page.keyboard.press('KeyM')
+  await page.waitForTimeout(500)
+  check((await map()).open === true, 'M opens the whole island')
+  check(await page.evaluate(() => !document.getElementById('map-full').hidden), 'and the sheet is actually shown')
+  const legendOf = () => page.evaluate(() => document.getElementById('map-legend')?.textContent ?? '')
+  check(!(await legendOf()).includes('CREATIVE'), 'in survival it is a chart and a "you are here"')
+
+  await page.evaluate(() => window.__g.game.setCreative(true))
+  await page.waitForTimeout(600)
+  check((await legendOf()).includes('CREATIVE'), 'in creative it becomes the surveyor’s sheet')
+  await page.evaluate(() => window.__g.game.setCreative(false))
+
+  await page.keyboard.press('KeyM')
+  await page.waitForTimeout(400)
+  check((await map()).open === false, 'M closes it again')
+}
+
 await browser.close()
 console.log(failed ? '\nGATE FAILED' : '\nGATE PASSED')
 process.exit(failed ? 1 : 0)

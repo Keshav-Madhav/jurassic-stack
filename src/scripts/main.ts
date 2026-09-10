@@ -33,6 +33,7 @@ import { Inventory } from './inventory'
 import { Chests } from './chests'
 import { ITEMS, RECIPES, type ItemId } from './items'
 import { Hud } from './hud'
+import { MapView } from './map'
 import { HELD_SIZE } from './player'
 import { saveGame, loadGame, SAVE_VERSION, type SaveFile } from './save'
 import { heightAt, loadHeightmap, worldMeta, SPAWN, skyViewAt, normalAt, biomeAt, BIOME, forestKindAt, forestMaskAt, FOREST_KIND } from './heightmap'
@@ -514,12 +515,18 @@ async function boot(): Promise<void> {
     }
     hud.refreshPanel()
   }
+  const mapView = new MapView(document.getElementById('hud')!, building, scatter)
   hud.onUi = (what) => sfx.play(what === 'open' ? 'ui-open' : what === 'close' ? 'ui-close' : 'ui-click', { volume: what === 'click' ? 0.3 : 0.45 })
   hud.onPanelToggle = (open) => {
     if (open) document.exitPointerLock()
     else renderer.domElement.requestPointerLock()
   }
   addEventListener('keydown', (e) => { if (e.code === 'Escape' && hud.panelOpen) hud.togglePanel() })
+  addEventListener('keydown', (e) => {
+    if (e.code !== 'Escape' || !mapView.open) return
+    mapView.toggle()
+    renderer.domElement.requestPointerLock()
+  })
   /** the mouse is captured: there is no cursor on screen, so nothing is clickable */
   const syncLockClass = (): void => {
     document.body.classList.toggle('locked', !!document.pointerLockElement)
@@ -1022,6 +1029,15 @@ async function boot(): Promise<void> {
     }
     // the panel is open: no gameplay keys (Esc closes it, above)
     if (hud.panelOpen) return
+    if (e.code === 'KeyM') {
+      // the sheet takes the pointer, the same way the pack does
+      const open = mapView.toggle()
+      sfx.play(open ? 'ui-open' : 'ui-close', { volume: 0.45 })
+      if (open) document.exitPointerLock()
+      else renderer.domElement.requestPointerLock()
+      return
+    }
+    if (mapView.open) return // the map is up: no gameplay keys behind it
     if (e.code === 'KeyT') daynight.setTime(daynight.time + 1 / 24)
     if (e.code === 'KeyC') setCreative(!creative)
     if (e.code === 'KeyF' && !riding) {
@@ -1688,6 +1704,8 @@ async function boot(): Promise<void> {
       /** QA (M71): the Wayfinder relic — where it lies and whether it is lifted */
       wayfinder: () => wayfinder.debug(),
       falls: () => waterfalls.debug(),
+      map: () => mapView.debug(),
+      toggleMap: () => mapView.toggle(),
       frogs: () => ambience.frogs,
       groundColorAt: (x: number, z: number) => groundColorProbe(x, z),
       forestAt: (x: number, z: number) => ({ mask: +forestMaskAt(x, z).toFixed(3), kind: forestKindAt(x, z) }),
@@ -2263,6 +2281,7 @@ async function boot(): Promise<void> {
     daynight.setFocus(focus.x, focus.z)
     daynight.advance(dt)
     skyExtras.update(dt, cam.camera, daynight.keyDir, daynight.nightness, daynight.keyColor, daynight.fogFar)
+    mapView.update(dt, focus, cam.yaw, creative)
     ambience.setPlace(humid, forestKindAt(focus.x, focus.z) === FOREST_KIND.PINE ? Math.max(0, Math.min(1, (forestMaskAt(focus.x, focus.z) + 0.35) / 0.6)) : 0)
     ambience.update(dt, daynight.time)
     tS = performance.now()

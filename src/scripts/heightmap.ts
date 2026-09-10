@@ -88,6 +88,8 @@ export interface WorldMeta {
   forests?: { name: string; kind: 'broadleaf' | 'pine' | 'mixed'; density: number; edge?: number; shore: [number, number][] }[]
   clearings?: [number, number][][]
   falls?: FallDef[]
+  /** cave mouths — the map's creative overlay names them */
+  caves?: { name: string; keystone: boolean; mouth: { x: number; z: number }; into: { x: number; z: number }; reach: number; radius: number }[]
 }
 
 let grid: Int16Array | null = null

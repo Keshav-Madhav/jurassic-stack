@@ -169,10 +169,26 @@ for (let iz = 0; iz < SIDE; iz++) {
         h += 0.9 * crestH * Math.exp(-(dWarp * dWarp) / (2 * (W * 0.55) * (W * 0.55)))
         continue
       }
-      h += 0.42 * crestH * Math.exp(-(dWarp * dWarp) / (2 * (W * 0.6) * (W * 0.6))) // massif
-      h += 0.58 * crestH * Math.exp(-Math.abs(dWarp) / (W * 0.13)) // exponential ridge: sharp crest
+      // A ROUNDED CREST, NOT A KNIFE EDGE (M75, user: "a natural less steep
+      // smoother mountain but the same max height, just smoother, less
+      // spiky, gentler"). The second term used to be exp(-|d|/…), whose
+      // derivative is discontinuous at the crest — that cusp IS the spike.
+      // Both terms are Gaussians now and they still sum to 1.0 × crestH at
+      // d = 0, so every summit keeps the height its crest vertex asks for.
+      // The widths are chosen so the pair carries about the SAME MASS as the
+      // old massif+cusp did — a Gaussian of sigma s has area 2.5s and an
+      // exponential of length L has area 2L, so a straight swap at equal
+      // peak height inflates the whole mountain (first cut: 412 m → 431 m,
+      // and four ruin sites lost their flat ground to the new bulk).
+      h += 0.435 * crestH * Math.exp(-(dWarp * dWarp) / (2 * (W * 0.62) * (W * 0.62))) // massif
+      h += 0.605 * crestH * Math.exp(-(dWarp * dWarp) / (2 * (W * 0.15) * (W * 0.15))) // the crest itself
       const alt = smoothstep(90, 180, h)
-      h += 22 * alt * fbm(x * 0.03 + 5, z * 0.03 - 9, 4) // scree, spurs, jagged skyline
+      // long swells instead of scree: 2.3× the wavelength and half the
+      // octaves, because FREQUENCY is what sets the slope. The amplitude
+      // comes DOWN from 22 to 17 even so — a 2-octave fbm has fewer
+      // cancelling components than a 4-octave one and so reaches nearer its
+      // full ±1, which quietly added 7 m to the island's summit
+      h += 17 * alt * fbm(x * 0.013 + 5, z * 0.013 - 9, 2)
     }
 
     // THE VOLCANO: angular radius modulation breaks the cone, radial ridges
@@ -565,6 +581,7 @@ console.time('ravine')
 carveRavine(false)
 console.timeEnd('ravine')
 
+
 // ---------- sculpt: rock bands on the ranges and the canyon walls ----------
 console.time('sculpt')
 {
@@ -583,8 +600,13 @@ console.time('sculpt')
         if (range.soft) continue // foothills stay rolling
         const rr = distToPath(x, z, range.crest)
         if (rr.d < range.width * 0.6 && h > 40) {
+          // 14 m steps at sharpness 3.2 are near-vertical risers, and the
+          // navmesh's walkableClimb is ONE metre — this pass alone turned
+          // every flank into a staircase nothing could climb (M74). Shorter
+          // bands, rounded, and mixed in more gently: still the "terraced
+          // rock bands" PLAN asks for, no longer a wall every 14 m.
           const w = smoothstep(range.width * 0.6, range.width * 0.25, rr.d) * 0.8
-          h = h * (1 - w) + terrace(h, 14, 3.2) * w
+          h = h * (1 - w) + terrace(h, 8, 1.7) * w
         }
       }
       for (let ri = 0; ri < RIVER.parts.length; ri++) {
@@ -680,25 +702,94 @@ console.timeEnd('erosion')
 // ---------- thermal erosion (talus relaxation) ----------
 console.time('thermal')
 {
+  // FROM A SNAPSHOT (M75). This read and wrote H in the same sweep, so a
+  // cell's second neighbour saw a height its first neighbour had already
+  // changed — an unstable diffusion that RAISED the roughness it exists to
+  // remove (measured: 57.8% of cells above 100 m over talus before it, 64.5%
+  // after). Reading last pass's heights and applying the deltas at the end
+  // makes it the relaxation it always claimed to be.
   const TALUS = 0.72 * RES
+  const src = new Float32Array(H.length)
+  const add = new Float32Array(H.length)
   for (let pass = 0; pass < 3; pass++) {
+    src.set(H)
+    add.fill(0)
     for (let iz = 1; iz < SIDE - 1; iz++) {
       for (let ix = 1; ix < SIDE - 1; ix++) {
-        const h = H[idx(ix, iz)]
-        for (const [ox, oz] of [[1, 0], [0, 1]]) {
-          const j = idx(ix + ox, iz + oz)
-          const d = h - H[j]
+        const i = idx(ix, iz)
+        const h = src[i]
+        for (const j of [i + 1, i + SIDE]) {
+          const d = h - src[j]
           if (Math.abs(d) > TALUS) {
             const move = (Math.abs(d) - TALUS) * 0.25 * Math.sign(d)
-            H[idx(ix, iz)] -= move
-            H[j] += move
+            add[i] -= move
+            add[j] += move
           }
         }
       }
     }
+    for (let i = 0; i < H.length; i++) H[i] += add[i]
   }
 }
 console.timeEnd('thermal')
+
+// ---------- THE RANGES RELAX (M75) ----------
+// Widening the crest smooths the SILHOUETTE but adds volume, and volume puts
+// more of the map on mountainside: at sigma 0.32W the peaks looked right and
+// three pine woods went above the treeline. Talus relaxation is the other
+// lever and the honest one — it conserves mass, so it smooths without
+// inflating anything, and it reduces steepness by construction.
+//
+// Musgrave's scheme, from a SNAPSHOT each pass: move half the worst excess
+// over the talus angle, shared among the downhill neighbours in proportion
+// to their drop. Masked to the ranges, because a global relaxation would
+// also eat the features that are deliberately vertical — the caldera
+// escarpment that seals the crater, the Ravine's walls, and the Wellspring
+// bluff the M72 waterfall falls down.
+console.time('relax')
+{
+  const TALUS = 0.72 * RES
+  const mask = new Uint8Array(SIDE * SIDE)
+  for (let iz = 0; iz < SIDE; iz++) {
+    for (let ix = 0; ix < SIDE; ix++) {
+      const x = worldX(ix), z = worldZ(iz)
+      if (Math.hypot(x - VOLCANO.x, z - VOLCANO.z) < 900) continue
+      for (const range of RANGES) {
+        if (range.soft) continue
+        if (distToPath(x, z, range.crest).d < range.width * 2.2) { mask[idx(ix, iz)] = 1; break }
+      }
+    }
+  }
+  const src = new Float32Array(H.length)
+  const add = new Float32Array(H.length)
+  for (let pass = 0; pass < 90; pass++) {
+    src.set(H); add.fill(0)
+    let moved = 0
+    for (let iz = 1; iz < SIDE - 1; iz++) {
+      for (let ix = 1; ix < SIDE - 1; ix++) {
+        const i = idx(ix, iz)
+        if (!mask[i]) continue
+        const h = src[i]
+        const nb = [i - 1, i + 1, i - SIDE, i + SIDE]
+        let total = 0, worst = 0
+        const ex = [0, 0, 0, 0]
+        for (let k = 0; k < 4; k++) {
+          const d = h - src[nb[k]] - TALUS
+          if (d > 0) { ex[k] = d; total += d; if (d > worst) worst = d }
+        }
+        if (total <= 0) continue
+        const give = 0.5 * worst
+        add[i] -= give
+        for (let k = 0; k < 4; k++) if (ex[k] > 0) add[nb[k]] += give * (ex[k] / total)
+        moved += give
+      }
+    }
+    for (let i = 0; i < H.length; i++) H[i] += add[i]
+    if (moved < 150) { console.log(`  relax: settled after ${pass + 1} passes`); break }
+  }
+}
+console.timeEnd('relax')
+
 
 // micro-detail baked into the grid (a runtime detail term desynced props from
 // LOD-rendered terrain — everything floated)

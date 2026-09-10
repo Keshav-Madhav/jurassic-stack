@@ -537,7 +537,11 @@ export const RUINS = [
   { tag: 'coast-shrine', x: 560, z: 1480, keystone: true }, // the root of East Head, looking over the Estuary Bay
   { tag: 'forest-temple', x: -60, z: 380, keystone: true }, // the Holm glade, heart of the ring
   { tag: 'highland-arch', x: 660, z: -240, keystone: true }, // the terrace on the inflow's east bank
-  { tag: 'foothill-vault', x: -760, z: -320, keystone: true }, // the shelf between the west foothills and the pines
+  // nudged 12 m (M75, with aster-shrine and wellspring-columns): the ranges
+  // are gentler now and their feet moved, taking these three sites just past
+  // the 6 m flatness tolerance. Each went to the nearest ground that is both
+  // flat and clear of trees.
+  { tag: 'foothill-vault', x: -748, z: -320, keystone: true }, // the shelf between the west foothills and the pines
   { tag: 'caldera-gate', x: 0, z: -876 }, // mid-apron; the arch stands 19 m north against the rock face
   { tag: 'crater-beacon', x: 0, z: -1250, layout: 'beacon' }, // the arc's end: the beacon in the crater
   // THE REST OF THE LOST CITY — minor ruins across the 4 km (layouts by kind):
@@ -552,7 +556,7 @@ export const RUINS = [
   { tag: 'coast-statue', x: 1498, z: 1034, layout: 'statue' },
   { tag: 'dune-obelisk', x: -950, z: 1150, layout: 'obelisk', keystone: true },
   { tag: 'dune-shrine', x: -700, z: 1280, layout: 'shrine' },
-  { tag: 'aster-shrine', x: -814, z: 44, layout: 'shrine', keystone: true }, // the lake's north-east bay
+  { tag: 'aster-shrine', x: -782, z: 60, layout: 'shrine', keystone: true }, // the lake's north-east bay
   { tag: 'ring-west-watch', x: -620, z: 420, layout: 'watch', keystone: true },
   { tag: 'holm-north-shrine', x: -60, z: 110, layout: 'shrine' },
   { tag: 'swamp-columns', x: 884, z: 720, layout: 'columns' },
@@ -560,7 +564,12 @@ export const RUINS = [
   { tag: 'pine-arch-west', x: -500, z: -520, layout: 'arch' },
   { tag: 'pine-arch-east', x: 360, z: -620, layout: 'arch' },
   { tag: 'horns-watch', x: -916, z: -1048, layout: 'watch', keystone: true },
-  { tag: 'wellspring-columns', x: 1020, z: -1190, layout: 'columns' }, // above the gorge, by the pool
+  // nudged 12 m south (M75): smoothing the ranges shifted the bluff's foot
+  // under it and the flatness check went to 6.2 m over 24 (tolerance 6).
+  // The first move went 43 m and landed in the Eastbank's trees; this is the
+  // nearest ground that is both flat AND clear of forest. Still above the
+  // gorge, still by the pool.
+  { tag: 'wellspring-columns', x: 1026, z: -1200, layout: 'columns' }, // above the gorge, by the pool
 ]
 
 export const CLEARINGS = [

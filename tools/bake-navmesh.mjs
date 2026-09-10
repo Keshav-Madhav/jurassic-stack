@@ -58,13 +58,22 @@ const indices = new Uint32Array(tmp)
 
 console.time('navmesh')
 const { success, navMesh } = generateTiledNavMesh(positions, indices, {
-  cs: 1.2,
-  ch: 0.25,
+  cs: Number(process.env.NAV_CS ?? 1.2),
+  ch: Number(process.env.NAV_CH ?? 0.25),
   tileSize: 256, // bigger tiles → more polys allowed per tile (the id space is 22 bits shared between tiles and polys)
-  walkableSlopeAngle: 50,
+  walkableSlopeAngle: Number(process.env.NAV_SLOPE ?? 50),
   walkableRadius: Math.ceil(0.5 / 1.2),
   walkableHeight: Math.ceil(1.9 / 0.25),
-  walkableClimb: Math.ceil(1.0 / 0.25), // 1 m: the baked ripple no longer fragments slopes into unwalkable steps
+  // WALKABLE CLIMB IS A SLOPE CAP IN DISGUISE (M75). Recast connects two
+  // neighbouring voxel columns only if their tops differ by less than this,
+  // so on a CONTINUOUS slope it caps the gradient at atan(climb / cs) — with
+  // 1.0 against cs 1.2 that is 39.8°, tighter than the walkableSlopeAngle of
+  // 50 that was supposed to govern. The whole alpine world was unreachable
+  // because of it, and no amount of reshaping the mountains touched it:
+  // raising walkableSlopeAngle to 65 changed the coverage by nothing at all,
+  // while raising this to 2.0 took the island from 83% to 92%.
+  // 1.5 m = cs × tan(50°), so the slope angle is now the thing that governs.
+  walkableClimb: Math.ceil(Number(process.env.NAV_CLIMB ?? 1.5) / Number(process.env.NAV_CH ?? 0.25)),
   minRegionArea: 8,
   mergeRegionArea: 20,
 })
