@@ -86,6 +86,29 @@ await settle(2500)
 const after = await state()
 check(after.pitch < 0.7, `the prone pitch relaxes when he stops (pitch ${after.pitch})`)
 
+// THE DIVE (M86). The buoyancy used to push the head back to the surface the
+// instant it dipped below, so the sea floor — and the rocks, weed and shelves
+// scattered over it — could not be reached at all.
+await page.evaluate(() => window.__g.teleport(0, 1740))
+await settle(2600)
+const floatY = (await page.evaluate(() => window.__g.player())).y
+await page.keyboard.down('ShiftLeft')
+await settle(3200)
+const deep = await state()
+const deepY = (await page.evaluate(() => window.__g.player())).y
+const sub = await page.evaluate(() => window.__g.game.air().submerged)
+check(deep.diving === true, 'SHIFT in deep water reads as a dive')
+check(deepY < floatY - 2.5, `he goes down (${floatY.toFixed(1)} → ${deepY.toFixed(1)} m)`)
+check(sub > 0.9, `the camera is under the surface (submerged ${sub.toFixed(2)})`)
+const bed = await page.evaluate(() => { const p = window.__g.player(); return window.__g.groundAt(p.x, p.z) })
+check(deepY - bed < 2.0, `he reaches the sea floor (${(deepY - bed).toFixed(1)} m above it)`)
+await page.keyboard.up('ShiftLeft')
+await settle(4000)
+const backUp = (await page.evaluate(() => window.__g.player())).y
+check(backUp > deepY + 2, `letting go floats him back up (${deepY.toFixed(1)} → ${backUp.toFixed(1)} m)`)
+const surf = await state()
+check(surf.diving === false, 'and the dive flag clears')
+
 // --- 5. dinosaur facing is NOT checked here, and the reason is worth
 // recording. Two rig-agnostic measurements were tried: where the top fifth of
 // the body sits along the travel axis, and which way the walk cycle slides

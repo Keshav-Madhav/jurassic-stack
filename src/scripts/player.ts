@@ -15,6 +15,7 @@ import { registerWarmRoot } from './uploads'
 const WALK_SPEED = 4.4
 const SPRINT_SPEED = 8.0
 const SWIM_SPEED = 3.4
+const DIVE_SPEED = 3.2
 const CURRENT_SPEED = 2.2
 const HEIGHT = 1.75
 /** where the swim pitch hinges: roughly the hips, in metres above the feet */
@@ -108,11 +109,21 @@ export class Player {
     pitch: 1.42, tread: 0.34, lift: 0.62,
     armBase: -2.05, armSwing: 0.85, armOut: 0.22, armOutSwing: 0.45, elbow: 0.9,
     thighOut: 0.4, thighPitch: 0.3, knee: -1.1,
+    /** how far the body tips off level when rising or diving */
+    climb: 0.55,
+    /** HOLDING STATION IS A DIFFERENT STROKE. The breaststroke angles are
+     *  authored for a PRONE body; on an upright one the same numbers threw
+     *  the arms straight out in front and left the legs hanging together,
+     *  which from the front read as a starfish. Treading gets its own arm
+     *  angle and a slow scissor kick, blended in as the stroke falls away. */
+    treadArm: -1.05, scissor: 0.42, treadKnee: -0.55,
   }
 
   readonly mover: Mover
   readonly object = new THREE.Group()
   swimming = false
+  /** holding the descend key while swimming — the only way under the surface */
+  diving = false
   riding = false
   /** Creative flight (double-tap space in creative mode). Auto-lands on ground contact. */
   flying = false
@@ -135,6 +146,8 @@ export class Player {
   private dirR = 0
   /** stroke phase, advanced by stroke rate rather than wall time */
   private strokeT = 0
+  /** smoothed vertical intent in the water: +1 rising, -1 diving */
+  private climbBlend = 0
   /** hip-height pivot: the swim pitch has to rotate the body about its
    *  middle, not about the point between its feet (which would swing the
    *  head out in front on the end of a 1.75 m lever). */
@@ -298,6 +311,7 @@ export class Player {
       swimBlend: +this.swimBlend.toFixed(2), airBlend: +this.airBlend.toFixed(2),
       armBlend: +this.armBlend.toFixed(2), moveWeight: +this.moveWeight.toFixed(2),
       pitch: +this.pivot.rotation.x.toFixed(2),
+      climb: +this.climbBlend.toFixed(2), diving: this.diving,
       bodyY: +(this.object.position.y + this.pivot.position.y).toFixed(2),
       arms: this.arms.length, forearms: this.forearms.length,
       clips: [...this.actions.keys()],
@@ -436,6 +450,7 @@ export class Player {
     this.swimming = !this.flying && depth > 1.05
 
     if (this.flying) {
+      this.diving = false
       // creative flight: WASD fast horizontal, space up, shift down; landing
       // (ground contact while descending) disengages. Debug override steers too.
       if (override) {
@@ -479,7 +494,10 @@ export class Player {
 
     if (override) {
       // the QA override: a speed past walking counts as a sprint (survival),
-      // and a winded player is held to walking pace like anyone else
+      // and a winded player is held to walking pace like anyone else. It
+      // never dives — and it has to SAY so, or a driven player who was
+      // holding SHIFT a moment ago keeps sinking with nothing pressed.
+      this.diving = false
       const mag = Math.hypot(override.vx, override.vz)
       const k = mag > WALK_SPEED + 0.1 && !this.sprintAllowed ? WALK_SPEED / mag : 1
       this.mover.intent.vx = override.vx * k
@@ -497,7 +515,14 @@ export class Player {
     if (input.down('KeyA')) strafe -= 1
     if (input.down('KeyD')) strafe += 1
 
-    const wantSprint = (input.down('ShiftLeft') || input.down('ShiftRight')) && this.sprintAllowed
+    const shift = input.down('ShiftLeft') || input.down('ShiftRight')
+    const wantSprint = shift && this.sprintAllowed
+    // SHIFT TAKES YOU DOWN. The buoyancy used to push the head back to the
+    // surface the moment it dipped below, so the sea floor — rocks, weed, the
+    // whole third of the map the water covers — could not be reached at all.
+    // Shift is free in the water (a swimmer cannot sprint) and it is already
+    // "down" in creative flight, so it is the same key in both.
+    this.diving = this.swimming && shift
     const speed = this.swimming ? SWIM_SPEED : wantSprint ? SPRINT_SPEED : WALK_SPEED
     const len = Math.hypot(fwd, strafe)
     this.moving = len > 0
@@ -534,12 +559,17 @@ export class Player {
   ): void {
     if (this.swimming && waterLevel !== null) {
       const head = this.mover.position.y + 0.4
-      if (this.mover.intent.jump) {
+      if (this.diving) {
+        this.mover.velocityY = THREE.MathUtils.lerp(this.mover.velocityY, -DIVE_SPEED, 1 - Math.exp(-dt * 5))
+      } else if (this.mover.intent.jump) {
         this.mover.velocityY = 2.6
       } else if (head > waterLevel - 0.15) {
         this.mover.velocityY = Math.max(this.mover.velocityY - 8 * dt, -1.2)
       } else {
-        this.mover.velocityY = THREE.MathUtils.lerp(this.mover.velocityY, 1.4, 1 - Math.exp(-dt * 3))
+        // buoyancy: it lifts you, and the deeper you are the harder — so a
+        // dive costs you the climb back, without a stat to track it
+        const deep = THREE.MathUtils.clamp((waterLevel - head) / 6, 0, 1)
+        this.mover.velocityY = THREE.MathUtils.lerp(this.mover.velocityY, 1.4 + deep * 1.1, 1 - Math.exp(-dt * 3))
       }
       this.mover.intent.jump = false
       if (current) {
@@ -594,6 +624,10 @@ export class Player {
     // you are mounted — so mounting from waist-deep water left the flag set
     // and the rider did a breaststroke, prone, on the animal's back.
     this.swimBlend = THREE.MathUtils.lerp(this.swimBlend, this.swimming && !this.riding ? 1 : 0, k)
+    // read the vertical from the body, not the key: it covers the dive, the
+    // kick for the surface and the slow bob at the top with one number
+    const climbT = this.swimming ? THREE.MathUtils.clamp(this.mover.velocityY / 2.6, -1, 1) : 0
+    this.climbBlend = THREE.MathUtils.lerp(this.climbBlend, climbT, 1 - Math.exp(-dt * 4))
     this.sitBlend = THREE.MathUtils.lerp(this.sitBlend, this.riding ? 1 : 0, 1 - Math.exp(-dt * 14))
     // a hatchet or a spear is PRESENTED; a torch is only carried
     const readied = !!this.heldId && !!HELD_POSE[this.heldId] && this.heldId !== 'torch'
@@ -681,9 +715,13 @@ export class Player {
     if (this.swimBlend > 0.002) {
       const P = Player.swimPose
       const t = this.swimBlend
-      const stroke = THREE.MathUtils.clamp(this.moveWeight * 1.6, 0, 1)
+      // GOING SOMEWHERE IS GOING SOMEWHERE, up or along: a dive straight down
+      // with no WASD is still a stroke, so the body goes prone for it and
+      // does not tread water while descending head-first.
+      const stroke = THREE.MathUtils.clamp(Math.max(this.moveWeight * 1.6, Math.abs(this.climbBlend)), 0, 1)
       this.strokeT += dt * (0.9 + stroke * 1.4)
-      this.pivot.rotation.x = t * (P.tread + (P.pitch - P.tread) * stroke)
+      // tip off level toward wherever he is heading in the water column
+      this.pivot.rotation.x = t * (P.tread + (P.pitch - P.tread) * stroke - this.climbBlend * P.climb)
       this.pivot.position.y = PIVOT_Y + t * P.lift * stroke
       const ph = this.strokeT * Math.PI * 2
       // A BREASTSTROKE, not a crawl. The arm hangs along the model's -y at
@@ -695,8 +733,9 @@ export class Player {
       const s1 = Math.sin(ph)
       const amp = 0.45 + 0.55 * stroke
       const spread = (1 - s1) * 0.5 // 0 extended → 1 swept back
+      const armBase = THREE.MathUtils.lerp(P.treadArm, P.armBase, stroke)
       for (const { bone, side, rest, pitch, roll } of this.arms) {
-        _q.setFromAxisAngle(pitch, P.armBase + P.armSwing * spread * 2 * amp - P.armSwing * amp)
+        _q.setFromAxisAngle(pitch, armBase + P.armSwing * spread * 2 * amp - P.armSwing * amp)
         _q2.setFromAxisAngle(roll, (P.armOut + P.armOutSwing * spread) * -side)
         _target.copy(_q).multiply(_q2).multiply(rest)
         bone.quaternion.slerp(_target, t)
@@ -711,13 +750,15 @@ export class Player {
       // then snap straight as the arms extend
       const fold = THREE.MathUtils.clamp((1 - Math.sin(ph + 1.0)) * 0.5, 0, 1) * amp
       for (const { bone, side, rest, pitch, roll } of this.kickers) {
-        _q.setFromAxisAngle(pitch, -P.thighPitch * fold)
-        _q2.setFromAxisAngle(roll, P.thighOut * fold * -side)
+        const scissor = Math.sin(ph * 1.15 + (side > 0 ? 0 : Math.PI)) * P.scissor
+        _q.setFromAxisAngle(pitch, THREE.MathUtils.lerp(scissor, -P.thighPitch * fold, stroke))
+        _q2.setFromAxisAngle(roll, P.thighOut * fold * -side * stroke)
         _target.copy(_q).multiply(_q2).multiply(rest)
         bone.quaternion.slerp(_target, t)
       }
-      for (const { bone, rest, pitch } of this.knees) {
-        _q.setFromAxisAngle(pitch, P.knee * fold)
+      for (const { bone, side, rest, pitch } of this.knees) {
+        const scissor = P.treadKnee * (0.6 + 0.4 * Math.sin(ph * 1.15 + (side > 0 ? 0 : Math.PI)))
+        _q.setFromAxisAngle(pitch, THREE.MathUtils.lerp(scissor, P.knee * fold, stroke))
         _target.copy(_q).multiply(rest)
         bone.quaternion.slerp(_target, t)
       }

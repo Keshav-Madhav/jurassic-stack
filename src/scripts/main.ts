@@ -2517,6 +2517,7 @@ async function boot(): Promise<void> {
       if (!seen('thirsty') && survival.water < 40) onboarding.hint('thirsty')
       if (!seen('stamina') && survival.winded) onboarding.hint('stamina')
       if (!seen('cold') && survival.cold) onboarding.hint('cold')
+      if (!seen('swim') && player.swimming) onboarding.hint('swim')
       if (!seen('night') && daynight.nightness > 0.7) onboarding.hint('night')
       if (!seen('raptor') && nearestDino(30, (d) => d.species.id === 'raptor' && d.state !== 'tamed' && d.state !== 'dead')) onboarding.hint('raptor')
       if (!seen('carcass') && nearestDino(INTERACT_RANGE + 2, (d) => d.state === 'dead')) onboarding.hint('carcass')
