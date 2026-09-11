@@ -147,6 +147,9 @@ export class Dino {
   private actions: Partial<Record<'idle' | 'walk' | 'run' | 'attack' | 'ko', THREE.AnimationAction>> = {}
   private flavorActions: THREE.AnimationAction[] = []
   private hurtAction: THREE.AnimationAction | null = null
+  private deathActions: THREE.AnimationAction[] = []
+  /** the `attack` slot plus whatever else the rig has to hit with */
+  private attackActions: THREE.AnimationAction[] = []
   /** so a burst of hits reads as one flinch rather than a stutter */
   private hurtT = 0
   private flavorT = 4 + Math.random() * 8
@@ -412,6 +415,20 @@ export class Dino {
       for (const slot of ['idle', 'walk', 'run', 'attack', 'ko'] as const) {
         const clip = animations.find((a) => this.species.clips[slot].test(a.name))
         if (clip) this.actions[slot] = this.mixer.clipAction(clip)
+      }
+    }
+    if (this.actions.attack) this.attackActions.push(this.actions.attack)
+    for (const re of this.species.attackClips ?? []) {
+      const clip = animations.find((a) => re.test(a.name))
+      if (clip) this.attackActions.push(this.mixer.clipAction(clip))
+    }
+    for (const re of this.species.deathClips ?? []) {
+      const clip = animations.find((a) => re.test(a.name))
+      if (clip) {
+        const a = this.mixer.clipAction(clip)
+        a.setLoop(THREE.LoopOnce, 1)
+        a.clampWhenFinished = true
+        this.deathActions.push(a)
       }
     }
     if (this.species.hurtClip) {
@@ -1000,8 +1017,7 @@ export class Dino {
         this.attackCooldown -= dt
         if (this.attackCooldown <= 0) {
           this.attackCooldown = 2.6
-          const a = this.actions.attack
-          if (a) { a.reset().setLoop(THREE.LoopOnce, 1); a.timeScale = 0.6; a.play() }
+          this.playAttack(0.6)
         }
         if (this.deadT <= 0) {
           this.satiety = 120 + Math.random() * 120
@@ -1050,8 +1066,7 @@ export class Dino {
               this.heading += THREE.MathUtils.clamp(dd, -this.species.turnRate * dt, this.species.turnRate * dt)
               if (this.attackCooldown <= 0) {
                 this.attackCooldown = 1.4
-                const a = this.actions.attack
-                if (a) { a.reset().setLoop(THREE.LoopOnce, 1); a.timeScale = 1; a.play() }
+                this.playAttack(1)
                 foe.takeHitFrom(this, this.species.attackDamage)
                 senses?.onHit(fp.x, fp.y + foe.species.height * 0.5, fp.z, this.species.attackDamage > 30)
               }
@@ -1103,8 +1118,7 @@ export class Dino {
           this.heading += THREE.MathUtils.clamp(dd, -this.species.turnRate * dt, this.species.turnRate * dt)
           if (this.attackCooldown <= 0) {
             this.attackCooldown = 1.4
-            const a = this.actions.attack
-            if (a) { a.reset().setLoop(THREE.LoopOnce, 1); a.timeScale = 1; a.play() }
+            this.playAttack(1)
             if (foe && !foeGone) {
               foe.takeHitFrom(this, this.species.attackDamage)
               senses?.onHit(foe.object.position.x, foe.object.position.y + foe.species.height * 0.5, foe.object.position.z, this.species.attackDamage > 30)
@@ -1294,7 +1308,7 @@ export class Dino {
     this.foe = null
     this.waypoints.length = 0
     this.harvestLeft = Math.max(2, Math.round(this.species.height * 2.2)) // a raptor gives 3 swings, a rex 10
-    this.playKo()
+    this.playDeath()
   }
 
   /** swings of meat + hide left in this carcass (dead only) */
@@ -1436,6 +1450,51 @@ export class Dino {
   private mixerAccum = 0
   private distToPlayer = 0
   private castingShadow = true
+
+  /** One blow, picked from whatever the rig can throw. `timeScale` is the
+   *  caller's: a feeding bite runs slow, a fight's does not. */
+  private playAttack(timeScale: number): void {
+    const n = this.attackActions.length
+    if (!n) return
+    const a = this.attackActions[n === 1 ? 0 : Math.floor(Math.random() * n)]
+    a.reset().setLoop(THREE.LoopOnce, 1)
+    a.timeScale = timeScale
+    a.weight = 1
+    a.play()
+  }
+
+  /** QA: how many different blows this animal has. */
+  attackCount(): number { return this.attackActions.length }
+
+  /** DYING IS NOT BEING KNOCKED OUT. Four rigs carry both and used to play
+   *  the knockout for both — a raptor with Death_01 and Death_02 in it went
+   *  down in its "Knocked Down" pose every time. Everything else still falls
+   *  through to the knockout clip, or to the procedural topple behind it. */
+  private playDeath(): void {
+    if (!this.deathActions.length) { this.playKo(); return }
+    const a = this.deathActions[Math.floor(Math.random() * this.deathActions.length)]
+    a.reset().setLoop(THREE.LoopOnce, 1)
+    a.clampWhenFinished = true
+    a.weight = 1
+    a.play()
+    // whatever it was doing stops fighting the collapse
+    for (const slot of ['idle', 'walk', 'run'] as const) { const o = this.actions[slot]; if (o) o.weight = 0 }
+    this.hurtAction?.stop()
+    this.toppleWanted = false
+    this.thudIn = 0.55
+    this.toppleLanded = false
+  }
+
+  /** QA: which collapse this animal would play, and whether it is playing. */
+  deathState(): { declared: number; bound: number; running: boolean; clip: string | null } {
+    const live = this.deathActions.find((a) => a.isRunning())
+    return {
+      declared: this.species.deathClips?.length ?? 0,
+      bound: this.deathActions.length,
+      running: !!live,
+      clip: live?.getClip().name ?? null,
+    }
+  }
 
   private playKo(): void {
     const ko = this.actions.ko

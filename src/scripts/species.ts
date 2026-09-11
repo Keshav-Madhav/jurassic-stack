@@ -65,6 +65,18 @@ export interface SpeciesDef {
    *  does not flinch — there is no plausible substitute in an attack or a
    *  death clip. */
   hurtClip?: RegExp
+  /** EXTRA ATTACKS, picked at random alongside the `attack` slot. Fights are
+   *  the most-watched animation in the game and most of these rigs have more
+   *  than one blow in them — a raptor bites twice over and leaps and tackles,
+   *  a stego has a tail whip and a stomp, a pachy a headbutt and a charge —
+   *  and every fight played the same single clip. */
+  attackClips?: RegExp[]
+  /** A DEATH, as distinct from a knockout. Most of these rigs have one clip
+   *  for going down and it is already the `ko` slot — but four have both, and
+   *  those four used to die in their KNOCKOUT pose: a raptor ships Death_01
+   *  and Death_02 and played "Knocked Down" for both. Where a species lists
+   *  more than one the choice is random, so a pack does not die in unison. */
+  deathClips?: RegExp[]
   /** optional flavor one-shots played randomly while idle */
   flavorClips?: RegExp[]
 }
@@ -93,6 +105,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     attackDamage: 16,
     attackRange: 2.0,
     rideable: true,
+    attackClips: [/^bite_?0?2$/i, /^tackle$/i],
     seat: { x: 0, y: 0.24, z: -0.05 },
     clips: {
       idle: /^idle_?0?1$/i,
@@ -101,6 +114,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
       attack: /^bite_?0?1$/i,
       ko: /^knocked down$/i,
     },
+    deathClips: [/^death_?0?1$/i, /^death_?0?2$/i],
     hurtClip: /^hurt_?0?1$/i,
     flavorClips: [/^sniff$/i, /^call_alert$/i, /^idle_?0?2$/i, /^roar_?0?1$/i],
   },
@@ -154,6 +168,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     attackDamage: 26,
     attackRange: 3.2,
     rideable: true,
+    attackClips: [/^Stomp$/, /^TailWhip$/],
     seat: { x: 0, y: 1.8, z: -0.35 },
     clips: {
       idle: /^IdleA$/,
@@ -162,6 +177,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
       attack: /^TailWhip$/,
       ko: /^KnockedDown$/,
     },
+    deathClips: [/^Death$/],
     hurtClip: /^HurtA$/,
     flavorClips: [/^Eat$/, /^Drink$/, /^IdleB$/],
   },
@@ -187,6 +203,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     attackDamage: 90,
     attackRange: 4.2,
     rideable: true,
+    attackClips: [/^attack_tail$/i],
     seat: { x: 0, y: 2.63, z: -0.5 },
     clips: {
       idle: /^idle$/i,
@@ -222,6 +239,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     attackDamage: 140,
     attackRange: 5.6,
     rideable: false,
+    attackClips: [/^attack_tail$/i],
     seat: { x: 0, y: 2.7, z: -0.5 },
     clips: {
       idle: /^idle$/i,
@@ -283,6 +301,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     rideable: true,
     seat: { x: 0, y: 2.49, z: -0.4 },
     clips: { idle: /G_Iddle$/, walk: /G_Walk$/, run: /G_Run$/, attack: /G_Atack$/, ko: /G_DieL_2$/ },
+    deathClips: [/G_DieR_2$/, /G_DieL_2$/],
     hurtClip: /G_Hit$/,
     flavorClips: [/G_Call$/],
   },
@@ -309,9 +328,10 @@ export const SPECIES: Record<string, SpeciesDef> = {
     attackDamage: 20,
     attackRange: 2.2,
     rideable: true,
+    attackClips: [/^HeadSmash$/],
     seat: { x: 0, y: 1.46, z: -0.1 },
     clips: { idle: /^Idle$/, walk: /^SlowWalk$/, run: /^FastWalk$/, attack: /^Attack$/, ko: /^Die$/ },
-    flavorClips: [/^Idle2$/, /^LegScratch$/, /^Yawn$/, /^Roar$/, /^HeadSmash$/],
+    flavorClips: [/^Idle2$/, /^LegScratch$/, /^Yawn$/, /^Roar$/], // HeadSmash is an ATTACK now, not something to do while standing about
   },
   pachy: {
     id: 'pachy',
@@ -334,8 +354,10 @@ export const SPECIES: Record<string, SpeciesDef> = {
     attackDamage: 14,
     attackRange: 2.0,
     rideable: true,
+    attackClips: [/^Charge$/],
     seat: { x: 0, y: 0.47, z: -0.15 },
     clips: { idle: /^IdleA$/, walk: /^Walk$/, run: /^Run$/, attack: /^Headbutt$/, ko: /^KnockedOut$/ },
+    deathClips: [/^KnockedDown$/],
     hurtClip: /^HurtLow$/,
     flavorClips: [/^IdleB$/, /^EatLow$/, /^EatHigh$/, /^Drink$/, /^Bark$/],
   },

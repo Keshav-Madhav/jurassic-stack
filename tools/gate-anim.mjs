@@ -149,6 +149,39 @@ check(unbound.length === 0, `every declared flinch is bound (${unbound.map(([k])
   check(!!hit?.f?.running, `being hit plays the rig's flinch (${hit?.f?.seconds}s clip)`)
 }
 
+// --- 6a. one blow is not every blow. Six rigs carry more than one attack and
+// every fight used to play the same single clip.
+const atk = await page.evaluate(() => window.__g.game.attackAudit())
+const many = Object.entries(atk).filter(([, v]) => v >= 2)
+check(many.length >= 6, `the rigs with more than one attack bind them all (${many.map(([k, v]) => `${k}:${v}`).join(' ')})`)
+// the one-clip rigs are the ones with none, and that is correct: their single
+// cycle is re-timed for the attack rather than cross-faded (M52)
+const none = Object.entries(atk).filter(([, v]) => v === 0).map(([k]) => k).sort()
+check(none.join(',') === 'dilo,sauropelta,spino', `only the one-clip rigs have no attack action (${none.join(' ') || 'none'})`)
+
+// --- 6b. the death. Four rigs carry a collapse distinct from their knockout
+// and used to play the knockout for both.
+const deaths = await page.evaluate(() => window.__g.game.deathAudit())
+const withDeath = Object.entries(deaths).filter(([, v]) => v.declared > 0)
+check(withDeath.length >= 4, `the rigs with a death clip declare one (${withDeath.map(([k]) => k).join(' ')})`)
+const shortDeath = withDeath.filter(([, v]) => v.bound < v.declared)
+check(shortDeath.length === 0, `every declared death clip is bound (${shortDeath.map(([k, v]) => `${k} ${v.bound}/${v.declared}`).join(' ') || 'all bound'})`)
+{
+  // a stego is the unambiguous one: it stands 3 m and its death clip lays it
+  // flat, so the collapse can be measured and not just named
+  const idx = await page.evaluate(() => { const p = window.__g.player(); return window.__g.game.spawnDino('stego', p.x + 9, p.z - 7) })
+  try {
+    await page.waitForFunction((j) => { const d = window.__g.game.dinoDeath(j); return !!d && d.bound > 0 }, idx, { timeout: 15000 })
+  } catch { /* reported below */ }
+  const standing = await page.evaluate((j) => window.__g.game.dinoHeight(j), idx)
+  const st = await page.evaluate((j) => { window.__g.game.killDino(j); return window.__g.game.dinoDeath(j) }, idx)
+  check(!!st?.running, `killing a stego plays its death clip (${st?.clip})`)
+  await settle(2600)
+  const down = await page.evaluate((j) => window.__g.game.dinoHeight(j), idx)
+  check(standing !== null && down !== null && down < standing * 0.66,
+    `and it goes down with it (${standing?.toFixed(1)} → ${down?.toFixed(1)} m)`)
+}
+
 // --- 6. the saddle: the rider's hip has to land ON the animal's back. These
 // are measured numbers now (seatFit), not hand-typed ones, so they can be
 // asserted. ±0.3 is the measurement's own noise: a walking animal's mid-body

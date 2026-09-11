@@ -1635,6 +1635,18 @@ async function boot(): Promise<void> {
         for (const d of dinos) { if (out[d.species.id]) continue; if (!d.rig) continue; out[d.species.id] = d.flinchState() }
         return out
       },
+      deathAudit: () => {
+        const out: Record<string, unknown> = {}
+        for (const d of dinos) { if (out[d.species.id]) continue; if (!d.rig) continue; out[d.species.id] = d.deathState() }
+        return out
+      },
+      dinoDeath: (i: number) => dinos[i]?.deathState() ?? null,
+      /** QA: how many different blows each species has bound */
+      attackAudit: () => {
+        const out: Record<string, number> = {}
+        for (const d of dinos) { if (out[d.species.id] !== undefined) continue; if (!d.rig) continue; out[d.species.id] = d.attackCount() }
+        return out
+      },
       /** QA: the flinch state of ONE animal by index — the roster-wide audit
        *  returns the first of each species, which on an island with dozens of
        *  wild raptors is never the one you just hit. */
