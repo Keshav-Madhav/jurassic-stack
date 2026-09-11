@@ -55,35 +55,35 @@ export const RANGES = [
   {
     // WEST RANGE — long, north–south, the island's spine on the west; kinked
     // crest with spurs; the Alpine Tarn sits in its high saddle
-    name: 'west', width: 300,
+    name: 'west', width: 225,
     crest: [
-      { x: -1400, z: -940, h: 140 }, { x: -1440, z: -760, h: 290 }, { x: -1360, z: -600, h: 380 },
-      { x: -1320, z: -440, h: 340 }, { x: -1370, z: -300, h: 330 }, // the Tarn's saddle
-      { x: -1290, z: -160, h: 420 }, { x: -1330, z: -20, h: 370 }, { x: -1250, z: 100, h: 395 },
-      { x: -1200, z: 240, h: 270 }, // the pass to the west coast
-      { x: -1240, z: 380, h: 340 }, { x: -1180, z: 520, h: 350 }, { x: -1120, z: 660, h: 240 },
-      { x: -1080, z: 800, h: 130 },
+      { x: -1400, z: -940, h: 105 }, { x: -1440, z: -760, h: 218 }, { x: -1360, z: -600, h: 285 },
+      { x: -1320, z: -440, h: 255 }, { x: -1370, z: -300, h: 248 }, // the Tarn's saddle
+      { x: -1290, z: -160, h: 315 }, { x: -1330, z: -20, h: 278 }, { x: -1250, z: 100, h: 296 },
+      { x: -1200, z: 240, h: 202 }, // the pass to the west coast
+      { x: -1240, z: 380, h: 255 }, { x: -1180, z: 520, h: 262 }, { x: -1120, z: 660, h: 180 },
+      { x: -1080, z: 800, h: 98 },
     ],
   },
   {
     // EAST RANGE — the north-east quadrant's wall, inland of the east coast.
     // Its northern foot is the coastal bluff the Wellspring gorge is cut into.
-    name: 'east', width: 260,
+    name: 'east', width: 195,
     crest: [
-      { x: 1215, z: -1290, h: 100 }, // the Wellspring Bluff: the sea cliff the gorge is cut through
-      { x: 1180, z: -1100, h: 130 }, { x: 1220, z: -960, h: 250 }, { x: 1200, z: -820, h: 300 },
-      { x: 1290, z: -700, h: 340 }, { x: 1250, z: -560, h: 290 }, { x: 1320, z: -440, h: 350 },
-      { x: 1300, z: -300, h: 320 }, { x: 1370, z: -170, h: 330 }, { x: 1330, z: -40, h: 280 },
-      { x: 1360, z: 100, h: 230 }, { x: 1300, z: 250, h: 160 },
+      { x: 1215, z: -1290, h: 75 }, // the Wellspring Bluff: the sea cliff the gorge is cut through
+      { x: 1180, z: -1100, h: 98 }, { x: 1220, z: -960, h: 188 }, { x: 1200, z: -820, h: 225 },
+      { x: 1290, z: -700, h: 255 }, { x: 1250, z: -560, h: 218 }, { x: 1320, z: -440, h: 262 },
+      { x: 1300, z: -300, h: 240 }, { x: 1370, z: -170, h: 248 }, { x: 1330, z: -40, h: 210 },
+      { x: 1360, z: 100, h: 172 }, { x: 1300, z: 250, h: 120 },
     ],
   },
   {
     // THE NORTHERN HORNS — a third, smaller range on the north-west shoulder
     // between the Bight and the volcano's foot: two horns and a col
-    name: 'horns', width: 200,
+    name: 'horns', width: 150,
     crest: [
-      { x: -1060, z: -1180, h: 90 }, { x: -920, z: -1280, h: 190 }, { x: -800, z: -1220, h: 230 },
-      { x: -690, z: -1330, h: 150 }, { x: -560, z: -1420, h: 210 }, { x: -430, z: -1460, h: 120 },
+      { x: -1060, z: -1180, h: 68 }, { x: -920, z: -1280, h: 142 }, { x: -800, z: -1220, h: 172 },
+      { x: -690, z: -1330, h: 112 }, { x: -560, z: -1420, h: 158 }, { x: -430, z: -1460, h: 90 },
     ],
   },
   // FOOTHILLS — soft rolling chains (no rock terraces, no snow): the ground
@@ -138,6 +138,17 @@ export const HOLM = [
 // A traced polygon held at height `h` (feathered 40 m outward): the flat
 // ground a range otherwise never offers — the Alpine Tarn's cirque bench.
 export const SHELVES = [
+  // THE ASTER BENCH (M81). Reshaping the West Range into something with a
+  // walkable top put Lake Aster in a sloped bowl, and its shrine — named
+  // for the lake — had no flat ground left on the shore, nor east of it.
+  // The choice was to exile it 189 m inland from the lake it is named
+  // after, or cut it a bench. A bench is the same idiom the Tarn's cirque
+  // and the caldera gate's apron already use.
+  // 88 m across with a 14 m feather: shelves are laid in composition and
+  // NOT re-asserted after erosion (unlike the Ravine's floor), so droplets
+  // put 7 m of roughness back into a 48 m bench. A bigger flat core keeps
+  // its middle flat through the weather.
+  { name: 'aster-bench', h: 48, edge: 14, shore: [[-826, 16], [-738, 16], [-738, 104], [-826, 104]] },
   { name: 'tarn-bench', h: 232, edge: 40, shore: [[-1320, 300], [-1260, 268], [-1200, 300], [-1180, 360], [-1210, 420], [-1270, 442], [-1320, 402], [-1342, 350]] },
   // THE GATE PORTAL — cut INTO the volcano's south flank: a flat apron at the
   // foot of a 33 m rock face, the arch set against the face. From the
@@ -148,6 +159,47 @@ export const SHELVES = [
   // THE CRATER FLOOR — a 175 m bench sunk 100 m into the summit: the arc's
   // last room, walled by the cone's own rim, reached only by the Ravine
   { name: 'crater', h: 175, edge: 34, shore: [[-92, -1250], [-72, -1318], [-18, -1352], [46, -1340], [88, -1290], [92, -1224], [58, -1170], [0, -1150], [-58, -1170], [-90, -1206]] },
+]
+
+// ---------- RIDGES: one walkable way up each range ----------
+// PLAN's mountains are meant to be climbed — the Alpine Tarn is "a
+// destination, not scenery" — and until M81 they simply were not. The
+// reshape got the flanks to 25-39° and gave every range a flat summit, but
+// recast still would not connect a summit to the lowland: a 40° band and a
+// 1.2 m agent radius between them, and a walkable ribbon that narrow gets
+// eroded away before it becomes a polygon.
+//
+// So each range gets ONE traced shoulder, the way the volcano has the
+// Ravine and the ring has the Ford: a broad, even ramp at a walkable grade.
+// It is a SHOULDER, not a road — 52 m across, following the hill, laid at a
+// constant grade between its ends so nothing on it can exceed that grade.
+//
+// Its FOOT has to stand on ground that is already connected, and that is
+// the one thing easy to get wrong: the first cut began at 118 m up the
+// flank and recast stopped 73 m short of it — a flawless 17° ramp starting
+// in mid-air, as far as a path was concerned. Both now start out on the
+// lowland and climb from there.
+export const RIDGES = [
+  {
+    // up the West Range's inland flank in two switchbacks, topping out on
+    // the summit plateau. 118 → 339 m over ~760 m of path: 16°.
+    // Its FOOT has to stand on ground that is already connected: the first
+    // cut started at (-800,-100) and recast stopped 73 m short of it — a
+    // perfectly good ramp beginning in mid-air, as far as a path was
+    // concerned. (-680,-110) is reachable from spawn in eight waypoints.
+    name: 'west-shoulder', halfWidth: 26, startY: 46, endY: 339,
+    path: [
+      { x: -560, z: -200 }, { x: -690, z: -174 }, { x: -800, z: -100 },
+      { x: -1050, z: -60 }, { x: -950, z: -260 }, { x: -1210, z: -160 },
+    ],
+  },
+  {
+    // and the East Range's, from the Eastbank's shoulder. 186 → 281 m.
+    name: 'east-shoulder', halfWidth: 26, startY: 150, endY: 281,
+    path: [
+      { x: 1100, z: 140 }, { x: 1180, z: 60 }, { x: 1320, z: -120 }, { x: 1240, z: -300 },
+    ],
+  },
 ]
 
 // ---------- THE RAVINE: the way into the mountain ----------
@@ -556,11 +608,17 @@ export const RUINS = [
   { tag: 'coast-shrine', x: 560, z: 1480, keystone: true }, // the root of East Head, looking over the Estuary Bay
   { tag: 'forest-temple', x: -60, z: 380, keystone: true }, // the Holm glade, heart of the ring
   { tag: 'highland-arch', x: 660, z: -240, keystone: true }, // the terrace on the inflow's east bank
+  // moved again in M81 (all six of these): reshaping the ranges into
+  // something with a walkable top moves the ground under their feet, and a
+  // ruin stands on flat ground or it does not stand. Each went to the
+  // nearest spot that is flat AND clear of trees — `aster-shrine` kept its
+  // lake, 117 m up the shore, rather than taking the flatter ground 189 m
+  // inland that would have left it named for a lake it could not see.
   // nudged 12 m (M75, with aster-shrine and wellspring-columns): the ranges
   // are gentler now and their feet moved, taking these three sites just past
   // the 6 m flatness tolerance. Each went to the nearest ground that is both
   // flat and clear of trees.
-  { tag: 'foothill-vault', x: -748, z: -320, keystone: true }, // the shelf between the west foothills and the pines
+  { tag: 'foothill-vault', x: -732, z: -304, keystone: true }, // the shelf between the west foothills and the pines
   { tag: 'caldera-gate', x: 0, z: -876 }, // mid-apron; the arch stands 19 m north against the rock face
   { tag: 'crater-beacon', x: 0, z: -1250, layout: 'beacon' }, // the arc's end: the beacon in the crater
   // THE REST OF THE LOST CITY — minor ruins across the 4 km (layouts by kind):
@@ -569,7 +627,7 @@ export const RUINS = [
   // Seven of them hold keystones too (M20: twelve in all, the gate wants
   // eight — every region has one, and no single lost ruin can block the arc)
   { tag: 'plain-circle', x: -250, z: 1000, layout: 'circle', keystone: true },
-  { tag: 'south-mound-columns', x: 550, z: 938, layout: 'columns' },
+  { tag: 'south-mound-columns', x: 566, z: 898, layout: 'columns' },
   { tag: 'estuary-watch', x: 850, z: 1240, layout: 'watch', keystone: true },
   { tag: 'spit-columns', x: 1472, z: 1372, layout: 'columns' },
   { tag: 'coast-statue', x: 1498, z: 1034, layout: 'statue' },
@@ -579,16 +637,16 @@ export const RUINS = [
   { tag: 'ring-west-watch', x: -620, z: 420, layout: 'watch', keystone: true },
   { tag: 'holm-north-shrine', x: -60, z: 110, layout: 'shrine' },
   { tag: 'swamp-columns', x: 884, z: 720, layout: 'columns' },
-  { tag: 'foothill-circle', x: 1084, z: 86, layout: 'circle', keystone: true }, // up on the east foothills
+  { tag: 'foothill-circle', x: 1252, z: 154, layout: 'circle', keystone: true }, // up on the east foothills
   { tag: 'pine-arch-west', x: -500, z: -520, layout: 'arch' },
   { tag: 'pine-arch-east', x: 360, z: -620, layout: 'arch' },
-  { tag: 'horns-watch', x: -916, z: -1048, layout: 'watch', keystone: true },
+  { tag: 'horns-watch', x: -972, z: -1104, layout: 'watch', keystone: true },
   // nudged 12 m south (M75): smoothing the ranges shifted the bluff's foot
   // under it and the flatness check went to 6.2 m over 24 (tolerance 6).
   // The first move went 43 m and landed in the Eastbank's trees; this is the
   // nearest ground that is both flat AND clear of forest. Still above the
   // gorge, still by the pool.
-  { tag: 'wellspring-columns', x: 1026, z: -1200, layout: 'columns' }, // above the gorge, by the pool
+  { tag: 'wellspring-columns', x: 1062, z: -1256, layout: 'columns' }, // above the gorge, by the pool
 ]
 
 export const CLEARINGS = [

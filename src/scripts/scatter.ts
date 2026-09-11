@@ -89,6 +89,41 @@ const NODE_DEFS: Record<NodeKind, { hp: number; yields: Partial<Record<ItemId, [
   outcrop: { hp: 8, yields: { stone: [6, 10], flint: [1, 3] } },
 }
 
+/** Bound an InstancedMesh HONESTLY (M81, user: "trees right in front within
+ *  100 m sometimes appear disappear").
+ *
+ *  three's `InstancedMesh.computeBoundingSphere()` walks the instances and
+ *  expands its box by each instance sphere's CENTRE, discarding the sphere's
+ *  own radius. The result is short by about one prop — measured across this
+ *  island, **58 of 85 instanced meshes were under-bounded, the worst by 41 m**
+ *  — so the frustum culler drops a whole 256 m cell while the trees along its
+ *  near edge are still plainly on screen. That is the popping.
+ *
+ *  Re-inflating by the geometry's radius times the largest instance scale is
+ *  exact: no instance can reach further than its own centre plus that. */
+export function boundInstances(m: THREE.InstancedMesh, scaleHint = 0): void {
+  m.computeBoundingSphere()
+  if (!m.boundingSphere || m.count === 0) return
+  if (!m.geometry.boundingSphere) m.geometry.computeBoundingSphere()
+  const gr = m.geometry.boundingSphere?.radius ?? 0
+  if (gr === 0) return
+  const e = _boundM.elements
+  // `scaleHint`: a SlotSet writes every slot at scale 0.0001 (hidden) before
+  // it is bounded, so reading the matrices would inflate by nothing at all.
+  // The caller passes the largest scale a slot will ever be given.
+  let maxScale = scaleHint
+  for (let i = 0; i < m.count; i++) {
+    m.getMatrixAt(i, _boundM)
+    const sx = Math.hypot(e[0], e[1], e[2])
+    const sy = Math.hypot(e[4], e[5], e[6])
+    const sz = Math.hypot(e[8], e[9], e[10])
+    const s = sx > sy ? (sx > sz ? sx : sz) : sy > sz ? sy : sz
+    if (s > maxScale) maxScale = s
+  }
+  m.boundingSphere.radius += gr * maxScale
+}
+const _boundM = /* @__PURE__ */ new THREE.Matrix4()
+
 /** Kinds whose trunks get physics cylinders (rocks: squat cylinders too). */
 const TRUNK_KINDS = new Set<NodeKind>(['tree', 'elder', 'redwood', 'pine', 'palm', 'deadtree', 'willow', 'rock', 'mangrove', 'cactus', 'boulder', 'outcrop'])
 /** Single-trunk canopy kinds: wide crowns in the air, so slope under the
@@ -657,7 +692,7 @@ class InstancedProp {
   /** Compute per-mesh bounding spheres from the filled instances; from here
    *  on, writes upload only their own slots. */
   computeBounds(): void {
-    for (const m of this.meshes) m.computeBoundingSphere()
+    for (const m of this.meshes) boundInstances(m)
     this.sealed = true
   }
 }
@@ -706,7 +741,9 @@ class SlotSet {
     }
     this.mesh.count = total
     this.mesh.instanceMatrix.needsUpdate = true
-    this.mesh.computeBoundingSphere()
+    let maxScale = 0
+    for (const c of cells) for (const id of c.ids) if (this.nodes[id].scale > maxScale) maxScale = this.nodes[id].scale
+    boundInstances(this.mesh, maxScale)
     group.add(this.mesh)
   }
 

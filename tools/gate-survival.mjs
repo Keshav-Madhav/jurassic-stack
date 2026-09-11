@@ -166,7 +166,11 @@ const warmthAt = async (x, z, secs) => {
 await g('window.__g.game.setSurvival({ warmth: 100 })')
 const low = await warmthAt(0, 1560, 4)
 check(low.w > 95, `the beach is warm (${low.w.toFixed(0)} at ${low.y.toFixed(0)} m)`)
-const high = await warmthAt(-1290, -160, 14)
+// 14 s was enough when the crest stood at 420 m; M81 cut the ranges 25% on
+// the user's instruction, so the same spot is 312 m — still well past
+// COLD_HARD (200) and still freezing, just not as fast. The claim is
+// unchanged; the clock it was measured on was tuned to the old mountain.
+const high = await warmthAt(-1290, -160, 22)
 check(high.y > 300, `the west crest is high ground (${high.y.toFixed(0)} m)`)
 check(high.w < 30, `and it freezes you without a coat (warmth ${high.w.toFixed(0)})`)
 

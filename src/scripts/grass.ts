@@ -5,6 +5,7 @@
 // (grass-gen.ts) and arrive as matrices; the main thread only uploads.
 // Dense underfoot, thinning by ring: six triangles a tuft, ~40K in view.
 import * as THREE from 'three'
+import { boundInstances } from './scatter'
 import { buildGrassCard } from './trees'
 import { buildGrassTile, GRASS_TILE as TILE } from './grass-gen'
 import { sharedBuilder } from './terrain'
@@ -133,7 +134,8 @@ export class GrassField {
     mesh.count = count
     mesh.instanceMatrix.needsUpdate = true
     mesh.instanceColor.needsUpdate = true
-    mesh.computeBoundingSphere()
+    // three under-bounds an InstancedMesh by one instance radius (M81)
+    boundInstances(mesh)
     mesh.visible = count > 0
     this.tiles.set(key, mesh)
     this.builtSpacing.set(key, spacing)

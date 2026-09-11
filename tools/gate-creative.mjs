@@ -44,10 +44,31 @@ await g('window.__g.game.select(8)')
 await g('window.__g.teleport(-700, 1000)') // the desert: far from all dino spawns (swing prioritizes dinos)
 await page.waitForTimeout(400)
 await g('window.__g.game.gotoNearest("tree")')
-await page.waitForTimeout(400) // camera snap needs a rendered frame before the aim ray is valid
+await page.waitForTimeout(900) // camera snap needs a rendered frame before the aim ray is valid
+// ASSERT THE AIM BEFORE THE SWING. This read "one-hit tree harvest" failed
+// whenever the walk-up left the trunk off the crosshair, which says nothing
+// about whether a creative swing fells a tree — the M69 lesson, that a bot
+// which cannot aim looks exactly like a game that cannot harvest.
+// ...and if a bush is in the way (the desert grew undergrowth when the
+// woods were re-traced in M79), sweep the look until the TRUNK is what the
+// crosshair is on, the way a person does — `aimNode` is exactly the
+// instrument M69 added for this.
+let aimed = await g('window.__g.game.aimNode()')
+if (!aimed || aimed.kind !== 'tree') {
+  const t = await g('window.__g.game.nearestNodeInfo("tree")')
+  for (let pitch = -0.9; pitch <= 0.3 && (!aimed || aimed.kind !== 'tree'); pitch += 0.06) {
+    await page.evaluate(([tx, tz, pi]) => {
+      const w = window.__g, p = w.player()
+      w.setCam(Math.atan2(-(tx - p.x), -(tz - p.z)), pi)
+    }, [t.x, t.z, pitch])
+    await page.waitForTimeout(90)
+    aimed = await g('window.__g.game.aimNode()')
+  }
+}
+check(!!aimed && aimed.kind === 'tree', `a tree is under the crosshair (${aimed ? aimed.kind : 'nothing'})`)
 const w0 = await g('window.__g.game.count("wood")')
 await g('window.__g.game.swing()')
-await page.waitForTimeout(300)
+await page.waitForTimeout(400)
 check((await g('window.__g.game.count("wood")')) > w0, 'one-hit tree harvest')
 
 // instant KO + instant tame.

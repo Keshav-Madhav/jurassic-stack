@@ -15,7 +15,7 @@
 // river path becomes a bed, and then lets erosion age it.
 import { writeFileSync, mkdirSync } from 'node:fs'
 import {
-  HALF, SPAWN, VOLCANO, COAST, RANGES, HOLM, SHELVES, RIVER, RIVER_PATHS, LAKES, FALLS, FORESTS, CLEARINGS, RUINS, BIOMES, RAVINE,
+  HALF, SPAWN, VOLCANO, COAST, RANGES, HOLM, SHELVES, RIVER, RIVER_PATHS, LAKES, FALLS, FORESTS, CLEARINGS, RUINS, BIOMES, RAVINE, RIDGES,
   shoreDist, distToPath, closedPath,
 } from './hand-geometry.mjs'
 import { encodeRowDelta } from './world-io.mjs'
@@ -162,11 +162,29 @@ for (let iz = 0; iz < SIDE; iz++) {
       const hA = range.crest[rr.seg].h
       const hB = range.crest[Math.min(rr.seg + 1, range.crest.length - 1)].h
       const crestH = lerp(hA, hB, rr.t) - 0.2 * Math.min(hA, hB) * Math.sin(rr.t * Math.PI)
-      const dWarp = rr.d + 90 * fbm(x * 0.0028 + 31, z * 0.0028 - 13, 3) + 22 * fbm(x * 0.009 + 3, z * 0.009 + 8, 2)
+      // THE WARP HAS TO BE SMALL AGAINST THE RAMP. It exists to turn a flank
+      // into spurs and side valleys rather than a cone, but ±112 m of wobble
+      // across a 600 m skirt locally doubles the gradient: the ideal profile
+      // is 38° at its steepest and the ground measured 54°. Halved, and the
+      // fine octave cut hardest — it is the one with the short wavelength
+      // and therefore all the slope.
+      const dWarp = rr.d + 26 * fbm(x * 0.0022 + 31, z * 0.0022 - 13, 2) + 6 * fbm(x * 0.007 + 3, z * 0.007 + 8, 2)
       const W = range.width
       if (range.soft) {
-        // foothills: a rolling massif, no sharp crest, no scree
-        h += 0.9 * crestH * Math.exp(-(dWarp * dWarp) / (2 * (W * 0.55) * (W * 0.55)))
+        // foothills: a rolling massif, no sharp crest, no scree.
+        // WIDER THAN THEY LOOK (M81). A Gaussian at sigma 0.55W is a 29°
+        // hill on its own, and four of these sit ON the big ranges' skirts —
+        // where the two gradients add. Measured on the West Range's inland
+        // approach: the whole climb from 150 m to the 335 m plateau is
+        // 25-39° and walkable, and the ONLY thing blocking it was a 100 m
+        // band at the toe reading 40-42° where a foothill's steepest part
+        // landed on the range's. At sigma 0.85W the same hill is 20° and the
+        // toe reads better. 0.85W was tried and spread the foothills over
+        // Lake Aster's shore, which cost two ruins their flat ground — and
+        // the toe was never what made the summits unreachable anyway: the
+        // traced shoulders did that. 0.62W is the compromise that keeps the
+        // lakeside.
+        h += 0.9 * crestH * Math.exp(-(dWarp * dWarp) / (2 * (W * 0.62) * (W * 0.62)))
         continue
       }
       // A ROUNDED CREST, NOT A KNIFE EDGE (M75, user: "a natural less steep
@@ -180,15 +198,37 @@ for (let iz = 0; iz < SIDE; iz++) {
       // exponential of length L has area 2L, so a straight swap at equal
       // peak height inflates the whole mountain (first cut: 412 m → 431 m,
       // and four ruin sites lost their flat ground to the new bulk).
-      h += 0.435 * crestH * Math.exp(-(dWarp * dWarp) / (2 * (W * 0.62) * (W * 0.62))) // massif
-      h += 0.605 * crestH * Math.exp(-(dWarp * dWarp) / (2 * (W * 0.15) * (W * 0.15))) // the crest itself
+      // A MOUNTAIN WITH A TOP ON IT (M81, user: "its like a spiked spin
+      // instead of being traversible at the top and reaching the top is
+      // impossible still… you can reduce height by 25% but make it smooth
+      // and have the top traversible too, see ARK mountains").
+      //
+      // Measured before touching it: a section through the West Range's
+      // highest point ran 55-72° from 150 m to the summit, and the summit
+      // was ONE CELL — 402 m at x -1280, 370 m twenty metres away. There was
+      // no top to stand on and no line up it. Two Gaussians can only ever
+      // make a peak; what an ARK range has is a RIDGE with a walkable back.
+      //
+      // So: a flat core out to `flatR`, then a smoothstep skirt to `foot`.
+      // Smoothstep is flat at both ends, so the crest is a real plateau and
+      // the foot meets the plain without a crease — and its steepest point
+      // is 1.5 × the average, which is the number to tune against.
+      const flatR = W * 0.30
+      // 2.6W swallowed Lake Aster's shore — `aster-shrine` and
+      // `foothill-circle` ended up on mountainside with no flat ground
+      // within 120 m, and six woods went over the treeline. The extra width
+      // was not what made the summits reachable either: the traced
+      // shoulders did that. 2.3W keeps the gentler profile and gives the
+      // lakeside back.
+      const foot = W * 2.0
+      h += crestH * smoothstep(foot, flatR, dWarp)
       const alt = smoothstep(90, 180, h)
       // long swells instead of scree: 2.3× the wavelength and half the
       // octaves, because FREQUENCY is what sets the slope. The amplitude
       // comes DOWN from 22 to 17 even so — a 2-octave fbm has fewer
       // cancelling components than a 4-octave one and so reaches nearer its
       // full ±1, which quietly added 7 m to the island's summit
-      h += 17 * alt * fbm(x * 0.013 + 5, z * 0.013 - 9, 2)
+      h += 9 * alt * fbm(x * 0.009 + 5, z * 0.009 - 9, 2)
     }
 
     // THE VOLCANO: angular radius modulation breaks the cone, radial ridges
@@ -552,6 +592,41 @@ function carveRavine(assert) {
     }
   }
 }
+// THE RIDGES: lay a broad, even ramp along each traced shoulder so there is
+// one walkable way up every range (M81). Same shape as the Ravine's floor —
+// carved with the landscape so erosion can weather it, then re-laid after,
+// because droplets turn a smooth ramp into a flight of steps no path can
+// climb (M51's cave floors lost 7 m to exactly that).
+const RIDGE_CUM = RIDGES.map((r) => {
+  const cum = [0]
+  for (let i = 1; i < r.path.length; i++) cum.push(cum[i - 1] + Math.hypot(r.path[i].x - r.path[i - 1].x, r.path[i].z - r.path[i - 1].z))
+  return cum
+})
+function layRidges() {
+  for (let ri = 0; ri < RIDGES.length; ri++) {
+    const r = RIDGES[ri]
+    const cum = RIDGE_CUM[ri]
+    const total = cum[cum.length - 1]
+    const reach = r.halfWidth * 3
+    const xs = r.path.map((p) => p.x), zs = r.path.map((p) => p.z)
+    const ix0 = Math.max(0, Math.floor((Math.min(...xs) - reach + HALF) / RES)), ix1 = Math.min(SIDE - 1, Math.ceil((Math.max(...xs) + reach + HALF) / RES))
+    const iz0 = Math.max(0, Math.floor((Math.min(...zs) - reach + HALF) / RES)), iz1 = Math.min(SIDE - 1, Math.ceil((Math.max(...zs) + reach + HALF) / RES))
+    for (let iz = iz0; iz <= iz1; iz++) {
+      for (let ix = ix0; ix <= ix1; ix++) {
+        const x = worldX(ix), z = worldZ(iz)
+        const { d, seg, t } = distToPath(x, z, r.path)
+        if (d > reach) continue
+        const along = (cum[seg] + (cum[Math.min(seg + 1, cum.length - 1)] - cum[seg]) * t) / total
+        const want = lerp(r.startY, r.endY, along)
+        const i0 = idx(ix, iz)
+        // flat across the shoulder, then feathered back into the hillside
+        H[i0] = lerp(want, H[i0], smoothstep(r.halfWidth, reach, d))
+      }
+    }
+  }
+}
+layRidges()
+
 console.time('ravine')
 carveRavine(false)
 console.timeEnd('ravine')
@@ -751,13 +826,18 @@ console.time('relax')
       if (dv < 900) continue
       for (const range of RANGES) {
         if (range.soft) continue
-        if (distToPath(x, z, range.crest).d < range.width * 2.2) { mask[idx(ix, iz)] = 1; break }
+        if (distToPath(x, z, range.crest).d < range.width * 2.4) { mask[idx(ix, iz)] = 1; break }
       }
     }
   }
   const src = new Float32Array(H.length)
   const add = new Float32Array(H.length)
-  for (let pass = 0; pass < 90; pass++) {
+  // A LONG SLOPE NEEDS MANY PASSES (M81). This is a diffusion: each pass
+  // moves half the worst excess one cell downhill, so flattening a 600 m
+  // flank takes hundreds of them, not ninety. At ninety it had not converged
+  // and the ranges kept a 40-50° band that nothing could walk up — the
+  // summits had navmesh on them and no route to it. It costs ~50 ms a pass.
+  for (let pass = 0; pass < 600; pass++) {
     src.set(H); add.fill(0)
     let moved = 0
     for (let iz = 1; iz < SIDE - 1; iz++) {
@@ -781,6 +861,7 @@ console.time('relax')
     }
     for (let i = 0; i < H.length; i++) H[i] += add[i]
     if (moved < 150) { console.log(`  relax: settled after ${pass + 1} passes`); break }
+    if (pass === 599) console.log(`  relax: STILL MOVING ${moved.toFixed(0)} after 600 passes`)
   }
 }
 console.timeEnd('relax')
@@ -922,6 +1003,7 @@ console.timeEnd('cliffs')
 
 // the Ravine's floor and the crater bench: re-laid (see carveRavine)
 carveRavine(true)
+layRidges() // the shoulders, re-laid after erosion
 carveFalls() // and the plunge pools
 {
   const crater = SHELVES.find((sh) => sh.name === 'crater')
