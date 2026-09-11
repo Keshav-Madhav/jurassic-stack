@@ -1049,6 +1049,7 @@ async function boot(): Promise<void> {
       const pick = heldFood ?? (['cookedmeat', 'berry', 'rawmeat'] as FoodId[]).find((f) => inventory.count(f) > 0) ?? null
       if (pick && inventory.remove(pick, 1)) {
         sfx.play('eat', { volume: 0.65 })
+        player.playInteract() // hand to mouth: the nearest thing this rig has
         const f = survival.eat(pick)
         playerHp = Math.max(1, Math.min(100, playerHp + f.hp))
         hud.toast(`Ate ${ITEMS[pick].name.toLowerCase()} ${ITEMS[pick].icon} · food ${Math.round(survival.food)} · ♥ ${Math.ceil(playerHp)}${pick === 'rawmeat' ? ' (raw — cook it at a fire)' : ''}`)

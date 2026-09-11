@@ -149,6 +149,25 @@ check(unbound.length === 0, `every declared flinch is bound (${unbound.map(([k])
   check(!!hit?.f?.running, `being hit plays the rig's flinch (${hit?.f?.seconds}s clip)`)
 }
 
+// --- 5b. THE JUMP. The rig has no jump clip, so the airborne slot falls back
+// to an alert idle: without a pose over the top of it the castaway stands
+// bolt upright a metre above the grass on every jump.
+await page.evaluate(() => { window.__g.teleport(0, 1560); window.__g.setCam(0, 0) })
+await settle(1500)
+const ground = await state()
+check(ground.tuck < 0.05, `standing on the ground there is no air pose (tuck ${ground.tuck})`)
+// HOLD it: the jump is read inside the fixed step, and a keyboard.press is
+// down-and-up inside 10 ms — one 16 ms step can miss it entirely
+await page.keyboard.down('Space')
+await settle(140)
+await page.keyboard.up('Space')
+const rising = await state()
+check(rising.airBlend > 0.5, `a jump reads as airborne (blend ${rising.airBlend})`)
+check(rising.tuck > 0.3, `and the legs tuck on the way up (tuck ${rising.tuck})`)
+await settle(1400)
+const landed = await state()
+check(landed.tuck < 0.05 && landed.airBlend < 0.1, `landing clears it again (tuck ${landed.tuck}, air ${landed.airBlend})`)
+
 // --- 6a. one blow is not every blow. Six rigs carry more than one attack and
 // every fight used to play the same single clip.
 const atk = await page.evaluate(() => window.__g.game.attackAudit())

@@ -119,6 +119,14 @@ export class Player {
     treadArm: -1.05, scissor: 0.42, treadKnee: -0.55,
   }
 
+  /** THE JUMP HAD NO CLIP AND NO POSE (M88). Casual2 ships no jump, so the
+   *  airborne slot falls back to its alert idle — a man standing bolt upright
+   *  a metre above the grass, arms at his sides, every single jump. The legs
+   *  tuck on the way up and reach for the ground on the way down, the same
+   *  way the swim is built: over the top of whatever clip is playing, about
+   *  the MODEL's axes so the rig's bind rotations do not matter. */
+  static airPose = { thigh: -0.62, knee: -1.0, arm: -0.5, armOut: 0.18 }
+
   readonly mover: Mover
   readonly object = new THREE.Group()
   swimming = false
@@ -148,6 +156,9 @@ export class Player {
   private strokeT = 0
   /** smoothed vertical intent in the water: +1 rising, -1 diving */
   private climbBlend = 0
+  /** how tucked the legs are in the air: 1 just after take-off, easing out
+   *  into a reach for the ground on the way down */
+  private airTuck = 0
   /** hip-height pivot: the swim pitch has to rotate the body about its
    *  middle, not about the point between its feet (which would swing the
    *  head out in front on the end of a 1.75 m lever). */
@@ -312,6 +323,7 @@ export class Player {
       armBlend: +this.armBlend.toFixed(2), moveWeight: +this.moveWeight.toFixed(2),
       pitch: +this.pivot.rotation.x.toFixed(2),
       climb: +this.climbBlend.toFixed(2), diving: this.diving,
+      tuck: +this.airTuck.toFixed(2),
       bodyY: +(this.object.position.y + this.pivot.position.y).toFixed(2),
       arms: this.arms.length, forearms: this.forearms.length,
       clips: [...this.actions.keys()],
@@ -628,6 +640,9 @@ export class Player {
     // kick for the surface and the slow bob at the top with one number
     const climbT = this.swimming ? THREE.MathUtils.clamp(this.mover.velocityY / 2.6, -1, 1) : 0
     this.climbBlend = THREE.MathUtils.lerp(this.climbBlend, climbT, 1 - Math.exp(-dt * 4))
+    // rising hard = tuck; falling = reach for the ground
+    const rise = THREE.MathUtils.clamp(this.mover.velocityY / 5, -1, 1)
+    this.airTuck = THREE.MathUtils.lerp(this.airTuck, this.airBlend * (0.3 + 0.7 * Math.max(0, rise)), 1 - Math.exp(-dt * 10))
     this.sitBlend = THREE.MathUtils.lerp(this.sitBlend, this.riding ? 1 : 0, 1 - Math.exp(-dt * 14))
     // a hatchet or a spear is PRESENTED; a torch is only carried
     const readied = !!this.heldId && !!HELD_POSE[this.heldId] && this.heldId !== 'torch'
@@ -765,6 +780,29 @@ export class Player {
     } else if (this.pivot.rotation.x !== 0) {
       this.pivot.rotation.x = 0
       this.pivot.position.y = PIVOT_Y
+    }
+
+    // PROCEDURAL JUMP (M88). Airborne is exclusive with swimming and riding,
+    // so this can never fight either of the poses around it.
+    if (this.airTuck > 0.02) {
+      const A = Player.airPose
+      const t = this.airTuck
+      for (const { bone, rest, pitch } of this.kickers) {
+        _q.setFromAxisAngle(pitch, A.thigh * t)
+        _target.copy(_q).multiply(rest)
+        bone.quaternion.slerp(_target, t)
+      }
+      for (const { bone, rest, pitch } of this.knees) {
+        _q.setFromAxisAngle(pitch, A.knee * t)
+        _target.copy(_q).multiply(rest)
+        bone.quaternion.slerp(_target, t)
+      }
+      for (const { bone, side, rest, pitch, roll } of this.arms) {
+        _q.setFromAxisAngle(pitch, A.arm * t)
+        _q2.setFromAxisAngle(roll, A.armOut * t * -side)
+        _target.copy(_q).multiply(_q2).multiply(rest)
+        bone.quaternion.slerp(_target, t)
+      }
     }
 
     // procedural riding pose: after the mixer writes bones, flex the legs into
