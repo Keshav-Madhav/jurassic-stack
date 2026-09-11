@@ -137,7 +137,11 @@ for (let i = 0; i < 45 && hpAfter >= hpBefore; i++) {
   hpAfter = await page.evaluate((k) => window.__g.game.dinoStates()[k].hp, foe)
   const d = await distNow()
   // "closing" counts as progress; 12 s with no new closest is a real stall
-  if (d < closest - 0.5) { closest = d; stalled = 0 } else if (++stalled > 12) break
+  // "not getting closer" is only a stall while it is still FAR. Once the
+  // tame is on top of the carno it circles, `closest` stops improving, and
+  // the first cut of this loop gave up at 2.6 m — a metre from the bite it
+  // was waiting for. Inside 8 m, wait out the full budget.
+  if (d < closest - 0.5) { closest = d; stalled = 0 } else if (d > 8 && ++stalled > 12) break
 }
 check(hpAfter < hpBefore,
   `the tame actually bites: the carno is ${hpBefore} → ${hpAfter} hp (closed to ${closest.toFixed(1)} m)`)

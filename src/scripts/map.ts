@@ -19,7 +19,7 @@
 // useless for building the thing.
 import type { Building } from './building'
 import type { Scatter, NodeKind } from './scatter'
-import { heightAt, biomeAt, BIOME, worldMeta, HALF_SIZE, SEA_LEVEL } from './heightmap'
+import { heightAt, biomeAt, BIOME, forestMaskAt, forestKindAt, FOREST_KIND, worldMeta, HALF_SIZE, SEA_LEVEL } from './heightmap'
 
 /** metres per raster pixel — 2 m is the heightmap's own resolution */
 const MPP = 2
@@ -47,6 +47,16 @@ export class MapView {
   private label: HTMLElement
   private legend: HTMLElement
   private t = 0
+  // WHAT THE OVERLAY DRAWS IS CACHED, because it barely changes and the
+  // minimap redraws every frame. Rescanning ~40 000 scatter nodes each frame
+  // measured 0.80 ms — about 8% of the frame at the wood line — for a list
+  // that only moves when you do. `building.serialize()` is worse than it
+  // looks too: it copies every piece into a new object, so calling it per
+  // frame is an allocation per piece per frame.
+  private cacheAt = { x: Infinity, z: Infinity }
+  private cacheT = 0
+  private nodeCache: { x: number; z: number; c: string }[] = []
+  private pieceCache: { x: number; z: number }[] = []
 
   constructor(root: HTMLElement, private building: Building, private scatter: Scatter) {
     this.raster = document.createElement('canvas')
@@ -115,6 +125,20 @@ export class MapView {
           if (bio === BIOME.SWAMP) { r = lerp(r, 40, 0.35); g = lerp(g, 120, 0.35); b = lerp(b, 110, 0.35) }
           else if (bio === BIOME.DESERT) { r = lerp(r, 230, 0.4); g = lerp(g, 190, 0.4); b = lerp(b, 110, 0.4) }
           else if (bio === BIOME.PLAINS) { r = lerp(r, 210, 0.3); g = lerp(g, 220, 0.3); b = lerp(b, 120, 0.3) }
+          // THE WOODS. Without these the island's most visible feature is
+          // simply absent: inland the sheet was an unbroken cream wash and
+          // the porthole in a pine forest showed a blank disc. Five of the
+          // eight things a player navigates by are woods.
+          const fm = forestMaskAt(x, z)
+          if (fm > -0.35) {
+            const cover = Math.min(1, (fm + 0.35) / 0.75) * 0.62
+            const kind = forestKindAt(x, z)
+            // conifers read darker and bluer than broadleaf, redwoods darkest
+            const fr = kind === FOREST_KIND.PINE ? 38 : kind === FOREST_KIND.REDWOOD ? 44 : 62
+            const fg = kind === FOREST_KIND.PINE ? 82 : kind === FOREST_KIND.REDWOOD ? 74 : 104
+            const fb = kind === FOREST_KIND.PINE ? 62 : kind === FOREST_KIND.REDWOOD ? 48 : 52
+            r = lerp(r, fr, cover); g = lerp(g, fg, cover); b = lerp(b, fb, cover)
+          }
         }
         const o = (j * RASTER + i) * 4
         d[o] = r; d[o + 1] = g; d[o + 2] = b; d[o + 3] = 255
@@ -181,10 +205,31 @@ export class MapView {
     c.fillText(s, x, y)
   }
 
+  /** Rebuild the cached overlay lists — on a move of 10 m or every 0.5 s. */
+  private refresh(p: { x: number; z: number }, creative: boolean): void {
+    const moved = Math.hypot(p.x - this.cacheAt.x, p.z - this.cacheAt.z)
+    if (moved < 10 && this.t - this.cacheT < 0.5) return
+    this.cacheAt = { x: p.x, z: p.z }
+    this.cacheT = this.t
+    this.pieceCache = this.building.serialize().map((q) => ({ x: q.gx * 3, z: q.gz * 3 }))
+    this.nodeCache.length = 0
+    if (!creative) return
+    const R = MINI_SPAN * 0.55
+    const tint: Record<string, string> = { rock: '#c3ccd6', boulder: '#a5b0bb', outcrop: '#98a2ae', bush: '#7ab863' }
+    for (const n of this.scatter.nodes) {
+      if (!n.alive) continue
+      if (Math.abs(n.x - p.x) > R || Math.abs(n.z - p.z) > R) continue
+      const c = tint[n.kind as NodeKind]
+      if (!c) continue
+      this.nodeCache.push({ x: n.x, z: n.z, c })
+    }
+  }
+
   /** Called every frame. `yaw` is the player's facing, 0 = north (-z). */
   update(dt: number, p: { x: number; z: number }, yaw: number, creative: boolean): void {
     this.t += dt
     if (this.row < RASTER) { this.paintSlice(); return }
+    this.refresh(p, creative)
 
     // --- the minimap: a window on the raster, north up, player centred ---
     const mw = this.mini.width
@@ -198,12 +243,12 @@ export class MapView {
       mw / 2 + ((wx - p.x) / MINI_SPAN) * mw,
       mw / 2 + ((wz - p.z) / MINI_SPAN) * mw,
     ]
-    for (const pc of this.building.serialize()) {
-      const [bx, by] = toMini(pc.gx * 3, pc.gz * 3)
+    for (const pc of this.pieceCache) {
+      const [bx, by] = toMini(pc.x, pc.z)
       if (bx < 0 || by < 0 || bx > mw || by > mw) continue
       this.dot(c, bx, by, 2.6, '#e8c07a')
     }
-    if (creative) this.overlay(c, toMini, p, mw, mw, MINI_SPAN, true)
+    if (creative) this.overlay(c, toMini, mw, mw, true)
     this.marker(c, mw / 2, mw / 2, yaw)
     c.restore()
 
@@ -235,11 +280,11 @@ export class MapView {
       this.dot(f, sx, sy, 4, '#8fd6ff')
       this.text(f, 'landfall', sx, sy - 14, 11, '#dff1ff')
     }
-    for (const pc of this.building.serialize()) {
-      const [bx, by] = toFull(pc.gx * 3, pc.gz * 3)
+    for (const pc of this.pieceCache) {
+      const [bx, by] = toFull(pc.x, pc.z)
       this.dot(f, bx, by, 2.4, '#e8c07a')
     }
-    if (creative) this.overlay(f, toFull, p, fw, fw, SPAN, false)
+    if (creative) this.overlay(f, toFull, fw, fw, false)
     this.marker(f, ...toFull(p.x, p.z), yaw)
 
     const compass = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round((((yaw * 180) / Math.PI + 360) % 360) / 45) % 8]
@@ -253,10 +298,8 @@ export class MapView {
   private overlay(
     c: CanvasRenderingContext2D,
     to: (x: number, z: number) => [number, number],
-    p: { x: number; z: number },
     w: number,
     h: number,
-    span: number,
     small: boolean,
   ): void {
     const m = worldMeta
@@ -308,16 +351,10 @@ export class MapView {
     // the reason to glance down. Pebbles and sticks are dropped even there —
     // there are tens of thousands and they carpet everything.
     if (!small) return
-    const R = span * 0.55
-    const tint: Record<string, string> = { rock: '#c3ccd6', boulder: '#a5b0bb', outcrop: '#98a2ae', bush: '#7ab863' }
-    for (const n of this.scatter.nodes) {
-      if (!n.alive) continue
-      if (Math.abs(n.x - p.x) > R || Math.abs(n.z - p.z) > R) continue
-      const t = tint[n.kind as NodeKind]
-      if (!t) continue
+    for (const n of this.nodeCache) {
       const [px, py] = to(n.x, n.z)
       if (!inside(px, py)) continue
-      this.dot(c, px, py, 1.7, t, 'rgba(0,0,0,0.4)')
+      this.dot(c, px, py, 1.7, n.c, 'rgba(0,0,0,0.4)')
     }
   }
 

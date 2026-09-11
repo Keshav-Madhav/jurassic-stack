@@ -271,7 +271,14 @@ await page.reload({ waitUntil: 'domcontentloaded', timeout: 120000 })
 await ready()
 check((await g('window.__g.game.count("wood")')) === savedWood, `inventory survived reload (wood=${savedWood})`)
 check((await g('window.__g.game.pieces()')) >= 3, 'structures survived reload')
-check(await g('window.__g.game.dinoStates().some(d => d.state === "tamed")'), 'tame survived reload')
+// the animals are restored and re-spawned after `ready`, so reading this
+// once on the very next line is a bet on how quickly that finished — it
+// lost under the full suite's load while passing standalone
+const tameBack = await page
+  .waitForFunction('window.__g.game.dinoStates().some(d => d.state === "tamed")', null, { timeout: 20000 })
+  .then(() => true)
+  .catch(() => false)
+check(tameBack, 'tame survived reload')
 
 await page.screenshot({ path: 'shots/gate-m4-final.png' })
 await browser.close()

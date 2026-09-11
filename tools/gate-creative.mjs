@@ -50,26 +50,58 @@ await g('window.__g.game.swing()')
 await page.waitForTimeout(300)
 check((await g('window.__g.game.count("wood")')) > w0, 'one-hit tree harvest')
 
-// instant KO + instant tame
-await g('window.__g.game.gotoDino("idle") || window.__g.game.gotoDino("wander")')
+// instant KO + instant tame.
+// SPAWN THE ANIMAL, do not take whatever is nearest. This walked up to the
+// closest idle dino in the desert and then assumed it could be RIDDEN — and
+// `sauropelta.rideable` is false, correctly, so the moment M75's reshaped
+// ground changed which animal was nearest the mount check started failing
+// on a game that was behaving perfectly. The gate now picks a rideable
+// species on purpose and says so.
+const mount = await page.evaluate(() => {
+  const gg = window.__g, p = gg.player()
+  return gg.game.spawnDino('raptor', p.x + 4, p.z - 3)
+})
+await page.waitForTimeout(600)
+check(
+  (await page.evaluate((i) => window.__g.game.dinoStates()[i]?.rideable, mount)) === true,
+  'the animal chosen for the ride test is a rideable species',
+)
+await page.evaluate((i) => window.__g.game.gotoDinoIndex(i), mount)
+await page.waitForTimeout(300)
 await g('window.__g.game.swing()')
 await page.waitForTimeout(300)
-check(await g('window.__g.game.dinoStates().some(d => d.state === "ko")'), 'creative punch = instant KO')
-await g('window.__g.game.gotoDino("ko")')
+check((await page.evaluate((i) => window.__g.game.dinoStates()[i].state, mount)) === 'ko', 'creative punch = instant KO')
+await page.evaluate((i) => window.__g.game.gotoDinoIndex(i), mount)
 await g('window.__g.game.interact()')
 await page.waitForTimeout(300)
-check(await g('window.__g.game.dinoStates().some(d => d.state === "tamed")'), 'creative feed = instant tame')
+check((await page.evaluate((i) => window.__g.game.dinoStates()[i].state, mount)) === 'tamed', 'creative feed = instant tame')
 
 // THE REGRESSION THAT SHIPPED: save while MOUNTED, reload, must spawn sane
 // (the parked player body at y=-520 used to get saved → eternal falling)
 await g('window.__g.game.gotoDino("tamed")')
-await g('window.__g.game.interact()') // saddle (already saddled → mounts)
-await page.waitForTimeout(300)
-if (!(await g('window.__g.game.riding()'))) {
-  await g('window.__g.game.interact()') // mount
-  await page.waitForTimeout(300)
+await page.waitForTimeout(600)
+// E on a tame is SADDLE first, then MOUNT, then DISMOUNT — so the number of
+// presses this needs depends on whether the tame came out saddled, and the
+// old code waited a flat 300 ms between them to decide. When the machine is
+// busy `riding()` has not flipped yet, the guard fires one more press, and
+// that press DISMOUNTS: the check then reads false having been mounted a
+// moment earlier. Press, then WAIT FOR THE FACT, and only press again if
+// the wait genuinely ran out.
+let riding = false
+for (let attempt = 0; attempt < 4 && !riding; attempt++) {
+  // ...and WALK BACK TO IT each time. A tame wanders, so a long poll between
+  // presses is its own trap: the first fix here waited 2.5 s for `riding()`
+  // to flip after the saddle press, by which time the bird had strolled out
+  // of reach and the mount press hit nothing.
+  await page.evaluate((i) => window.__g.game.gotoDinoIndex(i), mount)
+  await page.waitForTimeout(250)
+  await g('window.__g.game.interact()')
+  riding = await page
+    .waitForFunction('window.__g.game.riding() === true', null, { timeout: 900 })
+    .then(() => true)
+    .catch(() => false)
 }
-check(await g('window.__g.game.riding()'), 'mounted for save-while-riding test')
+check(riding, 'mounted for save-while-riding test')
 await g('window.__g.game.save()')
 await page.waitForTimeout(200)
 await page.reload({ waitUntil: 'domcontentloaded' })

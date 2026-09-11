@@ -1017,12 +1017,17 @@ async function boot(): Promise<void> {
     // `code` is the physical key, so this also works on AZERTY; `key` covers
     // layouts where the O-labelled key sits elsewhere (Dvorak)
     if (e.code === 'KeyO' || e.key === 'o' || e.key === 'O') {
+      // one sheet of paper at a time: the pack and the settings both used to
+      // open ON TOP of the map, leaving two panels stacked over a dimmed
+      // world with no way to tell which had the keyboard
+      if (mapView.open) mapView.toggle()
       openSettings()
       return
     }
     if (settings.open) { if (e.code === 'Escape') settings.close(); return }
     if (e.code === 'Tab') {
       e.preventDefault()
+      if (mapView.open) mapView.toggle()
       hud.togglePanel()
       if (hud.panelOpen) onboarding.hint('craft')
       return
@@ -1502,7 +1507,7 @@ async function boot(): Promise<void> {
       panelOpen: () => hud.panelOpen,
       iconCount: () => kit.icons.size,
       icon: (id: string) => kit.icons.get(id as ItemId) ?? null,
-      dinoStates: () => dinos.map((d) => ({ state: d.state, torpor: d.torpor, saddled: d.saddled, guarding: d.guarding, hp: Math.round(d.hp), species: d.species.id })),
+      dinoStates: () => dinos.map((d) => ({ state: d.state, torpor: d.torpor, saddled: d.saddled, guarding: d.guarding, hp: Math.round(d.hp), species: d.species.id, rideable: d.species.rideable })),
       /** QA: the awake ecology — who is doing what to whom */
       ecology: () => awake.filter((d) => d.state !== 'idle' && d.state !== 'wander').map((d) => ({ sp: d.species.id, state: d.state, hp: Math.round(d.hp), x: Math.round(d.object.position.x), z: Math.round(d.object.position.z), foe: d.currentFoe ? d.currentFoe.species.id : d.state === 'aggro' || d.state === 'hunt' ? 'player' : null })),
       /** QA: where dino #i stands */

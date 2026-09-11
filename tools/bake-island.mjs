@@ -878,6 +878,53 @@ for (let iz = 0; iz < SIDE; iz++) {
     if (H[i0] < floorH && !RIVER_PATHS.some((p) => distToPath(x, z, p).d < 40)) H[i0] = floorH
   }
 }
+// ---------- NO ONE-CELL CLIFFS (M77) ----------
+// A drop taller than a couple of cells is drawn as a STAIRCASE. Where the
+// cliff runs diagonally across the grid the steps alternate +x-facing and
+// -z-facing, the two orientations catch the light differently, and every sea
+// cliff on the island came out as vertical corduroy. The Wellspring bluff
+// drops 38 m in a single 2 m cell.
+//
+// It took three wrong fixes to find that — a triplanar-ish UV, a bare-rock
+// colour rule, and shadows — and the test that settled it was rendering the
+// terrain flat white: the stripes were still there, so it was never the
+// colour or the texture. Geometry and lighting, and only geometry fixes it.
+//
+// Spread any step over MAXSTEP into its neighbours so a cliff face is at
+// least a few cells wide and its facets point the same way. 6 m over a 2 m
+// cell is still 72° — dramatic, just not a wall of pixels. The volcano is
+// left out: its escarpment is a designed 52 m cliff that SEALS the crater
+// until M8's door opens, and softening it would open the mountain.
+console.time('cliffs')
+{
+  const MAXSTEP = 6
+  const src = new Float32Array(H.length)
+  const add = new Float32Array(H.length)
+  for (let pass = 0; pass < 14; pass++) {
+    src.set(H); add.fill(0)
+    let worst = 0
+    for (let iz = 1; iz < SIDE - 1; iz++) {
+      for (let ix = 1; ix < SIDE - 1; ix++) {
+        const i = idx(ix, iz)
+        const h = src[i]
+        if (Math.hypot(worldX(ix) - VOLCANO.x, worldZ(iz) - VOLCANO.z) < 900) continue
+        for (const j of [i + 1, i + SIDE]) {
+          const d = h - src[j]
+          const a = Math.abs(d)
+          if (a <= MAXSTEP) continue
+          if (a > worst) worst = a
+          const move = (a - MAXSTEP) * 0.25 * Math.sign(d)
+          add[i] -= move
+          add[j] += move
+        }
+      }
+    }
+    for (let i = 0; i < H.length; i++) H[i] += add[i]
+    if (worst < MAXSTEP + 0.5) { console.log(`  cliffs: settled after ${pass + 1} passes`); break }
+  }
+}
+console.timeEnd('cliffs')
+
 // the Ravine's floor and the crater bench: re-laid (see carveRavine)
 carveRavine(true)
 carveFalls() // and the plunge pools
