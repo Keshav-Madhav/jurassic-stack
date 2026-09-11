@@ -1628,6 +1628,17 @@ async function boot(): Promise<void> {
         return out
       },
       /** QA: per species, where the high parts (head) sit vs the heading — negative means the rig walks backwards */
+      /** QA (M85): per species, whether the rig's flinch is declared, bound
+       *  and (right now) playing. Only some rigs carry one. */
+      flinchAudit: () => {
+        const out: Record<string, unknown> = {}
+        for (const d of dinos) { if (out[d.species.id]) continue; if (!d.rig) continue; out[d.species.id] = d.flinchState() }
+        return out
+      },
+      /** QA: the flinch state of ONE animal by index — the roster-wide audit
+       *  returns the first of each species, which on an island with dozens of
+       *  wild raptors is never the one you just hit. */
+      dinoFlinch: (i: number) => dinos[i]?.flinchState() ?? null,
       facingAudit: () => {
         const out: Record<string, number> = {}
         for (const d of dinos) { if (out[d.species.id] !== undefined) continue; const h = d.headSide(); if (h !== null) out[d.species.id] = +h.toFixed(2) }

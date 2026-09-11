@@ -146,6 +146,9 @@ export class Dino {
   private mixer: THREE.AnimationMixer | null = null
   private actions: Partial<Record<'idle' | 'walk' | 'run' | 'attack' | 'ko', THREE.AnimationAction>> = {}
   private flavorActions: THREE.AnimationAction[] = []
+  private hurtAction: THREE.AnimationAction | null = null
+  /** so a burst of hits reads as one flinch rather than a stutter */
+  private hurtT = 0
   private flavorT = 4 + Math.random() * 8
   private stateT = 2 + Math.random() * 3
   private target = new THREE.Vector3()
@@ -411,6 +414,13 @@ export class Dino {
         if (clip) this.actions[slot] = this.mixer.clipAction(clip)
       }
     }
+    if (this.species.hurtClip) {
+      const clip = animations.find((a) => this.species.hurtClip!.test(a.name))
+      if (clip) {
+        this.hurtAction = this.mixer.clipAction(clip)
+        this.hurtAction.setLoop(THREE.LoopOnce, 1)
+      }
+    }
     for (const re of this.species.flavorClips ?? []) {
       const clip = animations.find((a) => re.test(a.name))
       if (clip) {
@@ -498,11 +508,34 @@ export class Dino {
   clipReport(): Record<string, string | null> {
     const out: Record<string, string | null> = {}
     for (const slot of ['idle', 'walk', 'run', 'attack', 'ko'] as const) out[slot] = this.actions[slot]?.getClip().name ?? null
+    out.hurt = this.hurtAction?.getClip().name ?? null
     return out
   }
 
-  /** QA: where the rig's high parts (head/neck for most dinos) sit relative to
-   *  the heading: +1 = ahead of the body centre, −1 = behind → walking backwards */
+  /** QA: is this animal's flinch bound, and is it playing right now? */
+  flinchState(): { bound: boolean; running: boolean; declared: boolean; seconds: number; at: number } {
+    return {
+      declared: !!this.species.hurtClip,
+      bound: !!this.hurtAction,
+      running: !!this.hurtAction?.isRunning(),
+      seconds: +(this.hurtAction?.getClip().duration ?? 0).toFixed(2),
+      at: +(this.hurtAction?.time ?? 0).toFixed(2),
+    }
+  }
+
+  /** QA: where the rig's high parts sit relative to the heading — INDICATIVE
+   *  ONLY, and the history is worth keeping (M85). It reads as a facing test
+   *  and is not one: the top fifth of the body is the head on a long-necked
+   *  apatosaur and a raised TAIL on a raptor, the plates on a stego, the sail
+   *  on a spino. Measured off the animated pose it also moved with the
+   *  stride (stego +0.18 one run, -0.26 the next). It is deterministic now —
+   *  the bind attribute, and a ratio, so the scale some of these rigs carry
+   *  on their bones cancels — but deterministic is not correct: it puts the
+   *  raptor at -0.19 and the trike at -0.36, both verified walking forwards
+   *  in side-on portraits. NOTHING GATES ON THIS. The real facing test is
+   *  the head-BONE probe in gate-m4, which covers the twelve rigs that name
+   *  their bones; the other four (carno, spino, trike, sauropelta) are
+   *  checked by eye with `qa-dinos.mjs`, which frames them walking. */
   headSide(): number | null {
     if (!this.model) return null
     // ONLY A LIVE ANIMAL CAN BE MEASURED. A dormant one keeps its model but
@@ -533,8 +566,16 @@ export class Dino {
       if (!(o instanceof THREE.SkinnedMesh) || !o.visible) return
       const count = o.geometry.attributes.position.count
       const step = Math.max(1, Math.floor(count / 3000))
+      const pos = o.geometry.attributes.position as THREE.BufferAttribute
       for (let i = 0; i < count; i += step) {
-        o.getVertexPosition(i, v).applyMatrix4(o.matrixWorld).applyMatrix4(inv)
+        // THE BIND POSE, DELIBERATELY. This is a RATIO — how far along the
+        // body the top fifth sits, over the body's own half-length — so the
+        // scale that some of these rigs carry on their BONES rather than
+        // their mesh node cancels out, and reading the bind attribute instead
+        // of the skinned one makes the answer the same on every run. Skinned,
+        // it moved with the animal's stride: the stego read +0.18 one run and
+        // -0.26 the next, which is a gate that fails at random.
+        v.fromBufferAttribute(pos, i).applyMatrix4(o.matrixWorld).applyMatrix4(inv)
         pts.push(v.clone())
         maxY = Math.max(maxY, v.y); minY = Math.min(minY, v.y)
       }
@@ -732,6 +773,16 @@ export class Dino {
   }
 
   /** A hit from the player. torporHit=true for fists (KO route), false for weapons (damage route). */
+  /** Play the rig's flinch, if it has one. Rate-limited: a spear volley used
+   *  to be four resets inside half a second, which reads as a stutter. */
+  private flinch(): void {
+    if (!this.hurtAction || this.hurtT > 0) return
+    this.hurtT = 0.55
+    this.hurtAction.reset().setLoop(THREE.LoopOnce, 1)
+    this.hurtAction.timeScale = 1.15
+    this.hurtAction.play()
+  }
+
   takeHit(damage: number, torporGain: number, fromX: number, fromZ: number): void {
     if (this.state === 'ko' || this.state === 'tamed') return
     this.lastHitX = fromX
@@ -753,6 +804,7 @@ export class Dino {
       return
     }
     this.say('hurt')
+    this.flinch()
     // provoked: aggressive AND defensive species turn on the attacker, skittish bolt
     if (this.species.temperament !== 'skittish') {
       this.state = 'aggro'
@@ -1208,6 +1260,7 @@ export class Dino {
     }
     this.hp -= damage
     if (this.hp <= 0) { this.die(); return }
+    this.flinch()
     if (this.state === 'tamed') { this.guard(attacker); return }
     if (this.state === 'hunt' && this.foe === attacker) { this.stateT = Math.max(this.stateT, 12); return } // prey fighting back doesn't break the hunt
     // a much bigger animal striking you is a reason to run, whatever your temper
@@ -1340,6 +1393,7 @@ export class Dino {
         act.weight = 1
         act.timeScale = THREE.MathUtils.lerp(oc.idle, moving, this.moveWeight)
       }
+      if (this.hurtT > 0) this.hurtT -= dt
       const d0 = this.distToPlayer
       const every0 = d0 > 260 ? 8 : d0 > 120 ? 3 : 1
       this.mixerSkip += 1
@@ -1352,6 +1406,7 @@ export class Dino {
       }
       return
     }
+    if (this.hurtT > 0) this.hurtT -= dt
     this.moveWeight = THREE.MathUtils.lerp(this.moveWeight, target, 1 - Math.exp(-dt * 8))
     this.runBlend = THREE.MathUtils.lerp(this.runBlend, running ? 1 : 0, 1 - Math.exp(-dt * 6))
     const { idle, walk, run } = this.actions

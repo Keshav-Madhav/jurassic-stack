@@ -638,9 +638,12 @@ export class Player {
     } else if (idle) {
       idle.weight = rest
     }
-    // the strafe and backpedal clips are RUNS, so they are retimed down to
-    // walking pace rather than gated to sprints only
-    const gait = 0.62 + (planar / SPRINT_SPEED) * 0.55
+    // The strafe and backpedal clips are RUNS — authored for sprint pace — so
+    // they are retimed to the ground speed rather than gated to sprints only.
+    // Proportional, not a constant plus a slope: a flat 0.62 + speed term ran
+    // the cycle at 0.92 while the body walked at 4.4 m/s, which is a foot
+    // sliding over the ground at nearly twice its stride.
+    const gait = THREE.MathUtils.clamp(planar / SPRINT_SPEED, 0.45, 1.15)
     const move = ground * this.moveWeight
     if (walk) {
       walk.weight = (move * wF * (1 - this.runBlend)) / dirSum

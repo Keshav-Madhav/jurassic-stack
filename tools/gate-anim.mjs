@@ -86,31 +86,45 @@ await settle(2500)
 const after = await state()
 check(after.pitch < 0.7, `the prone pitch relaxes when he stops (pitch ${after.pitch})`)
 
-// --- 5. dinosaur facing: no rig may walk backwards. This reads the MESH, not
-// bone names, so it covers the four rigs whose bones are called "Bone.001" —
-// and only LIVE rigs, because a dormant animal's skeleton is parked in an
-// arbitrary pose and measuring it is measuring nothing (see backProbe).
-await page.evaluate(() => {
-  const g = window.__g, p = g.player()
-  g.teleport(0, 1560)
-  g.game.speciesList().forEach((id, i) => {
-    const a = (i / 15) * Math.PI * 2
-    g.game.spawnDino(id, p.x + Math.cos(a) * 26, p.z + Math.sin(a) * 26)
-  })
-})
-await settle(14000)
-const audit = await page.evaluate(() => window.__g.game.facingAudit())
-const species = await page.evaluate(() => window.__g.game.speciesList())
-check(Object.keys(audit).length >= species.length - 2, `facing audit read ${Object.keys(audit).length} live rigs of ${species.length}`)
-// -0.15, not 0: the measure is the centroid of the top FIFTH of the body
-// projected on the travel axis, and on a rig with a high-held tail (carno,
-// allo) or a dorsal sail over the hips (spino) that centroid sits slightly
-// behind centre while the animal is plainly walking forwards — all three
-// were checked against side-on walking portraits. A rig that is genuinely
-// reversed lands between -0.2 and -0.7, which this still catches.
-const backwards = Object.entries(audit).filter(([, v]) => v < -0.15)
-check(backwards.length === 0, `no rig walks backwards (${backwards.map(([k, v]) => `${k}=${v}`).join(' ') || 'all forward'})`)
-console.log('  facing audit:', JSON.stringify(audit))
+// --- 5. dinosaur facing is NOT checked here, and the reason is worth
+// recording. Two rig-agnostic measurements were tried: where the top fifth of
+// the body sits along the travel axis, and which way the walk cycle slides
+// the ground-contact vertices. Both are plausible and both are wrong — the
+// first reads a raised tail as a head (raptor -0.19, trike -0.36), the second
+// reads root-motion clips as no motion at all and put the trike at +1.6.
+// All of those animals were then photographed walking, side-on, by
+// `qa-dinos.mjs`, and every one of them leads with its head. The real check
+// is the head-BONE probe in gate-m4, which is a measurement rather than a
+// heuristic and covers the twelve rigs that name their bones; the four that
+// do not (carno, spino, trike, sauropelta) are verified by portrait. A gate
+// that asserts a number nobody trusts is worse than no gate.
+
+// --- 6. the flinch. Four rigs carry a hurt clip; the invariant is that a
+// species which DECLARES one binds it (a renamed clip would unbind silently)
+// and that being hit actually plays it.
+const flinch = await page.evaluate(() => window.__g.game.flinchAudit())
+const declared = Object.entries(flinch).filter(([, v]) => v.declared)
+check(declared.length >= 4, `the rigs that carry a flinch declare it (${declared.map(([k]) => k).join(' ')})`)
+const unbound = declared.filter(([, v]) => !v.bound)
+check(unbound.length === 0, `every declared flinch is bound (${unbound.map(([k]) => k).join(' ') || 'all bound'})`)
+{
+  const idx = await page.evaluate(() => { const p = window.__g.player(); return window.__g.game.spawnDino('raptor', p.x + 4, p.z - 3) })
+  // wait for the RIG, not just the object: the clips arrive after it appears
+  try {
+    await page.waitForFunction((j) => { const f = window.__g.game.dinoFlinch(j); return !!f && f.bound }, idx, { timeout: 15000 })
+  } catch { /* the check below reports it */ }
+  let hit = null
+  for (let a = 0; a < 6 && !(hit && hit.t > 0); a++) {
+    hit = await page.evaluate((j) => {
+      window.__g.game.gotoDinoIndex(j)
+      window.__g.game.swing()
+      return { f: window.__g.game.dinoFlinch(j), t: window.__g.game.dinoStates()[j]?.torpor ?? 0 }
+    }, idx)
+    await settle(120)
+  }
+  check(hit?.t > 0, `the test raptor took the blow (torpor ${hit?.t})`)
+  check(!!hit?.f?.running, `being hit plays the rig's flinch (${hit?.f?.seconds}s clip)`)
+}
 
 // --- 6. the saddle: the rider's hip has to land ON the animal's back. These
 // are measured numbers now (seatFit), not hand-typed ones, so they can be

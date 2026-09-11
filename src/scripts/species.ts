@@ -58,6 +58,13 @@ export interface SpeciesDef {
    *  body: the same clip fills every slot at a different RATE, and M41's
    *  procedural topple covers the death it has no clip for. */
   oneClip?: { idle: number; walk: number; run: number; attack: number }
+  /** A FLINCH. Four of the fifteen rigs carry one (raptor, stego, pachy and
+   *  the Allosaurus' `G_Hit`) and nothing played it: being hit was a sound, a
+   *  puff of blood and a change of mind, with the body carrying on as if
+   *  nothing had touched it. Where a rig has no such clip the species simply
+   *  does not flinch — there is no plausible substitute in an attack or a
+   *  death clip. */
+  hurtClip?: RegExp
   /** optional flavor one-shots played randomly while idle */
   flavorClips?: RegExp[]
 }
@@ -94,6 +101,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
       attack: /^bite_?0?1$/i,
       ko: /^knocked down$/i,
     },
+    hurtClip: /^hurt_?0?1$/i,
     flavorClips: [/^sniff$/i, /^call_alert$/i, /^idle_?0?2$/i, /^roar_?0?1$/i],
   },
   trike: {
@@ -154,6 +162,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
       attack: /^TailWhip$/,
       ko: /^KnockedDown$/,
     },
+    hurtClip: /^HurtA$/,
     flavorClips: [/^Eat$/, /^Drink$/, /^IdleB$/],
   },
   trex: {
@@ -274,6 +283,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     rideable: true,
     seat: { x: 0, y: 2.49, z: -0.4 },
     clips: { idle: /G_Iddle$/, walk: /G_Walk$/, run: /G_Run$/, attack: /G_Atack$/, ko: /G_DieL_2$/ },
+    hurtClip: /G_Hit$/,
     flavorClips: [/G_Call$/],
   },
   terrorbird: {
@@ -326,6 +336,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     rideable: true,
     seat: { x: 0, y: 0.47, z: -0.15 },
     clips: { idle: /^IdleA$/, walk: /^Walk$/, run: /^Run$/, attack: /^Headbutt$/, ko: /^KnockedOut$/ },
+    hurtClip: /^HurtLow$/,
     flavorClips: [/^IdleB$/, /^EatLow$/, /^EatHigh$/, /^Drink$/, /^Bark$/],
   },
   parasaur: {

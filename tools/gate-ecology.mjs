@@ -31,7 +31,11 @@ for (const [id, a] of Object.entries(audit)) {
     check(a.slots.idle !== null, `${id}: its one clip resolved (${a.slots.idle})`)
     continue
   }
-  const missing = Object.entries(a.slots).filter(([, v]) => v === null).map(([k]) => k)
+  // `hurt` is OPTIONAL and deliberately absent on eleven of the fifteen rigs
+  // (M85) — it is not a slot every species is expected to fill, and
+  // gate-anim asserts the stronger invariant that a species which DECLARES
+  // one binds it. The five below are the slots every animated rig must have.
+  const missing = ['idle', 'walk', 'run', 'attack', 'ko'].filter((k) => a.slots[k] === null)
   check(missing.length === 0, `${id}: every clip slot resolved${missing.length ? ' — missing ' + missing.join(',') : ''}`)
 }
 check(Object.keys(audit).length >= 14, `the roster is ${Object.keys(audit).length} species with working rigs`)
