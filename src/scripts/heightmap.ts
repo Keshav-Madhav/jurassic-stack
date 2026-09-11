@@ -273,7 +273,20 @@ export function biomeAt(x: number, z: number): number {
   const ix = Math.round((x + HALF_SIZE) / res)
   const iz = Math.round((z + HALF_SIZE) / res)
   if (ix < 0 || iz < 0 || ix >= side || iz >= side) return 0
-  return biomes[iz * side + ix]
+  return biomes[iz * side + ix] & 7
+}
+
+/** How deep into its biome a point is, 0 at the traced line to 1 well inside
+ *  (M79). The id alone made every biome edge a visible seam — the desert's
+ *  sand met the plain's grass along a polygon you could pick out from the
+ *  air. The bake ramps this over the biome's own `edge`, 120-160 m, and the
+ *  ground colour and the grass fade across it instead of switching. */
+export function biomeBlendAt(x: number, z: number): number {
+  if (!biomes) return 0
+  const ix = Math.round((x + HALF_SIZE) / res)
+  const iz = Math.round((z + HALF_SIZE) / res)
+  if (ix < 0 || iz < 0 || ix >= side || iz >= side) return 0
+  return (biomes[iz * side + ix] >> 3) / 31
 }
 
 /** Forest fullness in [-1, 1] from the baked hand-traced woods (forest.bin):

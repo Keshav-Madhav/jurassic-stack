@@ -1,7 +1,7 @@
 // Grass tile generation — pure data (matrices + colours) from the baked
 // grids, so it can run in the terrain worker. grass.ts owns the meshes.
 import * as THREE from 'three'
-import { heightAt, normalAt, biomeAt, forestMaskAt, forestKindAt, FOREST_KIND, BIOME, VOLCANO, worldMeta, ambientAt, caveAt } from './heightmap'
+import { heightAt, normalAt, biomeAt, biomeBlendAt, forestMaskAt, forestKindAt, FOREST_KIND, BIOME, VOLCANO, worldMeta, ambientAt, caveAt } from './heightmap'
 
 export const GRASS_TILE = 64
 
@@ -93,9 +93,16 @@ export function buildGrassTile(tx: number, tz: number, spacing: number): { matri
       if (dv < 340 || (dv < 700 && h > 60)) continue
       if (h < 3.0 && r3 > 0.4) continue
       const biome = biomeAt(x, z)
-      if (biome === BIOME.DESERT && r2 > 0.12) continue // a few dry tufts in the dunes
-      if (biome === BIOME.SWAMP && r2 > 0.55) continue
-      if (biome === BIOME.ALPINE && r2 > 0.3) continue
+      // THE THINNING FADES IN (M79). These were hard cuts on a hard biome
+      // id, so the dunes' sparse tufts began along a traced line: full lawn
+      // one step, a twelfth of it the next. `biomeBlendAt` ramps over the
+      // biome's own edge, so the grass thins out across 120-160 m the way
+      // ground cover actually gives way.
+      const bB = biomeBlendAt(x, z)
+      const keep = (full: number): number => 1 - (1 - full) * bB
+      if (biome === BIOME.DESERT && r2 > keep(0.12)) continue // a few dry tufts in the dunes
+      if (biome === BIOME.SWAMP && r2 > keep(0.55)) continue
+      if (biome === BIOME.ALPINE && r2 > keep(0.3)) continue
       // thinner under a closed canopy (the floor is dirt and litter there)
       const f = forestMaskAt(x, z)
       const pineFloor = f > -0.1 && forestKindAt(x, z) === FOREST_KIND.PINE
@@ -112,7 +119,8 @@ export function buildGrassTile(tx: number, tz: number, spacing: number): { matri
       // desert read as a meadow that happened to be standing on sand (M56,
       // from the walk shots). Dry country grows shorter, straw-coloured
       // grass; the alpine's is short and sage; the swamp's is a deep olive.
-      const grow = biome === BIOME.DESERT ? 0.68 : biome === BIOME.ALPINE ? 0.82 : pineFloor ? 0.7 : 1
+      const growB = biome === BIOME.DESERT ? 0.68 : biome === BIOME.ALPINE ? 0.82 : 1
+      const grow = (1 + (growB - 1) * bB) * (pineFloor ? 0.7 : 1)
       const scale = (0.55 + r4 * 0.6) * grow
       _p.set(x, h - 0.04, z)
       _q.setFromAxisAngle(_up, r2 * Math.PI)
@@ -123,7 +131,12 @@ export function buildGrassTile(tx: number, tz: number, spacing: number): { matri
       if (caveAt(x, z, 4)) continue // no grass under a roof (M51)
       // the baked sky view again: grass in a hollow is grass in shade (M47)
       const dry = biome === BIOME.DESERT
-      const tint = pineFloor ? TINT_PINE : TINT[biome] ?? TINT_DEFAULT
+      // and so does the colour: a straight swap at the line made the dunes'
+      // straw start mid-meadow
+      const tRaw = pineFloor ? TINT_PINE : TINT[biome] ?? TINT_DEFAULT
+      const tint = tRaw === TINT_DEFAULT || pineFloor
+        ? tRaw
+        : ([0, 1, 2].map((i) => TINT_DEFAULT[i] + (tRaw[i] - TINT_DEFAULT[i]) * bB) as unknown as readonly [number, number, number])
       const k = (dry ? 0.78 + r4 * 0.3 : biome === BIOME.PLAINS ? 0.85 + r4 * 0.25 : 0.55 + r4 * 0.35) * ambientAt(x, z)
       colors[count * 3] = k * tint[0]
       colors[count * 3 + 1] = k * tint[1]

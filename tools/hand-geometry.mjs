@@ -429,50 +429,104 @@ export const FORESTS = [
       [720, 180], [650, 60], [640, -100], [700, -250], [720, -500], [680, -700], [700, -850],
     ],
   },
+  // ---- THE RANGE PINES, RE-TRACED (M79) ----------------------------------
+  // These four were single polygons thrown over a whole range — crest and
+  // all — and the M73 plantability validator said so: `range-pines-west` was
+  // 40% plantable, 32% of it above the 210 m pine line and 28% too steep to
+  // stand a tree on. A wood drawn over the top of a mountain is a wood whose
+  // middle is bare rock.
+  //
+  // The feather is 45 m on all four, not the 90 the old blob used: these are
+  // RIBBONS 130-250 m wide, and a 90 m ramp in from both edges means the
+  // middle never reaches full density — the first cut left the West Range's
+  // southern flank with eight trees in a 60 m circle.
+  //
+  // A range has a flank on BOTH sides of its crest, and a polygon cannot
+  // have a hole, so each range is now TWO traced woods — one per flank,
+  // following the 210 m contour on the inside and stopping before the
+  // lowland on the outside. Traced against `tools/forest-fit.mjs`, which
+  // prints the plantable ground cell by cell using the bake's own rule.
   {
-    // THE WEST RANGE PINES — the range's flanks below the snow
-    name: 'range-pines-west', kind: 'pine', density: 0.7, edge: 90,
+    // THE WEST RANGE, INLAND FLANK — the northern two thirds, facing the
+    // ring. Its inner edge follows the treeline; the crest above it is bare,
+    // as it should be. It STOPS at z 0: south of that the same flank is
+    // already the Westwood's, and running a pine ribbon through a broadleaf
+    // wood just flips the kind byte back and forth — measured, the first cut
+    // overlapped Westwood and grew seven broadleaf trees where it wanted
+    // pines. Below z 0 the West Range's inland flank is the Westwood's, which
+    // is right: broadleaf at the lake's altitude, conifer above it.
+    // 40% -> 99% plantable.
+    name: 'range-pines-west', kind: 'pine', density: 0.7, edge: 45,
     shore: [
-      [-1150, -950], [-1050, -700], [-1100, -420], [-1140, -150], [-1180, 120], [-1150, 360],
-      [-1100, 580], [-1000, 780], [-1120, 820], [-1280, 700], [-1400, 500], [-1450, 250],
-      [-1480, 0], [-1500, -250], [-1520, -500], [-1500, -760], [-1420, -1000], [-1280, -1060],
+      [-1420, -1030], [-1340, -890], [-1270, -730], [-1215, -550], [-1200, -350], [-1150, -150],
+      [-1130, -10], [-1010, 10], [-960, -140], [-980, -340], [-1000, -540], [-1020, -740],
+      [-1120, -920], [-1250, -1050],
     ],
   },
   {
-    // THE EAST RANGE PINES
-    name: 'range-pines-east', kind: 'pine', density: 0.7, edge: 90,
+    // THE WEST RANGE, SEAWARD FLANK — the narrower strip between the crest
+    // and the west coast. It only exists south of about z -200: north of
+    // that the range meets the sea too steeply for anything to root. 99%.
+    name: 'range-pines-seaward', kind: 'pine', density: 0.7, edge: 45,
     shore: [
-      [1100, -1150], [1250, -1200], [1400, -1000], [1450, -800], [1480, -600], [1500, -400],
-      [1520, -200], [1500, 0], [1450, 200], [1380, 380], [1250, 420], [1150, 300],
-      [1180, 100], [1200, -100], [1150, -300], [1130, -500], [1100, -700], [1080, -900],
+      [-1430, -180], [-1450, -40], [-1400, 100], [-1350, 240], [-1380, 380], [-1340, 500],
+      [-1300, 640], [-1220, 760], [-1500, 780], [-1560, 600], [-1580, 420], [-1590, 240],
+      [-1580, 60], [-1555, -120],
     ],
   },
   {
-    // THE HORNS PINES — over the Northern Horns
+    // THE EAST RANGE, INLAND FLANK — over the Eastbank's shoulder. 99%.
+    name: 'range-pines-east', kind: 'pine', density: 0.7, edge: 45,
+    shore: [
+      [1140, -1120], [1130, -960], [1075, -820], [1100, -700], [1135, -580], [1160, -480],
+      [1200, -380], [1195, -280], [1250, -180], [1250, -60], [1230, 60], [1265, 180],
+      [1270, 300], [1040, 300], [1040, 120], [1040, -80], [1040, -280], [1040, -480],
+      [1040, -680], [1045, -880], [1060, -1060],
+    ],
+  },
+  {
+    // THE EAST RANGE, SEAWARD FLANK — down to the east coast. 95%.
+    name: 'range-pines-east-seaward', kind: 'pine', density: 0.7, edge: 45,
+    shore: [
+      [1250, -1080], [1300, -940], [1400, -800], [1440, -680], [1410, -540], [1445, -400],
+      [1420, -260], [1470, -140], [1450, 0], [1475, 140], [1455, 260], [1360, 340],
+      [1600, 340], [1620, 140], [1630, -60], [1620, -260], [1600, -460], [1580, -660],
+      [1550, -860], [1440, -1020],
+    ],
+  },
+  {
+    // THE HORNS PINES — over the Northern Horns. The old trace ran its east
+    // end to x -300, which is inside the volcano's bare ash skirt (43% of
+    // the wood was ash). Pulled back west of the skirt. 39% -> 87%.
     name: 'horns-pines', kind: 'pine', density: 0.7, edge: 90,
     shore: [
-      [-1150, -1150], [-1000, -1300], [-800, -1400], [-600, -1500], [-400, -1540], [-300, -1440],
-      [-450, -1330], [-600, -1240], [-750, -1160], [-900, -1080], [-1050, -1050],
+      [-1250, -1100], [-1250, -1320], [-1120, -1380], [-980, -1420], [-860, -1470],
+      [-700, -1510], [-640, -1470], [-680, -1400], [-760, -1340], [-900, -1280],
+      [-1040, -1210], [-1120, -1140],
     ],
   },
   {
     // THE NORTH FOOTHILLS WOOD — mixed, between the volcano's NE flank and the
     // East Range's northern end
+    // (M79: its west half sat in the cone's ash skirt — 38% of the wood.
+    // Shifted east onto ground that can hold a tree. 60% -> 93%.)
     name: 'north-foothills', kind: 'mixed', density: 0.75, edge: 100,
     shore: [
-      [400, -1500], [560, -1560], [760, -1480], [900, -1320], [980, -1150], [900, -1020],
-      [760, -1030], [620, -1140], [500, -1280], [420, -1400],
+      [600, -1520], [820, -1480], [980, -1360], [1080, -1220], [1060, -1080],
+      [900, -1030], [780, -1120], [720, -1260], [700, -1400],
     ],
   },
   {
     // THE VOLCANO SKIRTS — mixed woods on the cone's lower flanks, NW and NE,
     // leaving the south approach open
+    // (M79: both skirts reached up into the ash they are named after — 41%
+    // and 43% of them were bare cone. Held back to the tree line. 100% each.)
     name: 'skirt-west', kind: 'mixed', density: 0.7, edge: 40,
-    shore: [[-750, -980], [-600, -1150], [-420, -1260], [-300, -1160], [-330, -980], [-450, -860], [-620, -840]],
+    shore: [[-860, -1130], [-700, -1130], [-660, -1030], [-430, -960], [-420, -880], [-700, -850], [-860, -880]],
   },
   {
     name: 'skirt-east', kind: 'mixed', density: 0.7, edge: 40,
-    shore: [[300, -1160], [430, -1280], [600, -1200], [620, -1040], [500, -900], [350, -880], [280, -1000]],
+    shore: [[430, -1110], [610, -1090], [730, -1010], [720, -930], [500, -890], [350, -900], [320, -1010]],
   },
   {
     // THE SOUTH-EAST WOOD — between the outflow and the east coast, south of
@@ -485,8 +539,10 @@ export const FORESTS = [
   },
   {
     // THE EAST COAST WOOD — the strip under the East Range's seaward side
+    // (M79: its seaward edge ran out onto the beach and below it — 43% of
+    // the wood was under 6 m. Pulled in to the shore line. 57% -> 98%.)
     name: 'east-coast', kind: 'broadleaf', density: 0.75, edge: 40,
-    shore: [[1420, 450], [1520, 500], [1540, 700], [1480, 880], [1400, 800], [1380, 600]],
+    shore: [[1380, 460], [1560, 480], [1510, 610], [1430, 730], [1340, 860], [1290, 750], [1300, 600]],
   },
 ]
 

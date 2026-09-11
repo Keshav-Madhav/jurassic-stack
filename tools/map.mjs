@@ -39,7 +39,8 @@ const hAt = (x, z) => {
 const bAt = (x, z) => {
   const ix = Math.round((x + half) / res), iz = Math.round((z + half) / res)
   if (ix < 0 || iz < 0 || ix >= side || iz >= side) return 0
-  return B[iz * side + ix]
+  // low 3 bits are the id; the high 5 are M79's blend strength
+  return B[iz * side + ix] & 7
 }
 
 // ---------- raster ----------

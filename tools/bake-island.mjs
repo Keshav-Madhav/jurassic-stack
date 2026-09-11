@@ -1400,6 +1400,17 @@ writeFileSync('public/world/forest.bin', Buffer.from(forest.buffer))
 }
 
 // biome map: the traced polygons (alpine is altitude)
+//
+// EACH CELL CARRIES A STRENGTH AS WELL AS AN ID (M79). The byte used to be a
+// hard yes/no — inside the traced line you were in the desert, one cell
+// outside you were not — so the ground colour, the grass tint and the flora
+// all changed along a polygon edge you could see from the air. The biome's
+// own `edge` (120-160 m) was already being used to feather the ground
+// HEIGHT; nothing was feathering its look.
+//
+// Low 3 bits: the id, exactly as before, so every existing reader is
+// untouched. High 5 bits: 0-31 of blend, ramped over that same `edge`. The
+// runtime reads the id with `& 7` and the strength with `>> 3`.
 {
   const biomes = new Uint8Array(SIDE * SIDE)
   for (let iz = 0; iz < SIDE; iz++) {
@@ -1407,9 +1418,16 @@ writeFileSync('public/world/forest.bin', Buffer.from(forest.buffer))
       const x = worldX(ix), z = worldZ(iz)
       const h = H[idx(ix, iz)]
       let b = 0
-      for (let bi = 0; bi < BIOMES.length && !b; bi++) if (biomeSD[bi](x, z) < 0) b = BIOMES[bi].id
-      if (!b && h > 120) b = 4
-      biomes[idx(ix, iz)] = b
+      let blend = 0
+      for (let bi = 0; bi < BIOMES.length && !b; bi++) {
+        const sd = biomeSD[bi](x, z)
+        if (sd >= 0) continue
+        b = BIOMES[bi].id
+        // full strength `edge` metres inside the line, zero at it
+        blend = smoothstep(0, -(BIOMES[bi].edge ?? 120), sd)
+      }
+      if (!b && h > 120) { b = 4; blend = smoothstep(120, 165, h) } // alpine is altitude
+      biomes[idx(ix, iz)] = (b & 7) | (Math.round(blend * 31) << 3)
     }
   }
   writeFileSync('public/world/biomes.bin', Buffer.from(biomes.buffer))

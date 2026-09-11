@@ -36,7 +36,7 @@ import { Hud } from './hud'
 import { MapView } from './map'
 import { HELD_SIZE } from './player'
 import { saveGame, loadGame, SAVE_VERSION, type SaveFile } from './save'
-import { heightAt, loadHeightmap, worldMeta, SPAWN, skyViewAt, normalAt, biomeAt, BIOME, forestKindAt, forestMaskAt, FOREST_KIND } from './heightmap'
+import { heightAt, loadHeightmap, worldMeta, SPAWN, skyViewAt, normalAt, biomeAt, biomeBlendAt, BIOME, forestKindAt, forestMaskAt, FOREST_KIND } from './heightmap'
 import { loadNavmesh, findPath, beginNavFrame, navStats, setNavBudget } from './navmesh'
 import { gridBytes } from './heightmap'
 import { terrainEvicted, setTerrainCacheTtl } from './terrain'
@@ -1717,6 +1717,8 @@ async function boot(): Promise<void> {
       frogs: () => ambience.frogs,
       groundColorAt: (x: number, z: number) => groundColorProbe(x, z),
       forestAt: (x: number, z: number) => ({ mask: +forestMaskAt(x, z).toFixed(3), kind: forestKindAt(x, z) }),
+      biomeAt: (x: number, z: number) => biomeAt(x, z),
+      biomeBlendAt: (x: number, z: number) => biomeBlendAt(x, z),
       air: () => ({ humid: +daynight.humid.toFixed(3), submerged: +submerged.toFixed(3), fogFar: Math.round((scene.fog as THREE.Fog).far), fog: (scene.fog as THREE.Fog).color.getHexString() }),
       fallSound: () => ambience.fallLevel,
       /** QA (M71): what the relic is pointing at right now */

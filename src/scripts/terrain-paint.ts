@@ -3,7 +3,7 @@
 // meshes) and by terrain-worker.ts (which builds LOD upgrades off the main
 // thread so a gallop across chunk borders never hitches the frame).
 import * as THREE from 'three'
-import { heightAt, normalAt, forestMaskAt, forestKindAt, FOREST_KIND, biomeAt, shoreDist, BIOME, VOLCANO, worldMeta, HALF_SIZE, SEA_LEVEL, ambientAt } from './heightmap'
+import { heightAt, normalAt, forestMaskAt, forestKindAt, FOREST_KIND, biomeAt, biomeBlendAt, shoreDist, BIOME, VOLCANO, worldMeta, HALF_SIZE, SEA_LEVEL, ambientAt } from './heightmap'
 
 export const CHUNK_SIZE = 128
 export const CHUNKS_PER_SIDE = (HALF_SIZE * 2) / CHUNK_SIZE // 32
@@ -173,17 +173,39 @@ function groundColorAt(x: number, z: number, h: number, ny: number, out: THREE.C
   const varT = n1 * 0.5 + n2 * 0.28 // ~[-0.78, 0.78]
 
   // biome overrides first
+  // BIOMES FADE, THEY DO NOT SWITCH (M79). These two used to `return` their
+  // colour outright the moment `biomeAt` said so, and `biomeAt` is a hard
+  // yes/no across a traced polygon — so the desert met the plain along a
+  // line you could pick out from the air. `biomeBlendAt` ramps 0 to 1 over
+  // the biome's own `edge` (120-160 m), and the override now mixes in over
+  // that distance. Inside the biome proper the blend is 1 and the colour is
+  // exactly what it always was.
   const biome = biomeAt(x, z)
-  if (biome === BIOME.SWAMP) {
-    const wet = worldMeta?.swamp && h < worldMeta.swamp.level + 0.4
-    out.copy(wet ? C_SWAMP_WET : C_SWAMP).offsetHSL(0, 0, varTFor(x, z) * 0.03)
-    return out
+  const bBlend = biomeBlendAt(x, z)
+  if (biome === BIOME.SWAMP || biome === BIOME.DESERT) {
+    if (biome === BIOME.SWAMP) {
+      const wet = worldMeta?.swamp && h < worldMeta.swamp.level + 0.4
+      _c.copy(wet ? C_SWAMP_WET : C_SWAMP).offsetHSL(0, 0, varTFor(x, z) * 0.03)
+    } else {
+      _c.copy(C_DESERT).lerp(C_DESERT_DARK, THREE.MathUtils.clamp(0.5 + varTFor(x, z) * 0.9, 0, 1))
+      if (ny < 0.82) _c.lerp(C_ROCK, THREE.MathUtils.clamp((0.82 - ny) / 0.2, 0, 1))
+    }
+    if (bBlend > 0.995) return out.copy(_c)
+    // ...otherwise fall through and paint the ordinary ground, then mix the
+    // biome's own colour in by however deep into it this point is
+    groundBase(x, z, h, ny, out, varT, n1, biome, bBlend)
+    return out.lerp(_c, bBlend)
   }
-  if (biome === BIOME.DESERT) {
-    out.copy(C_DESERT).lerp(C_DESERT_DARK, THREE.MathUtils.clamp(0.5 + varTFor(x, z) * 0.9, 0, 1))
-    if (ny < 0.82) out.lerp(C_ROCK, THREE.MathUtils.clamp((0.82 - ny) / 0.2, 0, 1))
-    return out
-  }
+  return groundBase(x, z, h, ny, out, varT, n1, biome, bBlend)
+}
+
+/** The ordinary ground — everything that is not a wholesale biome override.
+ *  Split out of `groundColorAt` (M79) so the swamp and the desert can be
+ *  MIXED over it across their edge instead of replacing it at a hard line. */
+function groundBase(
+  x: number, z: number, h: number, ny: number, out: THREE.Color,
+  varT: number, n1: number, biome: number, bBlend: number,
+): THREE.Color {
   // under a lake's fill level → bed color, never lawn
   for (const lake of worldMeta?.lakes ?? []) {
     if (shoreDist(x, z, lake.shore) < 2 && h < lake.level - 0.2) {
@@ -197,7 +219,7 @@ function groundColorAt(x: number, z: number, h: number, ny: number, out: THREE.C
   } else {
     // grass field: lush ↔ light by variation, dry olive patches where n1 peaks
     out.copy(C_GRASS_LUSH).lerp(C_GRASS_LIGHT, THREE.MathUtils.clamp(0.5 + varT * 0.9, 0, 1))
-    if (biome === BIOME.PLAINS) out.lerp(C_PLAINS, 0.55)
+    if (biome === BIOME.PLAINS) out.lerp(C_PLAINS, 0.55 * bBlend)
     if (n1 > 0.22) out.lerp(C_GRASS_DRY, THREE.MathUtils.clamp((n1 - 0.22) * 2.0, 0, 0.9))
     // under the woods the ground is dirt and leaf litter, not lawn (the ARK
     // reference: forest floors are brown, greens live in the understory)
