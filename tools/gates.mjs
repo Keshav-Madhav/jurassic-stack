@@ -31,7 +31,7 @@ const expected = existsSync(countsFile) ? JSON.parse(readFileSync(countsFile, 'u
 
 // gate-perf last: it is the one that measures, so it should not share the GPU
 // with anything else in the run
-const ORDER = ['m3', 'm4', 'm5', 'm8', 'creative', 'ecology', 'survival', 'sound', 'homestead', 'settings', 'perf']
+const ORDER = ['m3', 'm4', 'm5', 'm8', 'creative', 'ecology', 'survival', 'sound', 'homestead', 'settings', 'anim', 'perf']
 const found = readdirSync(new URL('.', import.meta.url)).filter((f) => /^gate-.+\.mjs$/.test(f)).map((f) => f.slice(5, -4))
 const missing = found.filter((n) => !ORDER.includes(n))
 if (missing.length) console.log(`note: ${missing.join(', ')} exist but are not in this runner's ORDER — add them\n`)

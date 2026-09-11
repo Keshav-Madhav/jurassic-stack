@@ -24,6 +24,7 @@ export interface Senses {
   onHit: (x: number, y: number, z: number, heavy: boolean) => void
 }
 
+const _m4 = /* @__PURE__ */ new THREE.Matrix4()
 const loader = new GLTFLoader()
 loader.setMeshoptDecoder(MeshoptDecoder)
 const modelCache = new Map<string, Promise<{ scene: THREE.Group; animations: THREE.AnimationClip[] }>>()
@@ -504,9 +505,27 @@ export class Dino {
    *  the heading: +1 = ahead of the body centre, −1 = behind → walking backwards */
   headSide(): number | null {
     if (!this.model) return null
+    // ONLY A LIVE ANIMAL CAN BE MEASURED. A dormant one keeps its model but
+    // its skeleton is not updated and not drawn, so the skinned vertices come
+    // back in whatever pose and place its bones were last left in — rotated,
+    // not merely displaced, which silently corrupts the body's long axis as
+    // well as its position. Read that way the roster-wide audit was noise
+    // (apato "walking backwards" at -0.60 against a head bone the M83 probe
+    // put squarely on +z) and the seat measurements were metres out. The
+    // caller has to bring the animal close enough to be alive first.
+    if (this.dormant || !this.mixer) return null
+
     const detached = !this.model.parent
     if (detached) this.object.add(this.model)
     this.object.updateMatrixWorld(true)
+    // MEASURE IN THE OBJECT'S OWN FRAME, not the world's. This used to
+    // project onto `this.heading`, and for a DORMANT animal the heading has
+    // moved on while `object.rotation.y` was last written whenever it was
+    // still awake — so the two disagree and the ratio is noise. It reported
+    // apato at -0.60, "walking backwards", against a head bone that the M83
+    // probe put squarely on +z. In object space the only rotation left is
+    // `facingOffset`, which is a constant.
+    const inv = _m4.copy(this.object.matrixWorld).invert()
     const pts: THREE.Vector3[] = []
     const v = new THREE.Vector3()
     let maxY = -Infinity, minY = Infinity
@@ -515,7 +534,7 @@ export class Dino {
       const count = o.geometry.attributes.position.count
       const step = Math.max(1, Math.floor(count / 3000))
       for (let i = 0; i < count; i += step) {
-        o.getVertexPosition(i, v).applyMatrix4(o.matrixWorld)
+        o.getVertexPosition(i, v).applyMatrix4(o.matrixWorld).applyMatrix4(inv)
         pts.push(v.clone())
         maxY = Math.max(maxY, v.y); minY = Math.min(minY, v.y)
       }
@@ -527,10 +546,94 @@ export class Dino {
     for (const p of pts) { cx += p.x; cz += p.z; if (p.y > cut) { hx += p.x; hz += p.z; n++ } }
     cx /= pts.length; cz /= pts.length
     if (!n) return null
-    const fx = Math.sin(this.heading), fz = Math.cos(this.heading)
+    // travel, in object space: the object carries `heading + facingOffset`, so
+    // the heading direction inside that frame is a turn of -facingOffset
+    const off = -(this.species.facingOffset ?? 0)
+    const fx = Math.sin(off), fz = Math.cos(off)
     const along = (hx / n - cx) * fx + (hz / n - cz) * fz
     const span = Math.max(...pts.map((p) => Math.abs((p.x - cx) * fx + (p.z - cz) * fz)))
     return along / (span || 1)
+  }
+
+  /** QA: where the animal's BACK is, in the space the saddle seat is authored
+   *  in (M84). Three earlier attempts at this measured the wrong thing:
+   *  bone positions are unusable (most of these rigs are authored in
+   *  centimetres and their skeletons are not all inside the rig subtree —
+   *  apato's "spine" read -1647), and a bounding box taken while the animal
+   *  is dormant is read off a skeleton nobody has updated, so its size was
+   *  right and its position nonsense. The torso is the middle of the body
+   *  along its long
+   *  axis: include the neck and a long-necked apato reports a saddle four
+   *  metres in the air, include the tail and a stego reports one in the mud. */
+  backProbe(): Record<string, number | string> | null {
+    if (!this.model) return null
+    if (this.dormant || !this.mixer) return null // see headSide: dormant is unmeasurable
+
+    const detached = !this.model.parent
+    if (detached) this.object.add(this.model)
+    this.object.updateMatrixWorld(true)
+    const inv = _m4.copy(this.object.matrixWorld).invert()
+    const pts: THREE.Vector3[] = []
+    const v = new THREE.Vector3()
+    this.model.traverse((o) => {
+      if (!(o instanceof THREE.Mesh) || !o.visible) return
+      const pos = o.geometry.attributes.position
+      if (!pos) return
+      const step = Math.max(1, Math.floor(pos.count / 2500))
+      for (let i = 0; i < pos.count; i += step) {
+        // EVERY NUMBER OUT OF HERE IS RELATIVE TO THE MODEL'S OWN EXTENT,
+        // and it has to be. A dormant animal keeps its model on its object
+        // and DETACHES THE OBJECT (the same trap attachForWarmup() documents),
+        // so the skinned vertices come back displaced by wherever the parked
+        // object last stood — carno read a back height of -248 m. Reading the
+        // raw bind-pose attribute instead fixes the offset and breaks the
+        // scale, because on several of these rigs the centimetre-to-metre
+        // scaling lives on the BONES, not on the mesh node (alpharex then
+        // measured 1 cm tall). So: keep the skinned read, which gets the
+        // shape right, and only ever report differences.
+        o.getVertexPosition(i, v).applyMatrix4(o.matrixWorld).applyMatrix4(inv)
+        pts.push(v.clone())
+      }
+    })
+    if (detached) this.object.remove(this.model)
+    if (pts.length < 20) return null
+    let minX = Infinity, maxX = -Infinity, minZ = Infinity, maxZ = -Infinity, minY = Infinity, maxY = -Infinity
+    for (const p of pts) {
+      minX = Math.min(minX, p.x); maxX = Math.max(maxX, p.x)
+      minZ = Math.min(minZ, p.z); maxZ = Math.max(maxZ, p.z)
+      minY = Math.min(minY, p.y); maxY = Math.max(maxY, p.y)
+    }
+    // the body's long axis, whichever way round the rig was authored
+    const spanX = maxX - minX, spanZ = maxZ - minZ
+    const useZ = spanZ >= spanX
+    const lo = useZ ? minZ : minX, hi = useZ ? maxZ : maxX
+    const mid = (lo + hi) / 2, half = (hi - lo) * 0.22
+    let backY = -Infinity, along = 0, n = 0
+    for (const p of pts) {
+      const a = useZ ? p.z : p.x
+      if (a < mid - half || a > mid + half) continue
+      backY = Math.max(backY, p.y)
+      along += a; n++
+    }
+    if (!n) return null
+    return {
+      axis: useZ ? 'z' : 'x',
+      /** the mid-body back, measured up from the animal's lowest point — the
+       *  same origin the saddle seat is authored from (the object sits at the
+       *  animal's feet) */
+      backAboveFeet: +(backY - minY).toFixed(2),
+      /** the same surface in the object's own coordinates, which is the space
+       *  the seat is authored in */
+      backY: +backY.toFixed(2),
+      /** where along the body the torso sample sits, in object coordinates */
+      torsoAlong: +(along / n).toFixed(2),
+      footY: +minY.toFixed(2),
+      /** how far the sampled torso sits from the body's own centre: a sanity
+       *  check on the window, not a measurement of anything */
+      torsoOffset: +(along / n - mid).toFixed(2),
+      length: +Math.max(spanX, spanZ).toFixed(2),
+      height: +(maxY - minY).toFixed(2),
+    }
   }
 
   /** QA: the way it faces/moves (radians, 0 = +z) */

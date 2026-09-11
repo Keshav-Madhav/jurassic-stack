@@ -30,7 +30,14 @@ export interface SpeciesDef {
   attackDamage: number
   attackRange: number
   rideable: boolean
-  /** rider seat offset from dino origin (local, pre-scale-normalized units) */
+  /** where the rider sits, in the animal's own frame, measured from its feet.
+   *  These are MEASURED, not guessed (M84): `seatFit()` reports the mid-body
+   *  back height off the live rig and the rider's hip height in the straddle,
+   *  and each y here puts the hip 0.1 m clear of the back. Before that they
+   *  were hand-typed and drifted — the parasaur floated 0.54 m over its back
+   *  and the apatosaur's rider sat 1.6 m inside the animal. `stego` is the one
+   *  deliberate exception: its mid-body maximum is the top of its PLATES, so
+   *  the rider correctly sits below it. */
   seat: { x: number; y: number; z: number }
   /** yaw the rig needs on top of its heading to face the way it moves (models
    *  ship with any forward axis: the Allosaurus and Apatosaurus walked
@@ -79,7 +86,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     attackDamage: 16,
     attackRange: 2.0,
     rideable: true,
-    seat: { x: 0, y: 0.48, z: -0.05 },
+    seat: { x: 0, y: 0.24, z: -0.05 },
     clips: {
       idle: /^idle_?0?1$/i,
       walk: /^walk$/i,
@@ -109,7 +116,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     attackDamage: 22,
     attackRange: 2.8,
     rideable: true,
-    seat: { x: 0, y: 1.55, z: -0.25 },
+    seat: { x: 0, y: 1.47, z: -0.25 },
     clips: {
       idle: /\|Idle$/,
       walk: /\|Walk$/,
@@ -171,7 +178,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     attackDamage: 90,
     attackRange: 4.2,
     rideable: true,
-    seat: { x: 0, y: 2.7, z: -0.5 },
+    seat: { x: 0, y: 2.63, z: -0.5 },
     clips: {
       idle: /^idle$/i,
       walk: /^run$/i, // rig ships run/bite/roar/tail/idle only
@@ -239,7 +246,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     attackDamage: 42,
     attackRange: 3.0,
     rideable: true,
-    seat: { x: 0, y: 1.9, z: -0.3 },
+    seat: { x: 0, y: 2.06, z: -0.3 },
     clips: { idle: /^Idle$/, walk: /^Walk$/, run: /^Run$/, attack: /^Atack$/, ko: /^Fall$/ },
     flavorClips: [/^Stand$/, /^Walk slow$/],
   },
@@ -265,7 +272,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     attackDamage: 48,
     attackRange: 3.4,
     rideable: true,
-    seat: { x: 0, y: 2.1, z: -0.4 },
+    seat: { x: 0, y: 2.49, z: -0.4 },
     clips: { idle: /G_Iddle$/, walk: /G_Walk$/, run: /G_Run$/, attack: /G_Atack$/, ko: /G_DieL_2$/ },
     flavorClips: [/G_Call$/],
   },
@@ -292,7 +299,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     attackDamage: 20,
     attackRange: 2.2,
     rideable: true,
-    seat: { x: 0, y: 1.3, z: -0.1 },
+    seat: { x: 0, y: 1.46, z: -0.1 },
     clips: { idle: /^Idle$/, walk: /^SlowWalk$/, run: /^FastWalk$/, attack: /^Attack$/, ko: /^Die$/ },
     flavorClips: [/^Idle2$/, /^LegScratch$/, /^Yawn$/, /^Roar$/, /^HeadSmash$/],
   },
@@ -317,7 +324,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     attackDamage: 14,
     attackRange: 2.0,
     rideable: true,
-    seat: { x: 0, y: 1.0, z: -0.15 },
+    seat: { x: 0, y: 0.47, z: -0.15 },
     clips: { idle: /^IdleA$/, walk: /^Walk$/, run: /^Run$/, attack: /^Headbutt$/, ko: /^KnockedOut$/ },
     flavorClips: [/^IdleB$/, /^EatLow$/, /^EatHigh$/, /^Drink$/, /^Bark$/],
   },
@@ -342,7 +349,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     attackDamage: 8,
     attackRange: 2.2,
     rideable: true,
-    seat: { x: 0, y: 1.9, z: -0.3 },
+    seat: { x: 0, y: 1.36, z: -0.3 },
     clips: { idle: /Parasaurolophus_Idle$/, walk: /Parasaurolophus_Walk$/, run: /Parasaurolophus_Run$/, attack: /Parasaurolophus_Attack$/, ko: /Parasaurolophus_Death$/ },
   },
   apato: {
@@ -369,7 +376,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     attackDamage: 70,
     attackRange: 6,
     rideable: true,
-    seat: { x: 0, y: 5.2, z: -1.0 },
+    seat: { x: 0, y: 6.9, z: -1.0 },
     clips: { idle: /Apatosaurus_Idle$/, walk: /Apatosaurus_Walk$/, run: /Apatosaurus_Run$/, attack: /Apatosaurus_Attack$/, ko: /Stegosaurus_Death$/ },
   },
   mammoth: {
@@ -394,7 +401,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     attackDamage: 42,
     attackRange: 3.6,
     rideable: true,
-    seat: { x: 0, y: 2.6, z: -0.4 },
+    seat: { x: 0, y: 2.81, z: -0.4 },
     clips: { idle: /Mammoth_Idle$/, walk: /Mammoth_WalkCycle$/, run: /Mammoth_WalkCycle$/, attack: /Mammoth_Trumpet$/, ko: /Mammoth_Idle$/ },
     flavorClips: [/Mammoth_Trumpet$/],
   },

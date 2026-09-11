@@ -641,6 +641,7 @@ async function boot(): Promise<void> {
     if (creative || god) return
     if (damage > 0) {
       sfx.play('player-hurt', { volume: 0.7, cooldown: 0.5 })
+      player.playHurt()
       const f2 = feetPos()
       const fx = from ? f2.x - from.object.position.x : 0
       shakeCamera(Math.min(0.34, 0.1 + damage * 0.012), fx, 0.7)
@@ -802,6 +803,7 @@ async function boot(): Promise<void> {
       dismount()
       return true
     }
+    player.playInteract()
     if (restAtBed()) return true
     // the caldera door
     const f0 = feetPos()
@@ -1526,26 +1528,65 @@ async function boot(): Promise<void> {
        *  side-on screenshot at 0.6 m/s cannot tell you which. The head bone
        *  can. */
       speciesList: () => Object.keys(SPECIES),
+      /** QA (M84): where each LIVE animal's back is, in the space the seat is
+       *  authored in, and what seat height would put the rider's hip on it.
+       *  Dormant animals are skipped rather than guessed at — see backProbe. */
+      seatProbe: () => {
+        const out: Record<string, unknown> = {}
+        for (const d of dinos) {
+          if (out[d.species.id]) continue
+          const b = d.backProbe()
+          if (!b) continue // dormant: nothing measurable (see backProbe)
+          const hip = player.poseInfo().hipAboveOrigin
+          out[d.species.id] = {
+            seatY: d.species.seat.y,
+            backAboveFeet: b.backAboveFeet, height: b.height, length: b.length,
+            axis: b.axis,
+            // the seat that would put the rider's hip 0.1 m clear of the back
+            suggestY: +(((b.backAboveFeet as number) + 0.1) - hip).toFixed(2),
+            dy: +(d.species.seat.y - ((b.backAboveFeet as number) + 0.1 - hip)).toFixed(2),
+          }
+        }
+        return out
+      },
+      seatFit: () => {
+        if (!riding) return null
+        const b = riding.backProbe()
+        const hips = player.object.getWorldPosition(new THREE.Vector3())
+        const back = (b?.backAboveFeet as number) ?? 0
+        const hip = player.poseInfo().hipAboveOrigin
+        return {
+          species: riding.species.id,
+          seat: riding.species.seat,
+          // THE RIG'S BOUNDING BOX TOP IS THE HEAD, not the back, and this
+          // used to measure against it — so every species read as a rider
+          // sunk about a metre, which said nothing (M83). backProbe() takes
+          // the mid-body only, and only off a live rig.
+          backAboveFeet: back,
+          backY: b?.backY ?? null,
+          torsoAlong: b?.torsoAlong ?? null,
+          axis: b?.axis ?? null,
+          hipAboveOrigin: hip,
+          dinoY: +riding.object.position.y.toFixed(2),
+          riderFeetY: +hips.y.toFixed(2),
+          riderPos: [+hips.x.toFixed(2), +hips.y.toFixed(2), +hips.z.toFixed(2)],
+          sitBlend: player.poseInfo().sitBlend,
+          /** where the rider's hip sits relative to the back surface:
+           *  0.1 is right, negative means he is sunk into the animal */
+          hipOverBack: +(riding.species.seat.y + hip - back).toFixed(2),
+          suggestY: b ? +((back + 0.1) - hip).toFixed(2) : null,
+          length: b?.length ?? null,
+        }
+      },
       /** QA (M83): the player rig's bone names, and whether the riding pose
        *  found the legs it needs. A silent name mismatch leaves the rider
        *  standing bolt upright on the animal's back. */
       playerRig: () => player.rigReport(),
       setSitPose: (thighX: number, thighZ: number, shinX: number) => { Player.sitPose = { thighX, thighZ, shinX }; return Player.sitPose },
-      /** QA (M83): where the rider sits against the animal's actual back. */
-      seatFit: () => {
-        if (!riding || !riding.rig) return null
-        const box = new THREE.Box3().setFromObject(riding.rig)
-        const hips = player.object.getWorldPosition(new THREE.Vector3())
-        return {
-          species: riding.species.id,
-          seat: riding.species.seat,
-          backTopY: +box.max.y.toFixed(2),
-          dinoY: +riding.object.position.y.toFixed(2),
-          riderY: +hips.y.toFixed(2),
-          gapAboveBack: +(hips.y - box.max.y).toFixed(2),
-          backLen: +(box.max.z - box.min.z).toFixed(2),
-        }
-      },
+      setSwimPose: (o: Partial<typeof Player.swimPose>) => { Player.swimPose = { ...Player.swimPose, ...o }; return Player.swimPose },
+      locoState: () => player.locoState(),
+      heldProbe: () => player.heldProbe(),
+      setHeldPose: (id: ItemId, pos: [number, number, number], rot: [number, number, number]) => player.setHeldPose(id, pos, rot),
       rigFacing: () => {
         const out: Record<string, { head: [number, number]; tail: [number, number] | null; offset: number; bone: string }> = {}
         for (const d of dinos) {
