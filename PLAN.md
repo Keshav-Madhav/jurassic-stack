@@ -346,7 +346,7 @@ and desert flora · M10g ground clutter · M10h boulders and outcrops.
 
 *Status 2026-09-07: beats 1–3 and 5 are built and live (the beach statue, twelve keystones / eight
 open the door, the caldera door in the Ravine's throat, the Gatekeeper alpha, the crater Beacon and
-credits). Beat 4: **cold shipped M50, the three caves shipped M51**; the aquatic tame remains. Survival (M21), the
+credits). Beat 4: **cold shipped M50**; the caves shipped M51 and were **CUT in M80** (see below); the aquatic tame remains. Survival (M21), the
 ecology (M19) and the first-minutes hints (M30) are in; see CHECKLIST.md M17–M30.*
 
 Sandbox first — no dialogue, no quest log, no obligation. For anyone who wants direction, five acts
@@ -360,9 +360,17 @@ told through geography, ruins, and what you can't survive yet (v1 design, playte
 3. **Saddle up — grasslands & rivers.** Bigger tames, the real base, rivers as highways. Each major
    ruin holds a **keystone** and a climbable vantage revealing the next region — map unlock by
    climbing and looking, not UI.
-4. **The dark places — swamp, snow, caves.** Environmental gates: cold demands fur gear off megafauna,
-   the swamp demands an aquatic tame; three fear-themed caves (dark, deep water, tight squeezes) each
-   guard a keystone.
+4. **The dark places — swamp, snow.** Environmental gates: cold demands fur gear off megafauna,
+   the swamp demands an aquatic tame.
+
+   **The caves are cut (M80, user's call: "completely remove caves… not just broken, they are not
+   even close to 0.1% of correct").** A heightmap cannot have an overhang, so M51 built each one as
+   a BOWL sunk into a hillside with a stone roof laid over it. That is not a cave — it is a pit with
+   a lid, and no amount of tuning the darkness or the shell was going to make walking down into a
+   dish feel like going underground. Cutting beats polishing something whose foundation is wrong.
+   If caves come back they need decision 6's answer, which this project already wrote down and then
+   did not follow: **portal-loaded interiors**, a separate hand-built space entered through a door,
+   not terrain at all.
 5. **The summit.** All keystones unseal the caldera door; the island's one scripted monster — an
    oversized alpha apex — guards it. Your tame army is your progression made flesh. Behind the door:
    what the ruin-builders left, and a choice — light the great beacon and roll credits, or keep living
@@ -398,8 +406,8 @@ polish / content:**
    ~~settings menu~~ **DONE M40** (render scale, shadows, grass, draw distance, volume, sensitivity,
    FOV — key rebinding still open) · **waterfalls + swamp/pine interiors** (content).
 4. **The Wayfinder item + corpse bag death** (feel) · **shadow caching + KTX2** (perf, G+H) · **playtest
-   ritual: F8 report dump + the 10-item first-ten-minutes checklist** (polish) · ~~caves~~ **DONE M51** — three carved bowls with stone roofs, dark enough that a
-   torch matters, one of them behind the cold and holding a keystone.
+   ritual: F8 report dump + the 10-item first-ten-minutes checklist** (polish) · ~~caves~~ **SHIPPED M51, CUT M80** — three carved bowls with
+   stone roofs. A bowl with a lid is not a cave; see beat 4 above.
 5. ~~Roster honesty~~ **DONE M52** — the claim was wrong: they had ONE clip each, not none, and
    one clip at four rates is a working animal. Fourteen species with rigs now. the flyer and the aquatic are movement modes (decision
    7) and come after.

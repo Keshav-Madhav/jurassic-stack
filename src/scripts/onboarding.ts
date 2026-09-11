@@ -7,7 +7,7 @@
 // once per save and is remembered. Nothing here blocks play.
 export type HintId =
   | 'wake' | 'bush' | 'punch' | 'craft' | 'keystone-near' | 'raptor' | 'hungry' | 'thirsty'
-  | 'night' | 'carcass' | 'ko' | 'saddle' | 'gate-sight' | 'stamina' | 'cold' | 'cave'
+  | 'night' | 'carcass' | 'ko' | 'saddle' | 'gate-sight' | 'stamina' | 'cold'
 
 const TEXT: Record<HintId, string> = {
   wake: 'You wash up on the south beach. Something old stands at its east end.',
@@ -24,7 +24,6 @@ const TEXT: Record<HintId, string> = {
   saddle: 'A saddle needs hide — from a carcass. Then E to saddle, E to ride.',
   'gate-sight': 'The mountain has a door in it. It wants eight keystones.',
   stamina: 'Winded. Stamina refills when you walk.',
-  cave: 'Dark in here. A torch in your hand, or a fire on the floor.',
   cold: 'The air bites up here. A fire holds it off — a coat of fur lets you stay.',
 }
 

@@ -15,9 +15,8 @@ await page.waitForTimeout(1500)
 const g = (expr) => page.evaluate(expr)
 
 const sites = await g('window.__g.game.keystoneSites()')
-// 13 since M51: twelve on the ruins and one at the back of a cave
-check(sites.length === 13, `13 keystone sites (${sites.map((s) => s.tag).join(', ')})`)
-check(sites.filter((s) => s.tag.startsWith('cave-')).length === 1, 'one of them is in a cave')
+// twelve, one per ruin that keeps a stone (M80 took the dark places out)
+check(sites.length === 12, `12 keystone sites (${sites.map((s) => s.tag).join(', ')})`)
 check((await g('window.__g.game.keystoneCount()')) === 0, 'none collected on fresh save')
 
 // collect the beach one
@@ -51,7 +50,7 @@ await page.waitForTimeout(400)
 await g('window.__g.game.interact()')
 check(!(await g('window.__g.game.doorOpen()')), 'door refuses with missing keystones')
 await g('window.__g.game.grantAllKeystones()')
-check((await g('window.__g.game.keystoneCount()')) === 13, 'all keystones granted (debug)')
+check((await g('window.__g.game.keystoneCount()')) === sites.length, `all ${sites.length} keystones granted (debug)`)
 await g('window.__g.game.interact()')
 await page.waitForTimeout(300)
 check(await g('window.__g.game.doorOpen()'), 'door opens with all five')
@@ -119,36 +118,6 @@ await page.reload({ waitUntil: 'domcontentloaded' })
 await page.waitForFunction('window.__g && window.__g.ready === true', null, { timeout: 60000 })
 await page.waitForTimeout(800)
 check(await g('window.__g.game.beaconLit()'), 'lit beacon survives reload')
-
-// --- M51: the caves (PLAN beat 4) ---
-{
-  const defs = await page.evaluate(() => window.__g.game.caveDefs())
-  check(defs.length === 3, `three caves are carved (${defs.map((d) => d.name).join(', ')})`)
-  const d0 = defs[0]
-  const yaw = Math.atan2(-d0.into.x, -d0.into.z)
-  const go = async (along) => {
-    await page.evaluate(([mx, mz, ix, iz, a, y]) => {
-      const g = window.__g
-      g.setTime(0.5); g.game.setGod(true)
-      g.teleport(mx + ix * a, mz + iz * a); g.setCam(y, 0.03)
-    }, [d0.mouth.x, d0.mouth.z, d0.into.x, d0.into.z, along, yaw])
-    await page.waitForTimeout(2500)
-    return page.evaluate(() => ({ inCave: window.__g.game.inCave(), y: window.__g.player().y, dark: window.__g.game.caveDark() }))
-  }
-  const out = await go(-40)
-  check(out.inCave === null, 'outside the mouth you are not in a cave')
-  check(out.dark < 0.1, `and the world is lit (interior ${out.dark.toFixed(2)})`)
-  const inn = await go(46)
-  check(inn.inCave === d0.name, `walking in puts you inside (${inn.inCave})`)
-  check(inn.y < out.y - 4, `and below the ground you came from (${inn.y.toFixed(1)} vs ${out.y.toFixed(1)} m)`)
-  check(inn.dark > 0.85, `the cave is DARK (interior ${inn.dark.toFixed(2)})`)
-  // nothing grows under a roof
-  const flora = await page.evaluate(([x, z]) => window.__g.game.nodesNear(x, z, 18), [d0.mouth.x + d0.into.x * d0.reach, d0.mouth.z + d0.into.z * d0.reach])
-  check(Object.keys(flora).length === 0, `nothing grows in the chamber (${JSON.stringify(flora)})`)
-  // and one cave keeps a keystone
-  const ks = await page.evaluate(() => window.__g.game.keystoneSites())
-  check(ks.some((k) => k.tag.startsWith('cave-')), `a cave holds a keystone (${ks.filter((k) => k.tag.startsWith('cave-')).map((k) => k.tag).join()})`)
-}
 
 // GRASS THAT KNOWS WHAT IT IS GROWING IN (M56). The dunes used to grow the
 // same lush meadow blade as the spawn valley — the loudest thing wrong in the
@@ -346,7 +315,7 @@ if (dune && meadow) {
   check(marsh.humid > 0.9, `the swamp closes in around you (humid ${marsh.humid})`)
   check(marsh.fogFar < 400, `and you cannot see the far hills any more (fog far ${marsh.fogFar} m, was ${plains.fogFar})`)
   check(marsh.fog !== plains.fog, `the air itself takes the marsh's colour (#${plains.fog} → #${marsh.fog})`)
-  // ...and it LIFTS on the way out rather than sticking (the cave/underwater bug shape)
+  // ...and it LIFTS on the way out rather than sticking (the underwater bug shape)
   const out = await at(-250, 1040, 7000)
   check(out.humid < 0.05 && out.fogFar > 1200, `and walking out of it gives the view back (fog far ${out.fogFar} m)`)
 

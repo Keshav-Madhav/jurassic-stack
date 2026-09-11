@@ -313,15 +313,8 @@ export class DayNight {
     if (this.env.texture) this.scene.environment = this.env.texture
   }
 
-  /** INSIDE (M51): 0 out in the open, 1 deep in a cave. A bowl 13 m deep and
-   *  60 m wide geometrically sees most of the sky — that is why the baked sky
-   *  view only reads 0.87 in there — so the roof's darkness is stated, not
-   *  derived: the key light and the sky fill are taken away and the exposure
-   *  drops, which is what a cave IS. Lerped by the caller so walking in is a
-   *  dimming, not a pop. */
-  interior = 0
 
-  /** UNDER THE WATER (M67, 0..1, lerped by the caller like `interior`).
+  /** UNDER THE WATER (M67, 0..1, lerped by the caller).
    *
    *  Swimming looked exactly like walking: the ocean sheet IS drawn from below
    *  (it is DoubleSide), but nothing else changed — no murk, no colour cast,
@@ -371,10 +364,8 @@ export class DayNight {
       grade = lerpGrade(GOLDEN, NIGHT, t, scratch)
     }
 
-    // the cave: no sun, almost no sky, and a darker print
-    const ins = this.interior
     const sub = this.submerged
-    this.renderer.toneMappingExposure = grade.exposure * THREE.MathUtils.lerp(1, 0.62, ins) * THREE.MathUtils.lerp(1, 0.92, sub)
+    this.renderer.toneMappingExposure = grade.exposure * THREE.MathUtils.lerp(1, 0.92, sub)
     const fog = this.scene.fog as THREE.Fog
     fog.color.copy(grade.fog)
     fog.near = grade.fogNear * this.fogScale
@@ -401,9 +392,9 @@ export class DayNight {
     }
     this.hemi.color.copy(grade.hemiSky)
     this.hemi.groundColor.copy(grade.hemiGround)
-    this.hemi.intensity = grade.hemiIntensity * THREE.MathUtils.lerp(1, 0.12, ins) * THREE.MathUtils.lerp(1, 0.95, sub)
+    this.hemi.intensity = grade.hemiIntensity * THREE.MathUtils.lerp(1, 0.95, sub)
     this.sunLight.color.copy(grade.sun)
-    this.sunLight.intensity = grade.sunIntensity * THREE.MathUtils.lerp(1, 0.06, ins)
+    this.sunLight.intensity = grade.sunIntensity
     this.sunLight.position.copy(this.focus).addScaledVector(this.sunDir, 420)
     this.sunLight.target.position.copy(this.focus)
     this.rimLight.intensity = grade.rimIntensity
@@ -453,6 +444,6 @@ export class DayNight {
     // so nothing is re-filtered. M19's re-bake cost 20-40 ms and jumped; this
     // costs one quad and moves continuously.
     this.env.update(this.time)
-    this.scene.environmentIntensity = THREE.MathUtils.lerp(0.13, 0.025, this.nightness) * THREE.MathUtils.lerp(1, 0.15, ins)
+    this.scene.environmentIntensity = THREE.MathUtils.lerp(0.13, 0.025, this.nightness)
   }
 }

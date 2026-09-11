@@ -1,7 +1,7 @@
 // Grass tile generation — pure data (matrices + colours) from the baked
 // grids, so it can run in the terrain worker. grass.ts owns the meshes.
 import * as THREE from 'three'
-import { heightAt, normalAt, biomeAt, biomeBlendAt, forestMaskAt, forestKindAt, FOREST_KIND, BIOME, VOLCANO, worldMeta, ambientAt, caveAt } from './heightmap'
+import { heightAt, normalAt, biomeAt, biomeBlendAt, forestMaskAt, forestKindAt, FOREST_KIND, BIOME, VOLCANO, worldMeta, ambientAt } from './heightmap'
 
 export const GRASS_TILE = 64
 
@@ -128,7 +128,6 @@ export function buildGrassTile(tx: number, tz: number, spacing: number): { matri
       _m.compose(_p, _q, _s)
       _m.toArray(matrices, count * 16)
       // plains lighter and yellower, woods darker
-      if (caveAt(x, z, 4)) continue // no grass under a roof (M51)
       // the baked sky view again: grass in a hollow is grass in shade (M47)
       const dry = biome === BIOME.DESERT
       // and so does the colour: a straight swap at the line made the dunes'

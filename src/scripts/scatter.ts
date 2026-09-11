@@ -13,7 +13,7 @@ import RAPIER from '@dimforge/rapier3d-compat'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js'
-import { heightAt, lodFloorAt, normalAt, forestMaskAt, forestKindAt, biomeAt, shoreDist, BIOME, FOREST_KIND, SEA_LEVEL, HALF_SIZE, SPAWN, VOLCANO, worldMeta, ambientAt, caveAt } from './heightmap'
+import { heightAt, lodFloorAt, normalAt, forestMaskAt, forestKindAt, biomeAt, shoreDist, BIOME, FOREST_KIND, SEA_LEVEL, HALF_SIZE, SPAWN, VOLCANO, worldMeta, ambientAt } from './heightmap'
 import { buildCanopyTree, buildElderTree, buildMushroom, buildRedwood, buildMangrove, buildDriedBush, buildCactus, buildReeds, buildPebbles, buildStones, buildSticks, buildOutcrop, buildGrassCard, buildFarPine, buildLog } from './trees'
 import { captureImpostor } from './impostor'
 import { CHUNK_SIZE, CHUNKS_PER_SIDE } from './terrain'
@@ -166,7 +166,7 @@ interface PlaceSpec {
   /**
    * A HEIGHT BAND TESTED FIRST, before any of the expensive per-candidate work
    * (M65). `habitat()` is the last thing `place()` calls — after the lake-shore
-   * loop, normalAt, the ravine test, caveAt, the ruin loop and riverDistAt —
+   * loop, normalAt, the ravine test, the ruin loop and riverDistAt —
    * which is fine for a kind that lives almost anywhere. The wet kinds live in
    * a band a couple of metres tall, so 95% of the island is rejected, and doing
    * that rejection last cost TEN SECONDS of load. Declared here it is two float
@@ -1170,7 +1170,6 @@ export class Scatter {
         // the Ravine's floor and the gate's mouth stay clear of everything solid
         // (a boulder sat across the door — M19); ruin courts keep their footprint
         if (worldMeta?.ravine && distToPathXZ(x, z, worldMeta.ravine.path) < worldMeta.ravine.halfWidth + 10) continue
-        if (caveAt(x, z, 6)) continue // nothing grows in a cave (M51)
         if (worldMeta && worldMeta.ruinSites.some((r) => Math.hypot(x - r.x, z - r.z) < (r.tag === 'caldera-gate' ? 40 : r.tag === 'crater-beacon' ? 40 : 14) && !GROUND_COVER.has(kind))) continue
         if (Math.hypot(x - SPAWN.x, z - SPAWN.z) < 14) continue
         const riverD = riverDistAt(x, z)

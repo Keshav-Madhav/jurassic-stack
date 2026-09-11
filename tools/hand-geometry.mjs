@@ -150,43 +150,6 @@ export const SHELVES = [
   { name: 'crater', h: 175, edge: 34, shore: [[-92, -1250], [-72, -1318], [-18, -1352], [46, -1340], [88, -1290], [92, -1224], [58, -1170], [0, -1150], [-58, -1170], [-90, -1206]] },
 ]
 
-// ---------- THE CAVES: three dark places (PLAN beat 4) ----------
-// A heightmap cannot have an overhang, so a cave here is a BOWL carved into a
-// hillside with a stone roof laid over it (caves.ts builds the shell). That
-// gives a real interior you walk down into: the terrain is the floor and the
-// walls, the shell is the ceiling and the mouth's lintel, and M47's baked sky
-// view darkens the inside for free — a deep bowl sees no sky.
-//
-// `mouth` is where you walk in, `into` is the compass direction of the hill
-// behind it, and the chamber sits `reach` metres in. `mouthY` / `floorY` are
-// HAND-AUTHORED absolute heights (metres): the bake composes its grid in one
-// pass and cannot sample itself mid-pass, and a designed floor level is what
-// the hand-geometry mandate wants anyway. `reach` must clear `radius + 22`
-// (the chamber's outer blend) or the carve swallows its own mouth — the first
-// cut dropped the dune mouth from 30 m to 17 (M51).
-export const CAVES = [
-  {
-    name: 'dune-hollow',
-    // low and early: the first dark place, a short walk from the west dunes
-    mouth: { x: -670, z: 1090 }, into: { x: -0.55, z: -0.84 },
-    reach: 62, radius: 26, mouthY: 30, floorY: 17, keystone: false,
-  },
-  {
-    name: 'east-adit',
-    // the east foothills at 122 m — the FIRST site here was down by the swamp
-    // at (690, 970) and the bake's own outflow validator threw it out: the
-    // chamber cut under the river's bed and made the water run uphill (M51)
-    mouth: { x: 1410, z: 50 }, into: { x: -0.90, z: 0.44 },
-    reach: 66, radius: 27, mouthY: 122, floorY: 108, keystone: false,
-  },
-  {
-    name: 'range-deep',
-    // 156 m up the West Range: behind the cold (M50), and it holds a keystone
-    mouth: { x: -1270, z: -590 }, into: { x: -0.72, z: -0.69 },
-    reach: 74, radius: 30, mouthY: 156, floorY: 139, keystone: true,
-  },
-]
-
 // ---------- THE RAVINE: the way into the mountain ----------
 // A slot canyon cut through the volcano's south flank from the gate's rock
 // face up into the crater — floor climbs from the apron to the crater bench

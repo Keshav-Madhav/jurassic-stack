@@ -12,7 +12,7 @@
 //
 // WHAT IT SHOWS IS THE POINT. In survival it is a chart and a "you are here"
 // — the island, the water, your own buildings, and nothing you have not
-// earned. In creative it becomes the author's sheet: caves, every ruin site
+// earned. In creative it becomes the author's sheet: every ruin site
 // named, the areas named, the resource nodes around you. That split is the
 // whole feature; a map that shows everything in survival would hand the
 // player the arc for free, and one that shows nothing in creative would be
@@ -195,6 +195,64 @@ export class MapView {
     c.strokeStyle = ring; c.lineWidth = 1; c.stroke()
   }
 
+  /** A marker with a SHAPE, not just a colour (M80).
+   *
+   *  The legend has promised `◆ ruin · ★ keystone` since the map
+   *  shipped and both were drawn as the same circle. On a chart the
+   *  shape carries the meaning; colour only separates two of a kind. */
+  private pin(
+    c: CanvasRenderingContext2D,
+    kind: 'ruin' | 'keystone',
+    x: number, y: number, r: number,
+  ): void {
+    c.save()
+    c.translate(x, y)
+    c.beginPath()
+    if (kind === 'ruin') {
+      // a diamond
+      c.moveTo(0, -r); c.lineTo(r, 0); c.lineTo(0, r); c.lineTo(-r, 0)
+    } else {
+      // a five-pointed star — the thing you are actually hunting
+      const R = r * 1.45
+      for (let i = 0; i < 10; i++) {
+        const a = (i * Math.PI) / 5 - Math.PI / 2
+        const rr = i % 2 ? R * 0.44 : R
+        i ? c.lineTo(Math.cos(a) * rr, Math.sin(a) * rr) : c.moveTo(Math.cos(a) * rr, Math.sin(a) * rr)
+      }
+    }
+    c.closePath()
+    c.fillStyle = kind === 'keystone' ? '#ffd24a' : '#c9b48c'
+    c.strokeStyle = 'rgba(30,20,8,0.8)'
+    c.lineWidth = 1.2
+    c.fill()
+    c.stroke()
+    c.restore()
+  }
+
+  /** Boxes already taken by a label this frame (full sheet only). */
+  private taken: { x: number; y: number; w: number; h: number }[] = []
+
+  /** A label that GIVES WAY to one already placed (M80).
+   *
+   *  Two dozen ruins and seventeen woods all wanted a name on
+   *  one sheet and every one of them drew unconditionally — "range-deep" sat
+   *  under "range-pines-west" and neither could be read. Callers go in
+   *  priority order (pins first, area names last), so the thing you are
+   *  hunting keeps its name and the scenery yields. */
+  private label2(
+    c: CanvasRenderingContext2D, s: string, x: number, y: number, size: number, colour: string,
+  ): boolean {
+    const w = s.length * size * 0.58 + 4
+    const h = size + 3
+    const box = { x: x - w / 2, y: y - h, w, h }
+    for (const t of this.taken) {
+      if (box.x < t.x + t.w && box.x + box.w > t.x && box.y < t.y + t.h && box.y + box.h > t.y) return false
+    }
+    this.taken.push(box)
+    this.text(c, s, x, y, size, colour)
+    return true
+  }
+
   private text(c: CanvasRenderingContext2D, s: string, x: number, y: number, size = 11, colour = '#f4ead6'): void {
     c.font = `${size}px ui-monospace, monospace`
     c.textAlign = 'center'
@@ -274,11 +332,12 @@ export class MapView {
     }
     f.restore()
 
+    this.taken.length = 0
     const m = worldMeta
     if (m) {
       const [sx, sy] = toFull(m.spawn.x, m.spawn.z)
       this.dot(f, sx, sy, 4, '#8fd6ff')
-      this.text(f, 'landfall', sx, sy - 14, 11, '#dff1ff')
+      this.label2(f, 'landfall', sx, sy - 14, 11, '#dff1ff')
     }
     for (const pc of this.pieceCache) {
       const [bx, by] = toFull(pc.x, pc.z)
@@ -290,7 +349,7 @@ export class MapView {
     const compass = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'][Math.round((((yaw * 180) / Math.PI + 360) % 360) / 45) % 8]
     this.label.textContent = `${Math.round(p.x)}, ${Math.round(p.z)} · ${Math.round(heightAt(p.x, p.z))} m · facing ${compass}`
     this.legend.innerHTML = creative
-      ? '<b>CREATIVE</b> · ▲ you · ● camp · ◆ ruin · ★ keystone · ⬟ cave · ✦ node — <i>press M to close</i>'
+      ? '<b>CREATIVE</b> · ▲ you · ● camp · ◆ ruin · ★ keystone · ✦ node — <i>press M to close</i>'
       : '▲ you · ● your camp · ○ landfall — <i>press M to close · C for the surveyor’s sheet</i>'
   }
 
@@ -306,6 +365,14 @@ export class MapView {
     if (!m) return
     const inside = (x: number, y: number): boolean => x > -20 && y > -20 && x < w + 20 && y < h + 20
 
+    // THE PINS GO FIRST. Area names are scenery; a ruin's name is the thing
+    // you are navigating to, so it wins the space (see `label2`).
+    if (!small) {
+      for (const r of m.ruinSites) {
+        const [px, py] = to(r.x, r.z)
+        if (inside(px, py)) this.label2(c, r.tag, px, py - 9, 9, r.keystone ? '#ffe9a8' : 'rgba(240,232,214,0.8)')
+      }
+    }
     // area names, drawn under the pins
     if (!small) {
       const named: [string, number, number][] = []
@@ -328,21 +395,14 @@ export class MapView {
       if (m.river) named.push(['the Knot', m.river.knot.x, m.river.knot.z])
       for (const [name, x, z] of named) {
         const [px, py] = to(x, z)
-        if (inside(px, py)) this.text(c, name, px, py, 10, 'rgba(255,244,224,0.82)')
+        if (inside(px, py)) this.label2(c, name, px, py, 10, 'rgba(255,244,224,0.82)')
       }
     }
 
-    for (const cv of m.caves ?? []) {
-      const [px, py] = to(cv.mouth.x, cv.mouth.z)
-      if (!inside(px, py)) continue
-      this.dot(c, px, py, small ? 3 : 4.5, '#2b2118', 'rgba(255,230,190,0.9)')
-      if (!small) this.text(c, cv.name, px, py + 14, 10, '#ffe6be')
-    }
     for (const r of m.ruinSites) {
       const [px, py] = to(r.x, r.z)
       if (!inside(px, py)) continue
-      this.dot(c, px, py, small ? 3 : 4.5, r.keystone ? '#ffd24a' : '#c9b48c')
-      if (!small) this.text(c, r.tag, px, py - 8, 9, r.keystone ? '#ffe9a8' : 'rgba(240,232,214,0.8)')
+      this.pin(c, r.keystone ? 'keystone' : 'ruin', px, py, small ? 3 : 4.2)
     }
     // THE NODES ARE FOR THE MINIMAP ONLY, and the first cut proved the point
     // my own comment had already made: at 4 km across, 260 m of pebbles and
