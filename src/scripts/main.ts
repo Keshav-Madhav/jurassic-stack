@@ -1525,6 +1525,27 @@ async function boot(): Promise<void> {
        *  the offset is wrong the animal walks backwards, and eyeballing a
        *  side-on screenshot at 0.6 m/s cannot tell you which. The head bone
        *  can. */
+      speciesList: () => Object.keys(SPECIES),
+      /** QA (M83): the player rig's bone names, and whether the riding pose
+       *  found the legs it needs. A silent name mismatch leaves the rider
+       *  standing bolt upright on the animal's back. */
+      playerRig: () => player.rigReport(),
+      setSitPose: (thighX: number, thighZ: number, shinX: number) => { Player.sitPose = { thighX, thighZ, shinX }; return Player.sitPose },
+      /** QA (M83): where the rider sits against the animal's actual back. */
+      seatFit: () => {
+        if (!riding || !riding.rig) return null
+        const box = new THREE.Box3().setFromObject(riding.rig)
+        const hips = player.object.getWorldPosition(new THREE.Vector3())
+        return {
+          species: riding.species.id,
+          seat: riding.species.seat,
+          backTopY: +box.max.y.toFixed(2),
+          dinoY: +riding.object.position.y.toFixed(2),
+          riderY: +hips.y.toFixed(2),
+          gapAboveBack: +(hips.y - box.max.y).toFixed(2),
+          backLen: +(box.max.z - box.min.z).toFixed(2),
+        }
+      },
       rigFacing: () => {
         const out: Record<string, { head: [number, number]; tail: [number, number] | null; offset: number; bone: string }> = {}
         for (const d of dinos) {
@@ -1537,6 +1558,11 @@ async function boot(): Promise<void> {
           const tail = bones.find((x) => /tail/i.test(x.name))
           const root = bones[0]
           if (!head || !root) continue
+          // the bones' world matrices are updated by the renderer; force the
+          // rig's own to match before inverting, or a rig sampled mid-turn
+          // reports a head on the wrong side (trex and alpharex share one
+          // GLB and disagreed, which is impossible and gave the game away)
+          d.rig.updateWorldMatrix(true, true)
           const inv = new THREE.Matrix4().copy(d.rig.matrixWorld).invert()
           const local = (o: THREE.Object3D): THREE.Vector3 => o.getWorldPosition(new THREE.Vector3()).applyMatrix4(inv)
           const h = local(head), r = local(root)

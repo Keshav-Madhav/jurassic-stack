@@ -361,7 +361,9 @@ export const SPECIES: Record<string, SpeciesDef> = {
     tamePerFeed: 5,
     temperament: 'defensive',
     diet: 'herbivore',
-    facingOffset: Math.PI,
+    // no facingOffset (M83): this rig's head bone already sits on +z in
+    // model space, which is the convention every other species follows. The
+    // π here rotated it to face -z — the apatosaur walked backwards.
     aggroRange: 0,
     packRange: 0,
     attackDamage: 70,

@@ -48,7 +48,19 @@ const CASTAWAY_RECOLOR: Record<string, number> = {
   LightBlue: 0x4a3623, // jeans → ragged brown shorts
 }
 
+const _q = /* @__PURE__ */ new THREE.Quaternion()
+const _q2 = /* @__PURE__ */ new THREE.Quaternion()
+const _target = /* @__PURE__ */ new THREE.Quaternion()
+const _axX = /* @__PURE__ */ new THREE.Vector3(1, 0, 0)
+const _axZ = /* @__PURE__ */ new THREE.Vector3(0, 0, 1)
+
 export class Player {
+  /** The straddle, tunable at runtime so it can be dialled in against a
+   *  screenshot instead of one rebuild per guess (M83). */
+  // Chosen against screenshots, not guessed: -1.15/0.4/1.55 threw the thighs
+  // out horizontally, and 1.55 of shin folded the calf flat against it.
+  static sitPose = { thighX: -0.7, thighZ: 0.32, shinX: 1.1 }
+
   readonly mover: Mover
   readonly object = new THREE.Group()
   swimming = false
@@ -82,8 +94,8 @@ export class Player {
   private heldId: ItemId | null = null
   /** main.ts supplies the kit model for an item (player.ts must not know the kit) */
   heldFactory: ((id: ItemId) => THREE.Object3D | null) | null = null
-  private thighs: { bone: THREE.Bone; side: 1 | -1 }[] = []
-  private shins: THREE.Bone[] = []
+  private thighs: { bone: THREE.Bone; side: 1 | -1; rest: THREE.Quaternion }[] = []
+  private shins: { bone: THREE.Bone; rest: THREE.Quaternion }[] = []
 
   constructor(physics: Physics, spawn: THREE.Vector3) {
     this.mover = new Mover(physics, PLAYER_MOVER, spawn)
@@ -136,9 +148,17 @@ export class Player {
       if (!(o instanceof THREE.Bone)) return
       const n = o.name.replace(/\./g, '')
       if (n === 'WristR') this.hand = o
-      if (n === 'UpperLegL') this.thighs.push({ bone: o, side: -1 })
-      if (n === 'UpperLegR') this.thighs.push({ bone: o, side: 1 })
-      if (n === 'LowerLegL' || n === 'LowerLegR') this.shins.push(o)
+      // THE REST POSE IS THE ONLY STABLE REFERENCE (M83). These bones' local
+      // frames are rotated ~180° about z in this rig, so nudging
+      // `rotation.x` — which is what the sit pose used to do — pushes the leg
+      // on an axis that is not the hip's pitch, and the two halves cancel:
+      // measured while mounted, thighs sat at z ±3.39 and shins at x 2.97,
+      // and the rider stood bolt upright on the animal's back. Posing from
+      // the captured rest quaternion makes the result independent of both
+      // the rig's bind orientation and whatever the walk clip was doing.
+      if (n === 'UpperLegL') this.thighs.push({ bone: o, side: -1, rest: o.quaternion.clone() })
+      if (n === 'UpperLegR') this.thighs.push({ bone: o, side: 1, rest: o.quaternion.clone() })
+      if (n === 'LowerLegL' || n === 'LowerLegR') this.shins.push({ bone: o, rest: o.quaternion.clone() })
     })
     if (this.thighs.length === 0) console.warn('riding pose: no leg bones matched — rig names changed?')
 
@@ -350,6 +370,19 @@ export class Player {
   }
 
   /** Render frame: interpolate the visible mesh + drive the animation state. */
+  /** QA: what the riding pose actually bound (M83). */
+  rigReport(): Record<string, unknown> {
+    const names: string[] = []
+    this.object.traverse((o: THREE.Object3D) => { if ((o as THREE.Bone).isBone) names.push(o.name) })
+    return {
+      thighs: this.thighs.length, shins: this.shins.length, hand: !!this.hand,
+      thighRot: this.thighs.map((t) => [+t.bone.rotation.x.toFixed(2), +t.bone.rotation.y.toFixed(2), +t.bone.rotation.z.toFixed(2)]),
+      shinRot: this.shins.map((sh) => +sh.bone.rotation.x.toFixed(2)),
+      sitBlend: +this.sitBlend.toFixed(2), riding: this.riding,
+      bones: names,
+    }
+  }
+
   render(alpha: number, dt: number): void {
     if (!this.riding) {
       this.object.position.lerpVectors(this.mover.prevPosition, this.mover.position, alpha)
@@ -406,11 +439,21 @@ export class Player {
     // a straddle (thighs forward+out, knees bent) proportional to sitBlend
     if (this.sitBlend > 0.02) {
       const t = this.sitBlend
-      for (const { bone, side } of this.thighs) {
-        bone.rotation.x -= 1.25 * t
-        bone.rotation.z += 0.42 * t * side
+      // Blend from whatever the clip wrote toward a straddle built on the
+      // REST pose: hips pitched forward and swung out, knees folded back.
+      // The axes are the MODEL's, taken through the bone's rest frame, so
+      // this reads the same on any rig whose legs point down at bind time.
+      for (const { bone, side, rest } of this.thighs) {
+        _q.setFromAxisAngle(_axX, Player.sitPose.thighX)
+        _q2.setFromAxisAngle(_axZ, Player.sitPose.thighZ * side)
+        _target.copy(rest).multiply(_q).multiply(_q2)
+        bone.quaternion.slerp(_target, t)
       }
-      for (const bone of this.shins) bone.rotation.x += 1.4 * t
+      for (const { bone, rest } of this.shins) {
+        _q.setFromAxisAngle(_axX, Player.sitPose.shinX)
+        _target.copy(rest).multiply(_q)
+        bone.quaternion.slerp(_target, t)
+      }
     }
   }
 }

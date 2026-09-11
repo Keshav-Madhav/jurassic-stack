@@ -110,6 +110,28 @@ const kinds = () => page.evaluate(() => window.__g.game.pieceList().map((p) => p
   await page.evaluate(() => window.__g.game.selectItem('hatchet'))
 }
 
+// ---------- EVERY RIG FACES THE SAME WAY (M83) ----------
+// The game drives every animal along its object's local +z and adds the
+// species' `facingOffset`, so "effective facing" — the model's head
+// direction rotated by that offset — must come out +z for all of them.
+// `apato` had a head already on +z AND a π offset, so it walked backwards,
+// and a side-on screenshot of an animal drifting at 0.6 m/s could not tell
+// you that. The head bone can, so the gate asks it.
+{
+  const rigs = await page.evaluate(() => window.__g.game.rigFacing())
+  const names = Object.keys(rigs)
+  check(names.length >= 8, `rig facing sampled for ${names.length} species`)
+  const wrong = []
+  for (const [id, r] of Object.entries(rigs)) {
+    // rotate the model-space head direction by the offset and look at z
+    const [hx, hz] = r.head
+    const c = Math.cos(r.offset), sn = Math.sin(r.offset)
+    const z = hx * -sn + hz * c
+    if (z <= 0) wrong.push(`${id} (z ${z.toFixed(2)})`)
+  }
+  check(wrong.length === 0, `every rig's head leads its travel${wrong.length ? ' — BACKWARDS: ' + wrong.join(', ') : ''}`)
+}
+
 // ---------- every rig at its species height ----------
 // (a dormant rig calibrated while detached read stale bone matrices and
 // mammoths spawned the size of the island — user screenshot 20, M18). Pose
