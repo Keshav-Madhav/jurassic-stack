@@ -753,7 +753,27 @@ console.time('relax')
   for (let iz = 0; iz < SIDE; iz++) {
     for (let ix = 0; ix < SIDE; ix++) {
       const x = worldX(ix), z = worldZ(iz)
-      if (Math.hypot(x - VOLCANO.x, z - VOLCANO.z) < 900) continue
+      const dv = Math.hypot(x - VOLCANO.x, z - VOLCANO.z)
+      // THE CONE'S OUTER FLANKS RELAX TOO (M78, user's call: smooth them,
+      // but not the ring). Three things on this mountain are load-bearing
+      // and must keep their exact shape:
+      //   · the ESCARPMENT, a 52 m cliff band at dv 268-298 that is the only
+      //     reason the summit is unreachable before the caldera door opens;
+      //   · the CRATER and its bench, inside that;
+      //   · the GATE's apron and rock face at (0,-930), a hand-cut shelf
+      //     with a 33 m wall the door stands in — and unlike the Ravine,
+      //     shelves are NOT re-laid after this pass, so relaxing there would
+      //     quietly dissolve the doorway.
+      // Everything outside 320 m is just mountainside, and gets the same
+      // treatment the ranges got.
+      // ...and the UPPER flank too, between the crater and the ring. That is
+      // where the cone's spikiness actually lives — `14 * sin(vAng*12)` of
+      // radial ridging on top of a cone² — and smoothing only the skirt
+      // changed nothing you could see. The two protected bands stay exact:
+      // dv < 115 (the crater lip and bench) and dv 262-322 (the escarpment).
+      const onCone = (dv > 115 && dv < 262) || (dv > 322 && dv < 1100)
+      if (onCone && Math.hypot(x - 0, z + 930) > 190) { mask[idx(ix, iz)] = 1; continue }
+      if (dv < 900) continue
       for (const range of RANGES) {
         if (range.soft) continue
         if (distToPath(x, z, range.crest).d < range.width * 2.2) { mask[idx(ix, iz)] = 1; break }

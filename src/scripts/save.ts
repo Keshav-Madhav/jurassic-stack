@@ -34,6 +34,8 @@ export interface SaveFile {
   /** has the Wayfinder relic been lifted off the beach? (M71) — separate from
    *  whether it is in your pack, which is just an inventory count */
   wayfinderTaken?: boolean
+  /** has anyone broken a pebble yet? the first one is guaranteed flint (M78) */
+  firstFlintGiven?: boolean
   /** island days lived (fractional) */
   days?: number
   inventory: unknown

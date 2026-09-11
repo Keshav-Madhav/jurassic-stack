@@ -1336,8 +1336,22 @@ export class Scatter {
     for (const [item, [lo, hi]] of Object.entries(NODE_DEFS[node.kind].yields)) {
       out[item as ItemId] = lo + Math.floor(Math.random() * (hi - lo + 1))
     }
+    // YOUR FIRST TOOL IS NOT A COIN FLIP (M78, user's call). Pebbles drop
+    // `flint: [0, 1]`, and flint is the one thing the hatchet cannot be made
+    // without — so the opening could hand you a beach full of stone and no
+    // way to cut anything. An honest run hit exactly that: 0 flint at 43 s
+    // and no hatchet at all. The FIRST pebble anyone breaks is guaranteed;
+    // after that it is the coin flip it was, so flint stays worth looking for.
+    if (node.kind === 'pebbles' && !this.firstFlintGiven) {
+      this.firstFlintGiven = true
+      if (!out.flint) out.flint = 1
+    }
     return out
   }
+
+  /** Has anyone broken a pebble yet? Saved, so a returning player does not
+   *  get the beginner's guarantee a second time (see `harvest`). */
+  firstFlintGiven = false
 
   /** things hit in the last moment (a wobble) and things falling (a felled
    *  tree). Both animate ONE instance matrix each, for well under a frame. */

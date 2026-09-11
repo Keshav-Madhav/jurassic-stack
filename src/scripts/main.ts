@@ -258,6 +258,8 @@ async function boot(): Promise<void> {
   wayfinder.group.name = 'wayfinder'
   scene.add(wayfinder.group)
   if (save?.wayfinderTaken) wayfinder.take()
+  // a save from before M78 has no flag; treat an existing player as past it
+  scatter.firstFlintGiven = save ? save.firstFlintGiven ?? true : false
   keystones.group.name = 'keystones'
   if (save?.keystones) keystones.restore(save.keystones as string[])
   keystones.onCollect = () => {
@@ -1116,6 +1118,7 @@ async function boot(): Promise<void> {
     hints: onboarding.serialize(),
     engrams: engrams.serialize(),
     wayfinderTaken: wayfinder.isTaken,
+    firstFlintGiven: scatter.firstFlintGiven,
     }
   }
   setInterval(() => void saveGame(collectSave()), 30_000)

@@ -11,7 +11,12 @@ export interface SurvivalStats { food: number; water: number; stamina: number; w
 
 /** food/water per second at rest (drains scale with sprinting) */
 const FOOD_DRAIN = 100 / (DAY_LENGTH_S * 1.5)
-const WATER_DRAIN = 100 / (DAY_LENGTH_S * 0.9)
+// 0.9 -> 1.35 of a day (M78, user's call). At 0.9 a bar was about four
+// minutes and a walk inland without a river on the route was a real risk of
+// dying of thirst — M69 watched a fresh player die seven times doing exactly
+// that. Six minutes a bar leaves thirst a constraint you plan around instead
+// of one that interrupts every journey.
+const WATER_DRAIN = 100 / (DAY_LENGTH_S * 1.35)
 const STAMINA_DRAIN = 100 / 9 // a 9 s sprint from full
 const STAMINA_REGEN = 100 / 6 // 6 s to refill standing still
 /** hp lost per second while starving / parched (each) */
