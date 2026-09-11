@@ -177,12 +177,28 @@ async function harvest(kind, item, want, tries = 10) {
   return (await g((it) => window.__g.game.count(it), item)) >= want
 }
 
+/** Wood from WHATEVER IS NEAREST, the way a person would take it.
+ *
+ *  This asked only for `sticks` and so reported "never made fire" on a beach
+ *  with twenty-nine palms on it: sticks need forest cover (`f > -0.4`) and
+ *  there is not one inside 100 m of the spawn, while a palm is four steps
+ *  away and drops 2-3 wood. The run was measuring the bot's vocabulary, not
+ *  the island's generosity — exactly the M69 mistake (a pitch sweep with the
+ *  sign backwards) in a new costume. */
+async function harvestWood(want) {
+  for (const kind of ['sticks', 'palm', 'tree', 'deadtree']) {
+    if ((await g((it) => window.__g.game.count(it), 'wood')) >= want) return true
+    await harvest(kind, 'wood', want, kind === 'sticks' ? 4 : 6)
+  }
+  return (await g((it) => window.__g.game.count(it), 'wood')) >= want
+}
+
 console.log(`\nTHE FIRST ${Math.round(BUDGET / 60)} MINUTES — no god mode, no teleport, no give()\n`)
 const start = await state()
 console.log(`  waking at ${start.x}, ${start.z} with ${start.wood} wood, ${start.fiber} fiber, ${start.stone} stone\n`)
 
 // 1. the very first thing: something to chop with
-await harvest('sticks', 'wood', 2)
+await harvestWood(2)
 await harvest('pebbles', 'stone', 2)
 if (await g(() => window.__g.game.count('flint') > 0)) mark('found flint')
 await harvest('bush', 'fiber', 6)
@@ -204,7 +220,7 @@ if (s1.surv.water < 96) {
 if (await harvest('bush', 'berry', 3)) mark('food in the pack (berries)')
 
 // 3. a fire — the first real milestone
-await harvest('sticks', 'wood', 6)
+await harvestWood(6)
 await harvest('pebbles', 'stone', 4)
 await harvest('stones', 'stone', 4)
 if (await g(() => window.__g.game.craft('campfire'))) mark('FIRE — a campfire crafted')
