@@ -164,9 +164,17 @@ await page.keyboard.up('Space')
 const rising = await state()
 check(rising.airBlend > 0.5, `a jump reads as airborne (blend ${rising.airBlend})`)
 check(rising.tuck > 0.3, `and the legs tuck on the way up (tuck ${rising.tuck})`)
+// and the landing crouch, which lasts 0.42 s — too short to sample blind
+let crouch = 0
+try {
+  await page.waitForFunction('window.__g.game.locoState().land > 0.15', null, { timeout: 4000, polling: 30 })
+  crouch = (await state()).land
+} catch { /* reported below */ }
+check(crouch > 0.15, `touching down spends the fall on a crouch (land ${crouch})`)
 await settle(1400)
 const landed = await state()
 check(landed.tuck < 0.05 && landed.airBlend < 0.1, `landing clears it again (tuck ${landed.tuck}, air ${landed.airBlend})`)
+check(landed.land === 0, `and the crouch comes back up (land ${landed.land})`)
 
 // --- 6a. one blow is not every blow. Six rigs carry more than one attack and
 // every fight used to play the same single clip.
@@ -227,6 +235,12 @@ for (const sp of ['raptor', 'parasaur']) {
   const fit = await page.evaluate(() => window.__g.game.seatFit())
   check(fit.sitBlend > 0.9, `${sp}: the rider is in the straddle, not standing (sitBlend ${fit.sitBlend})`)
   check(Math.abs(fit.hipOverBack - 0.1) < 0.3, `${sp}: the rider's hip sits on the back (${fit.hipOverBack} m over it)`)
+  // the rider is not welded on: main feeds the mount's pace to the seat pose
+  await page.keyboard.down('KeyW')
+  await settle(1400)
+  const moving = await state()
+  await page.keyboard.up('KeyW')
+  check(moving.rideSpeed > 0.05, `${sp}: the seat knows the animal's pace (rideSpeed ${moving.rideSpeed})`)
   for (let a = 0; a < 5; a++) {
     await page.evaluate(() => window.__g.game.interact())
     try { await page.waitForFunction('window.__g.game.riding() === false', null, { timeout: 2000 }); break } catch { /* again */ }

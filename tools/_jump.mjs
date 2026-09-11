@@ -15,14 +15,16 @@ await page.evaluate(() => {
 await new Promise((r) => setTimeout(r, 1200))
 const home = await page.evaluate(() => window.__g.player())
 await page.evaluate((p) => window.__g.setFreeCam(p.x + 4.5, p.y + 0.6, p.z, Math.PI / 2, -0.03), home)
-await page.keyboard.press('Space')
-for (const [tag, ms] of [['rise', 120], ['apex', 260], ['fall', 300], ['land', 360]]) {
+await page.keyboard.down('Space')
+await new Promise((r) => setTimeout(r, 140))
+await page.keyboard.up('Space')
+for (const [tag, ms] of [['rise', 120], ['apex', 200], ['fall1', 120], ['fall2', 120], ['fall3', 90], ['land', 70], ['land2', 70], ['land3', 120], ['settled', 900]]) {
   await new Promise((r) => setTimeout(r, ms))
   const s = await page.evaluate(() => {
     const l = window.__g.game.locoState(), p = window.__g.player()
-    return { y: +p.y.toFixed(2), air: l.airBlend, w: l.weights.air, tuck: l.tuck ?? null }
+    return { y: +p.y.toFixed(2), air: l.airBlend, w: l.weights.air, tuck: l.tuck ?? null, land: l.land ?? null, bodyY: l.bodyY, fv: l.fallVy, vy: l.vy, g: l.grounded }
   })
   await page.screenshot({ path: `shots/jump-${tag}.png` })
-  console.log(`${tag.padEnd(6)} y=${String(s.y).padStart(6)} airBlend=${s.air} airClip=${s.w} tuck=${s.tuck}`)
+  console.log(`${tag.padEnd(8)} y=${String(s.y).padStart(6)} air=${String(s.air).padStart(4)} tuck=${String(s.tuck).padStart(4)} land=${String(s.land).padStart(4)} fallVy=${String(s.fv).padStart(6)} vy=${String(s.vy).padStart(6)} grounded=${s.g}`)
 }
 await b.close()

@@ -126,6 +126,10 @@ export class Player {
    *  way the swim is built: over the top of whatever clip is playing, about
    *  the MODEL's axes so the rig's bind rotations do not matter. */
   static airPose = { thigh: -0.62, knee: -1.0, arm: -0.5, armOut: 0.18 }
+  /** the crouch a landing buys, and how long it takes to come back up */
+  static landPose = { drop: 0.26, knee: -0.85, seconds: 0.42 }
+  /** the rider is not welded on: the seat lifts and pitches with the stride */
+  static ridePose = { bob: 0.055, pitch: 0.05, lean: 0.09 }
 
   readonly mover: Mover
   readonly object = new THREE.Group()
@@ -159,6 +163,13 @@ export class Player {
   /** how tucked the legs are in the air: 1 just after take-off, easing out
    *  into a reach for the ground on the way down */
   private airTuck = 0
+  /** the last downward speed before touching down, and the crouch it buys */
+  private lastFallVy = 0
+  private landT = 0
+  /** how fast the animal under you is going, 0-1 of its run: main.ts sets it,
+   *  because the player has no handle on its mount */
+  rideSpeed = 0
+  private ridePhase = 0
   /** hip-height pivot: the swim pitch has to rotate the body about its
    *  middle, not about the point between its feet (which would swing the
    *  head out in front on the end of a 1.75 m lever). */
@@ -323,7 +334,8 @@ export class Player {
       armBlend: +this.armBlend.toFixed(2), moveWeight: +this.moveWeight.toFixed(2),
       pitch: +this.pivot.rotation.x.toFixed(2),
       climb: +this.climbBlend.toFixed(2), diving: this.diving,
-      tuck: +this.airTuck.toFixed(2),
+      tuck: +this.airTuck.toFixed(2), land: +this.landT.toFixed(2), rideSpeed: +this.rideSpeed.toFixed(2),
+      fallVy: +this.lastFallVy.toFixed(2), vy: +this.mover.velocityY.toFixed(2), grounded: this.mover.grounded,
       bodyY: +(this.object.position.y + this.pivot.position.y).toFixed(2),
       arms: this.arms.length, forearms: this.forearms.length,
       clips: [...this.actions.keys()],
@@ -643,6 +655,16 @@ export class Player {
     // rising hard = tuck; falling = reach for the ground
     const rise = THREE.MathUtils.clamp(this.mover.velocityY / 5, -1, 1)
     this.airTuck = THREE.MathUtils.lerp(this.airTuck, this.airBlend * (0.3 + 0.7 * Math.max(0, rise)), 1 - Math.exp(-dt * 10))
+    // LANDING. Remember the speed on the way down, and spend it on a crouch
+    // the moment the feet touch: a jump that ends with the legs already
+    // straight reads as the ground catching him rather than him landing.
+    if (!this.mover.grounded && !this.swimming) this.lastFallVy = Math.min(this.lastFallVy, this.mover.velocityY)
+    else if (this.lastFallVy < -3) {
+      this.landT = THREE.MathUtils.clamp(-this.lastFallVy / 11, 0.25, 1)
+      this.lastFallVy = 0
+    } else this.lastFallVy = 0
+    if (this.landT > 0) this.landT = Math.max(0, this.landT - dt / Player.landPose.seconds)
+    this.ridePhase += dt * (1.6 + this.rideSpeed * 5.5)
     this.sitBlend = THREE.MathUtils.lerp(this.sitBlend, this.riding ? 1 : 0, 1 - Math.exp(-dt * 14))
     // a hatchet or a spear is PRESENTED; a torch is only carried
     const readied = !!this.heldId && !!HELD_POSE[this.heldId] && this.heldId !== 'torch'
@@ -721,6 +743,11 @@ export class Player {
     if (this.swimBlend > 0.02 && idle) idle.weight += this.swimBlend * oneShot
     this.mixer.update(dt)
 
+    // The body's own offset from its feet — one place writes it, because the
+    // swim, the landing and the saddle all want a piece of it.
+    let pivotPitch = 0
+    let pivotY = PIVOT_Y
+
     // PROCEDURAL SWIM (M84). The castaway used to cross open water bolt
     // upright in an alert idle, sliding along like a buoy. There is no swim
     // clip in Casual2, so this tips the body toward prone about the hips and
@@ -736,8 +763,8 @@ export class Player {
       const stroke = THREE.MathUtils.clamp(Math.max(this.moveWeight * 1.6, Math.abs(this.climbBlend)), 0, 1)
       this.strokeT += dt * (0.9 + stroke * 1.4)
       // tip off level toward wherever he is heading in the water column
-      this.pivot.rotation.x = t * (P.tread + (P.pitch - P.tread) * stroke - this.climbBlend * P.climb)
-      this.pivot.position.y = PIVOT_Y + t * P.lift * stroke
+      pivotPitch = t * (P.tread + (P.pitch - P.tread) * stroke - this.climbBlend * P.climb)
+      pivotY += t * P.lift * stroke
       const ph = this.strokeT * Math.PI * 2
       // A BREASTSTROKE, not a crawl. The arm hangs along the model's -y at
       // rest, and rotating it about the model's x sweeps it through the
@@ -777,9 +804,6 @@ export class Player {
         _target.copy(_q).multiply(rest)
         bone.quaternion.slerp(_target, t)
       }
-    } else if (this.pivot.rotation.x !== 0) {
-      this.pivot.rotation.x = 0
-      this.pivot.position.y = PIVOT_Y
     }
 
     // PROCEDURAL JUMP (M88). Airborne is exclusive with swimming and riding,
@@ -824,6 +848,30 @@ export class Player {
         _target.copy(rest).multiply(_q)
         bone.quaternion.slerp(_target, t)
       }
+      // AND HE IS NOT WELDED ON. A rider bolted rigidly to a running animal
+      // is the stiffest thing in the frame; the seat lifts and pitches with
+      // the stride instead, at the animal's own pace.
+      const R = Player.ridePose
+      const g = this.sitBlend * this.rideSpeed
+      pivotY += Math.sin(this.ridePhase * 2) * R.bob * g
+      pivotPitch += Math.sin(this.ridePhase) * R.pitch * g - R.lean * g
     }
+
+    // THE LANDING CROUCH. Spent from the speed he was falling at, and taken
+    // out of the body's height rather than the feet, so the boots stay on the
+    // ground while he absorbs it.
+    if (this.landT > 0) {
+      const L = Player.landPose
+      const c = this.landT
+      pivotY -= L.drop * c
+      for (const { bone, rest, pitch } of this.knees) {
+        _q.setFromAxisAngle(pitch, L.knee * c)
+        _target.copy(_q).multiply(rest)
+        bone.quaternion.slerp(_target, c)
+      }
+    }
+
+    this.pivot.rotation.x = pivotPitch
+    this.pivot.position.y = pivotY
   }
 }

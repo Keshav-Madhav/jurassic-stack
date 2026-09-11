@@ -2245,6 +2245,8 @@ async function boot(): Promise<void> {
     // motion scales with speed: walking shimmered, riding stuttered, flying
     // shook (user report).
     Dino.renderAlpha = alpha
+    // the rider's bob needs the animal's pace, which only main can see
+    player.rideSpeed = riding ? THREE.MathUtils.clamp(riding.speedNow / Math.max(1, riding.species.runSpeed), 0, 1) : 0
     player.render(alpha, dt) // runs while riding too (seat pose + mixer)
     player.setHeldItem(inventory.held)
     const pFeet = feetPos()
