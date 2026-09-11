@@ -1520,6 +1520,36 @@ async function boot(): Promise<void> {
       spawnDino: (id: string, x: number, z: number) => { const d = spawnDino(id, x, z); return d.index },
       dinoCalib: () => dinos.map((d) => ({ sp: d.species.id, ...d.debugCalib })),
       /** QA: every species' clip resolution + the model's full clip list */
+      /** QA (M82): which way each rig's nose points in MODEL space.
+       *  The game drives every animal along -z and adds `facingOffset`; if
+       *  the offset is wrong the animal walks backwards, and eyeballing a
+       *  side-on screenshot at 0.6 m/s cannot tell you which. The head bone
+       *  can. */
+      rigFacing: () => {
+        const out: Record<string, { head: [number, number]; tail: [number, number] | null; offset: number; bone: string }> = {}
+        for (const d of dinos) {
+          if (out[d.species.id] || !d.rig) continue
+          let mesh: THREE.SkinnedMesh | null = null
+          d.rig.traverse((o) => { if (!mesh && (o as THREE.SkinnedMesh).isSkinnedMesh) mesh = o as THREE.SkinnedMesh })
+          if (!mesh) continue
+          const bones = (mesh as THREE.SkinnedMesh).skeleton.bones
+          const head = bones.find((x) => /head|skull|jaw|nose|neck/i.test(x.name))
+          const tail = bones.find((x) => /tail/i.test(x.name))
+          const root = bones[0]
+          if (!head || !root) continue
+          const inv = new THREE.Matrix4().copy(d.rig.matrixWorld).invert()
+          const local = (o: THREE.Object3D): THREE.Vector3 => o.getWorldPosition(new THREE.Vector3()).applyMatrix4(inv)
+          const h = local(head), r = local(root)
+          const t = tail ? local(tail) : null
+          out[d.species.id] = {
+            head: [+(h.x - r.x).toFixed(2), +(h.z - r.z).toFixed(2)],
+            tail: t ? [+(t.x - r.x).toFixed(2), +(t.z - r.z).toFixed(2)] : null,
+            offset: +((d.species.facingOffset ?? 0)).toFixed(2),
+            bone: head.name,
+          }
+        }
+        return out
+      },
       animAudit: () => {
         const out: Record<string, { clips: string[]; slots: Record<string, string | null>; height: number }> = {}
         for (const d of dinos) {

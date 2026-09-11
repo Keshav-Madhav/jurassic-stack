@@ -637,7 +637,7 @@ export const RUINS = [
   { tag: 'ring-west-watch', x: -620, z: 420, layout: 'watch', keystone: true },
   { tag: 'holm-north-shrine', x: -60, z: 110, layout: 'shrine' },
   { tag: 'swamp-columns', x: 884, z: 720, layout: 'columns' },
-  { tag: 'foothill-circle', x: 1252, z: 154, layout: 'circle', keystone: true }, // up on the east foothills
+  { tag: 'foothill-circle', x: 1284, z: 182, layout: 'circle', keystone: true }, // up on the east foothills
   { tag: 'pine-arch-west', x: -500, z: -520, layout: 'arch' },
   { tag: 'pine-arch-east', x: 360, z: -620, layout: 'arch' },
   { tag: 'horns-watch', x: -972, z: -1104, layout: 'watch', keystone: true },

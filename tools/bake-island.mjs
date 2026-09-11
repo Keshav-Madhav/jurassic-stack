@@ -603,11 +603,54 @@ const RIDGE_CUM = RIDGES.map((r) => {
   return cum
 })
 function layRidges() {
+  // FOLLOW THE HILL, DO NOT BUILD A VIADUCT (M82, user screenshot).
+  //
+  // The first cut laid a constant grade between two hand-authored heights,
+  // which is right for a slot like the Ravine and wrong for an open
+  // hillside: wherever the ground sat below that line the ramp FILLED up to
+  // it, and the west shoulder came out as a 60 m flat causeway standing
+  // seventy metres above the snowfield with 63° walls — a zigzag trench
+  // gouged across the summit, visible from the air.
+  //
+  // A mountain path is a CUT, never a fill. Sample the real ground along the
+  // centreline, then run a min-filter forward and backward that allows at
+  // most `grade` of rise per metre: the result is never above the terrain and
+  // never steeper than the grade, so it hugs the hill and only notches the
+  // humps that were too steep to walk.
   for (let ri = 0; ri < RIDGES.length; ri++) {
     const r = RIDGES[ri]
     const cum = RIDGE_CUM[ri]
     const total = cum[cum.length - 1]
-    const reach = r.halfWidth * 3
+    const grade = Math.tan((r.gradeDeg ?? 17) * Math.PI / 180)
+    const STEP = 4
+    const n = Math.max(2, Math.round(total / STEP) + 1)
+    const at = (t) => {
+      const d = t * total
+      let seg = 0
+      while (seg < cum.length - 2 && cum[seg + 1] < d) seg++
+      const u = (d - cum[seg]) / ((cum[seg + 1] - cum[seg]) || 1)
+      return { x: lerp(r.path[seg].x, r.path[seg + 1].x, u), z: lerp(r.path[seg].z, r.path[seg + 1].z, u) }
+    }
+    const pts = [], prof = []
+    for (let i = 0; i < n; i++) { const p = at(i / (n - 1)); pts.push(p); prof.push(hAt(p.x, p.z)) }
+    // A BILATERAL limiter, not a one-sided cap. `min(prev + grade)` walking
+    // forward looks right and is not: it propagates the LOWEST point along
+    // the whole path, so a shoulder starting at 46 m cut 130 m out of the
+    // mountain it was supposed to climb. Clamping to a BAND around the
+    // previous sample bounds the gradient while tracking the real ground,
+    // and three sweeps settle it.
+    const ground = prof.slice()
+    for (let pass = 0; pass < 3; pass++) {
+      for (let i = 1; i < n; i++) prof[i] = Math.max(prof[i - 1] - grade * STEP, Math.min(prof[i - 1] + grade * STEP, prof[i]))
+      for (let i = n - 2; i >= 0; i--) prof[i] = Math.max(prof[i + 1] - grade * STEP, Math.min(prof[i + 1] + grade * STEP, prof[i]))
+    }
+    // ...and never move the ground more than this, so the path can never
+    // become a canyon or a causeway. Where the hill is steeper than the
+    // grade over a long run, the shoulder is as good as 14 m of earthwork
+    // can make it and no better — which is what a real mountain track is.
+    const MAX_CUT = 14
+    for (let i = 0; i < n; i++) prof[i] = Math.max(ground[i] - MAX_CUT, Math.min(ground[i] + 4, prof[i]))
+    const reach = r.halfWidth * 5 // a long feather: the shoulder has to MEET the hill
     const xs = r.path.map((p) => p.x), zs = r.path.map((p) => p.z)
     const ix0 = Math.max(0, Math.floor((Math.min(...xs) - reach + HALF) / RES)), ix1 = Math.min(SIDE - 1, Math.ceil((Math.max(...xs) + reach + HALF) / RES))
     const iz0 = Math.max(0, Math.floor((Math.min(...zs) - reach + HALF) / RES)), iz1 = Math.min(SIDE - 1, Math.ceil((Math.max(...zs) + reach + HALF) / RES))
@@ -617,9 +660,9 @@ function layRidges() {
         const { d, seg, t } = distToPath(x, z, r.path)
         if (d > reach) continue
         const along = (cum[seg] + (cum[Math.min(seg + 1, cum.length - 1)] - cum[seg]) * t) / total
-        const want = lerp(r.startY, r.endY, along)
+        const k = Math.max(0, Math.min(n - 1, Math.round(along * (n - 1))))
+        const want = prof[k]
         const i0 = idx(ix, iz)
-        // flat across the shoulder, then feathered back into the hillside
         H[i0] = lerp(want, H[i0], smoothstep(r.halfWidth, reach, d))
       }
     }

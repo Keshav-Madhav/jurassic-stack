@@ -998,7 +998,7 @@
       "tag": "foothill-vault",
       "x": -732,
       "z": -304,
-      "y": 44.5,
+      "y": 44.6,
       "keystone": true,
       "layout": null
     },
@@ -1108,9 +1108,9 @@
     },
     {
       "tag": "foothill-circle",
-      "x": 1252,
-      "z": 154,
-      "y": 152.3,
+      "x": 1284,
+      "z": 182,
+      "y": 147.2,
       "keystone": true,
       "layout": "circle"
     },
@@ -1262,8 +1262,8 @@
     },
     {
       "tag": "foothill-circle",
-      "x": 1252,
-      "z": 154,
+      "x": 1284,
+      "z": 182,
       "layout": "circle",
       "keystone": true
     },
@@ -4071,5 +4071,5 @@
       ]
     }
   ],
-  "bakedAt": "2026-09-11T14:07:29.995Z"
+  "bakedAt": "2026-09-11T15:46:34.905Z"
 }
