@@ -25,6 +25,9 @@ export interface Senses {
 }
 
 const _m4 = /* @__PURE__ */ new THREE.Matrix4()
+const _hq = /* @__PURE__ */ new THREE.Quaternion()
+/** how far a head will turn off the body's heading before it just faces front */
+const HEAD_YAW_MAX = 0.62
 const loader = new GLTFLoader()
 loader.setMeshoptDecoder(MeshoptDecoder)
 const modelCache = new Map<string, Promise<{ scene: THREE.Group; animations: THREE.AnimationClip[] }>>()
@@ -151,6 +154,16 @@ export class Dino {
   /** the `attack` slot plus whatever else the rig has to hit with */
   private attackActions: THREE.AnimationAction[] = []
   private eatAction: THREE.AnimationAction | null = null
+  /** THE HEAD FOLLOWS YOU (M91). A predator that never looks at you is
+   *  scenery. The yaw is applied about the MODEL's own up axis carried into
+   *  the bone's parent frame — the same trick the player's swim uses — and
+   *  laid over whatever the clip wrote, so the walk cycle still moves the
+   *  head and this only turns it. Eleven of the fifteen rigs name a head or
+   *  neck bone; the four that call everything Bone.001 simply do not track. */
+  private head: { bone: THREE.Bone; yaw: THREE.Vector3 } | null = null
+  private headYaw = 0
+  /** what to look at this frame, in world space (null = straight ahead) */
+  private headTarget: THREE.Vector3 | null = null
   /** so a burst of hits reads as one flinch rather than a stutter */
   private hurtT = 0
   private flavorT = 4 + Math.random() * 8
@@ -418,6 +431,20 @@ export class Dino {
         if (clip) this.actions[slot] = this.mixer.clipAction(clip)
       }
     }
+    {
+      // prefer an actual head over a neck: the M83 facing probe took the
+      // first match of head|skull|jaw|nose|neck and got apato's NECK
+      let mesh: THREE.SkinnedMesh | null = null
+      model.traverse((o) => { if (!mesh && (o as THREE.SkinnedMesh).isSkinnedMesh) mesh = o as THREE.SkinnedMesh })
+      const bones = mesh ? (mesh as THREE.SkinnedMesh).skeleton.bones : []
+      const bone = bones.find((b) => /head|skull/i.test(b.name)) ?? bones.find((b) => /neck/i.test(b.name))
+      if (bone) {
+        const acc = new THREE.Quaternion()
+        for (let par = bone.parent; par && par !== model; par = par.parent) acc.premultiply(par.quaternion)
+        acc.invert()
+        this.head = { bone, yaw: new THREE.Vector3(0, 1, 0).applyQuaternion(acc) }
+      }
+    }
     if (this.species.eatClip) {
       const clip = animations.find((a) => this.species.eatClip!.test(a.name))
       if (clip) { this.eatAction = this.mixer.clipAction(clip); this.eatAction.setLoop(THREE.LoopOnce, 1) }
@@ -533,6 +560,27 @@ export class Dino {
     out.hurt = this.hurtAction?.getClip().name ?? null
     out.eat = this.eatAction?.getClip().name ?? null
     return out
+  }
+
+  /** QA: what the head is doing — a screenshot of a moving animal cannot
+   *  tell a turned head from a turned body, but this can. */
+  headState(): { bone: string | null; yaw: number; target: boolean; bearing: number } {
+    // the bearing it is TRYING to look at, relative to its heading — without
+    // this a gate cannot tell "did not turn its head" from "turned its whole
+    // body, so there was nothing left to turn", and the check is a coin flip
+    let bearing = 0
+    if (this.headTarget) {
+      let d = Math.atan2(this.headTarget.x - this.object.position.x, this.headTarget.z - this.object.position.z) - this.heading
+      while (d > Math.PI) d -= Math.PI * 2
+      while (d < -Math.PI) d += Math.PI * 2
+      bearing = d
+    }
+    return {
+      bone: this.head?.bone.name ?? null,
+      yaw: +this.headYaw.toFixed(3),
+      target: !!this.headTarget,
+      bearing: +bearing.toFixed(3),
+    }
   }
 
   /** QA: is this animal's flinch bound, and is it playing right now? */
@@ -997,6 +1045,17 @@ export class Dino {
       return
     }
 
+    // WHAT IT IS WATCHING. Its foe if it has one, you if it is dealing with
+    // you, and you anyway if you are close enough to be worth a look — which
+    // is what makes a herd notice you walk past rather than stare through you.
+    this.headTarget = null
+    if (this.distToPlayer < 70) {
+      const foe = this.foe
+      if ((this.state === 'aggro' || this.state === 'hunt') && foe && foe.state !== 'dead') this.headTarget = foe.object.position
+      else if (this.state === 'aggro' || this.state === 'hunt' || this.state === 'flee' || this.state === 'tamed') this.headTarget = playerPos
+      else if (this.distToPlayer < 26) this.headTarget = playerPos
+    }
+
     // perception: what's around me, every ~0.5 s
     this.thinkT -= dt
     this.satiety -= dt
@@ -1401,6 +1460,28 @@ export class Dino {
 
   private mixerSkip = 0
 
+  /** Turn the head toward `headTarget`, clamped, over whatever the clip
+   *  wrote. MUST be called only on a frame where the mixer actually ran: far
+   *  animals tick their mixers every Nth frame, and premultiplying a stale
+   *  pose again each frame would wind the head round like a screw. */
+  private aimHead(dt: number): void {
+    if (!this.head) return
+    let want = 0
+    const t = this.headTarget
+    if (t) {
+      const dx = t.x - this.object.position.x
+      const dz = t.z - this.object.position.z
+      let d = Math.atan2(dx, dz) - this.heading
+      while (d > Math.PI) d -= Math.PI * 2
+      while (d < -Math.PI) d += Math.PI * 2
+      want = THREE.MathUtils.clamp(d, -HEAD_YAW_MAX, HEAD_YAW_MAX)
+    }
+    this.headYaw = THREE.MathUtils.lerp(this.headYaw, want, 1 - Math.exp(-dt * 3.5))
+    if (Math.abs(this.headYaw) < 0.005) return
+    _hq.setFromAxisAngle(this.head.yaw, this.headYaw)
+    this.head.bone.quaternion.premultiply(_hq)
+  }
+
   private animate(dt: number, moveT: number, running: boolean): void {
     const target = THREE.MathUtils.clamp(moveT, 0, 1)
     const oc = this.species.oneClip
@@ -1422,6 +1503,7 @@ export class Dino {
       if (this.model && !this.model.parent) return
       if (this.mixerSkip >= every0) {
         this.mixer?.update(this.mixerAccum)
+        this.aimHead(this.mixerAccum)
         this.mixerSkip = 0
         this.mixerAccum = 0
       }
@@ -1449,6 +1531,7 @@ export class Dino {
     if (this.model && !this.model.parent) return // not drawn: no bones to pose
     if (this.mixerSkip >= every) {
       this.mixer?.update(this.mixerAccum)
+      this.aimHead(this.mixerAccum)
       this.mixerSkip = 0
       this.mixerAccum = 0
     }

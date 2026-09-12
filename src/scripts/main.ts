@@ -675,6 +675,10 @@ async function boot(): Promise<void> {
 
     // placeables: LMB places the ghost
     if (held && ITEMS[held].placeable) {
+      // A REACH, NOT A PUNCH. This branch returns before playSwing, so
+      // laying a foundation — the thing you do twenty times building a hut —
+      // had no animation on the body at all.
+      player.playInteract()
       const placed = building.place(held as PieceKind, updateAim())
       if (placed && inventory.remove(placed, 1)) {
         hud.toast(placed === 'bedroll' ? 'A bed of straw and hide — you will wake here.' : `Placed ${ITEMS[placed].name}`)
@@ -1655,6 +1659,13 @@ async function boot(): Promise<void> {
        *  returns the first of each species, which on an island with dozens of
        *  wild raptors is never the one you just hit. */
       dinoFlinch: (i: number) => dinos[i]?.flinchState() ?? null,
+      /** QA (M91): the head-tracking state of one animal */
+      dinoHead: (i: number) => dinos[i]?.headState() ?? null,
+      headAudit: () => {
+        const out: Record<string, unknown> = {}
+        for (const d of dinos) { if (out[d.species.id]) continue; if (!d.rig) continue; out[d.species.id] = d.headState() }
+        return out
+      },
       facingAudit: () => {
         const out: Record<string, number> = {}
         for (const d of dinos) { if (out[d.species.id] !== undefined) continue; const h = d.headSide(); if (h !== null) out[d.species.id] = +h.toFixed(2) }

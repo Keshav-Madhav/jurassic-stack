@@ -190,6 +190,39 @@ check(none.join(',') === 'dilo,sauropelta,spino', `only the one-clip rigs have n
 const audit = await page.evaluate(() => window.__g.game.animAudit())
 check(!!audit.raptor?.slots?.eat, `the raptor has a feeding clip of its own (${audit.raptor?.slots?.eat})`)
 
+// --- 6c. the head follows you. Eleven rigs name a head or neck bone; the
+// four that call everything Bone.001 do not track, and that is the same four
+// the facing probe cannot read.
+{
+  const idx = await page.evaluate(() => { const p = window.__g.player(); return window.__g.game.spawnDino('stego', p.x + 12, p.z - 10) })
+  try {
+    await page.waitForFunction((j) => window.__g.game.dinoHead(j)?.bone, idx, { timeout: 15000 })
+  } catch { /* reported below */ }
+  const bone = (await page.evaluate((j) => window.__g.game.dinoHead(j), idx))?.bone
+  check(!!bone, `the stego's head bone is bound (${bone})`)
+  // COMPARE THE YAW AGAINST THE BEARING IT IS AIMING AT, not against the side
+  // the player stands on: an animal that turns its whole BODY to face you has
+  // nothing left to turn its head by, and reads as a failure. That is exactly
+  // how this check failed first time (left -0.019 with the stego squared up).
+  const sampleSide = async (side) => {
+    await page.evaluate(([j, sd]) => { const p = window.__g.game.dinoPos(j); window.__g.teleport(p.x + sd * 9, p.z + 1) }, [idx, side])
+    await settle(2200)
+    return await page.evaluate((j) => window.__g.game.dinoHead(j), idx)
+  }
+  let agreed = 0
+  let testable = 0
+  for (const side of [-1, 1]) {
+    const h = await sampleSide(side)
+    if (!h || Math.abs(h.bearing) < 0.2) continue
+    testable++
+    if (Math.sign(h.yaw) === Math.sign(h.bearing) && Math.abs(h.yaw) > 0.05) agreed++
+  }
+  check(testable > 0 && agreed === testable, `and the head turns the way it is looking (${agreed}/${testable} samples agreed)`)
+  const heads = await page.evaluate(() => window.__g.game.headAudit())
+  const tracked = Object.entries(heads).filter(([, v]) => v.bone)
+  check(tracked.length >= 10, `most of the roster can turn its head (${tracked.length} of ${Object.keys(heads).length})`)
+}
+
 // --- 6b. the death. Four rigs carry a collapse distinct from their knockout
 // and used to play the knockout for both.
 const deaths = await page.evaluate(() => window.__g.game.deathAudit())
