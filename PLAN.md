@@ -602,6 +602,196 @@ Not doing, and why, stays as recorded: N8AO, tessellation, WebGPU.
 6. **The Tarn fall** — the measurements are already taken; it may only need a re-check.
 7. Then the decisions in §1, and weather.
 
+---
+
+# RESEARCH — what the field does, and which of it applies here (2026-09-12)
+
+*Web research against the vision "a very good game, no matter what it takes, as long as it is free."
+Everything below is CC0/MIT or a technique, so nothing here costs money. Sources at the end. Where
+the answer is "this does not apply to us", that is said first and plainly, because a plan item that
+cannot be built is worse than no plan item.*
+
+## 0. What does NOT apply, stated first
+
+- **Tessellation is not available to this game.** WebGL2 has no tessellation stage and no compute
+  stage, and three.js does not emulate one. The only route to GPU tessellation or hydraulic-erosion-
+  on-the-fly is **WebGPU**, which `PERFORMANCE.md` already calls "a port of every custom shader in
+  the project… not this year". Any backlog line that says "tessellation" is a WebGPU line wearing a
+  disguise. **The honest alternative on the current renderer is what is already built**: a baked
+  heightmap with chunked LODs and a vertex-displaced grid. Note it and move on.
+- **Texture-space tricks have a horizon problem.** The per-tile hash that makes stochastic texturing
+  and cell bombing work aliases at high minification — i.e. precisely at the far edge of a big
+  terrain. Anything adopted here needs a distance fade, which is the same lesson M26 already learned
+  about the water ripple.
+
+## 1. Assets — what is free, and what is actually usable
+
+**The find that matters: [Gobkit Free Dinosaur Pack](https://gobkit.itch.io/gobkit-free-dinosaur-pack)**
+— 10 rigged, animated low-poly dinosaurs, **GLB, CC0 1.0, commercial use, no attribution, 8.9 MB**,
+on a **shared retarget-friendly skeleton**, four baked clips each (idle / attack / dead / walk, 24 fps).
+Its species list includes **Spinosaurus, Carnotaurus, Ankylosaurus and Pachycephalosaurus** — which
+is three of the four rigs this project has been apologising for (§5 of the audit: the one-clip rigs
+and the four that name every bone `Bone.001`).
+
+**The catch, and it is a real one: the pack is UNLIT baked-colour on a single atlas.** This island is
+PBR-lit with a day-night grade, a shadow box and a post chain; an unlit model ignores every one of
+them and will read flat and wrong at dusk, which is exactly the mismatch M2's art-direction test was
+run to avoid. Three honest options, in ascending order of work:
+
+1. **Re-material on import** — bind the atlas as `map` on a `MeshStandardMaterial` and let the world
+   light it. Cheap, and the baked shading will fight the real shading a little.
+2. **Use it only for the broken four**, re-lit as above, and accept a slight style seam against the
+   PBR rigs already in the world.
+3. **Mine it for the SKELETON.** A shared retarget-friendly rig is the thing this project actually
+   lacks — it would give `carno`, `spino`, `sauropelta` and `trike` named bones, which is what
+   unlocks head-tracking and the facing probe for them (§5), *without* replacing the meshes anyone
+   has already looked at.
+
+**Materials and textures**: [ambientCG](https://ambientcg.com) (2,000+ CC0 PBR materials with albedo/
+normal/roughness/metallic/height/AO, up to 8K) and [Poly Haven](https://polyhaven.com) (CC0 HDRIs and
+materials). Both are drop-in for the terrain tiles and prop materials, with no licence question.
+
+**Music: the game has none at all** (74 CC0 samples plus a procedural ambience bed, M35). Free and
+CC0: Kenney's music packs, OpenGameArt's CC0 music collections, and CC0 ambient/drone sample packs.
+A single 90-second exploration loop that ducks under combat would be the largest perceived-quality
+change per byte in the whole backlog.
+
+## 2. Optimisation — one library worth an evaluation, and the reason
+
+**[InstancedMesh2](https://github.com/agargaro/instanced-mesh) (`@three.ez/instanced-mesh`, MIT,
+actively maintained)** adds to `THREE.InstancedMesh`: **per-instance frustum culling backed by a
+dynamic BVH**, LOD *and shadow LOD*, sorting, per-instance uniforms/opacity/visibility, dynamic
+capacity — and **instanced skinning** (their examples run 1M static trees and 3,000 skinned
+instances). Three things it would change here:
+
+1. **Scatter culls whole 256 m cells today.** Per-instance culling is strictly finer, and it would
+   have made M81's under-bounding bug — `computeBoundingSphere()` discarding each instance sphere's
+   radius, 58 of 85 meshes short, the worst by 41 m — structurally impossible.
+2. **The hand-rolled LOD bands and impostor cards have a library equivalent**, including for shadows,
+   which this project pays for separately.
+3. **The big one: 1,515 animals are dormant-until-near precisely because skinned meshes are
+   expensive.** Instanced skinning changes that arithmetic, and with it how alive the island can be
+   at distance.
+
+Also worth knowing: three.js core's **`BatchedMesh`** does per-object frustum culling and sorting for
+*non-identical* geometry, and works on both the WebGL and WebGPU backends.
+
+**Adopt nothing on faith.** The frame already meets its 12 ms contract at 3–5 ms, so the case for any
+of this is **the animals**, not the trees — and it is an A/B measurement, the way every lever in
+`PERFORMANCE.md` was decided.
+
+## 3. Graphics — what would actually move the look
+
+- **Texture repetition**: the splat shader already does triplanar + texture bombing, which is most of
+  the win. Beyond it is Heitz–Neyret stochastic texturing (sample the texture several times from
+  different regions, blend with a luminance-preserving operator) — with the horizon-aliasing caveat
+  in §0.
+- **Rim light is the cheapest "it looks better" change available.** The stylised-low-poly literature
+  is unanimous that a tasteful rim/fresnel term is what gives low-poly silhouettes their readability,
+  and it is one term in a material keyed to the sun direction. This island is already vertex-coloured
+  and flat-lit; it has the exact look rim lighting is for.
+- **Vertex colours for gradients** rather than textures — already the project's idiom, worth
+  extending to props that still ship flat albedo.
+- **Toon/outline passes**: available, but they would overturn M2's art direction rather than serve
+  it. A decision, not an improvement.
+
+## 4. Map design — one rule worth turning into a gate
+
+The most concrete, testable thing the open-world level-design literature offers:
+
+> **From any hub or intersection you should be able to see at least two other landmarks**, and a
+> major landmark should be identifiable from anywhere on the map.
+
+This island has 24 ruins, a volcano, two ranges, a beacon and a waterfall, and **no measurement
+anywhere of whether any of them can be seen from any other.** A `gate-landmarks.mjs` that raycasts
+between every landmark pair against the baked heightmap and reports the visibility graph — plus the
+count of landmarks visible from each ruin — is a day's work, needs no new art, and is precisely this
+codebase's idiom: turn a design principle into a number a gate can hold. The same tool answers "is
+the volcano visible from the spawn beach", which PLAN beat 1 has asserted since the beginning and
+nothing has ever checked.
+
+Second, softer: **cluster points of interest into "mini-trips"** rather than spreading them evenly.
+The island's 24 ruins are currently distributed along a spawn→summit gradient, which is a line, not
+clusters.
+
+## 5. Boss fights — what the one boss is missing
+
+The literature agrees on three things, and the Gatekeeper (M20) has none of them:
+
+- **Telegraph.** Attacks must be readable and fair even when fast: a large gesture, a sound cue, a
+  colour, *before* the damage. `attackCooldown` currently fires the clip and the damage **on the same
+  frame** — there is nothing to react to, for the Gatekeeper or for any animal (§2 of the audit).
+- **Phases, each distinct.** One boss, one behaviour, one health bar. Phases are what let a fight
+  tell a story and test adaptation — and this rig has `roar`, `bite` and `attack_tail` bound, which
+  is already the raw material for two.
+- **Teach through the fight, not before it.** A boss whose pattern takes three attempts to learn is
+  memorable; one that kills you with an unreadable move is cheap.
+
+And the genre structure worth stealing wholesale: **Valheim's biome-boss loop** — beat the boss,
+unlock the material, the next biome opens. This island already *has* biomes with distinct dangers and
+a keystone-gated finale; it has one boss at the very end. A boss per major biome, each dropping the
+thing that makes the next biome survivable, is the same arc with a pulse.
+
+## 6. Balance — the method this project does not have
+
+The professional loop is **theory → internal playtest → live data**, and the first stage happens in a
+**spreadsheet**, because *time-to-kill and time-to-die are far easier to evaluate there than in a
+running game.*
+
+This project has **no balance model at all.** Species hp, damage, torpor, torporMax, harvest yield,
+food values, drain rates and recipe costs are hand-typed numbers in `species.ts` and `items.ts` with
+no cross-check — and hand-typed numbers that drift is exactly the failure M84 found in the fifteen
+saddle seats, and fixed by *measuring* them.
+
+**The proposal, and it is the same shape as every good tool in `tools/`:** a `tools/balance.mjs` that
+reads `species.ts` and `items.ts` and prints, for every species:
+
+- **time-to-kill** with fists / hatchet / spear, and **time-to-die** for the player against it;
+- **swings-to-KO** (torpor per hit against `torporMax`) — the taming cost, which is the real gate;
+- **food economy**: how many of each food a kill yields against the drain rate, i.e. how long one
+  animal feeds you;
+- **the progression curve**: those numbers sorted along the intended spawn→summit gradient, with a
+  gate that asserts it is **monotonic** — no animal in the second biome easier than one in the first.
+
+That turns "is this balanced?" from an opinion into a table, and a regression in it into a red gate.
+It is free, it needs no assets, and nothing in this project is better suited to it.
+
+## Sources
+
+- Gobkit Free Dinosaur Pack (CC0): https://gobkit.itch.io/gobkit-free-dinosaur-pack
+- InstancedMesh2 (MIT): https://github.com/agargaro/instanced-mesh
+- three.js performance practice: https://www.utsubo.com/blog/threejs-best-practices-100-tips
+- WebGPU/compute vs WebGL2 in three.js: https://threejsroadmap.com/blog/introduction-to-webgpu-compute-shaders
+- Texture repetition (Inigo Quilez): https://iquilezles.org/articles/texturerepetition/
+- Stochastic texturing: https://medium.com/@jasonbooth_86226/stochastic-texturing-3c2e58d76a14
+- Open-world orientation and landmarks: https://iuliu-cosmin-oniscu.medium.com/guidance-and-orientation-in-open-world-maps-c7ff78a12a05
+- Open-world level design (POI clustering): https://www.gamedeveloper.com/design/open-world-level-design-the-full-vision-part-2-5-
+- Boss design: https://gamedesignskills.com/game-design/game-boss-design/
+- Boss readability/telegraphing: https://www.gamedeveloper.com/game-platforms/designing-for-difficulty-readability-in-arpgs
+- Valheim's biome-boss progression: https://valheim.fandom.com/wiki/Progression_guide
+- Game economy balancing framework: https://gamedevessentials.com/a-7-step-framework-for-game-economy-design/
+- Balancing methodology and telemetry: https://videogamedevelopmentauthority.com/game-balancing-and-tuning
+- CC0 asset sources: https://ambientcg.com · https://polyhaven.com · https://kenney.nl · https://quaternius.com · https://opengameart.org
+- Low-poly art direction: https://rocketbrush.com/blog/low-poly-art-in-games
+
+## The order this research changes
+
+Inserted into §12's list, the research-backed items rank like this:
+
+1. **`tools/balance.mjs` + a monotonic-progression gate.** Free, no assets, turns the game's oldest
+   unexamined numbers into a measurement. Should come before any new content, because every new
+   animal or recipe makes the un-modelled economy worse.
+2. **A wind-up on every attack** — already §12's item 2, and the research says it is the single
+   highest-value change in combat, for the boss as much as for a raptor.
+3. **`gate-landmarks.mjs`** — one day, turns a design principle into a number, and finally checks the
+   claim PLAN beat 1 has made since the first line: that the volcano is visible from the beach.
+4. **A rim-light term**, the cheapest visual change in the list.
+5. **One CC0 music loop.** Largest perceived-quality change per byte in the backlog.
+6. **Evaluate InstancedMesh2 for the ANIMALS** (not the trees) with an A/B, because instanced
+   skinning is the only thing on this list that could change how alive the island is at distance.
+7. **The Gobkit skeleton for the four unnamed rigs** — option 3 in §1, which fixes head-tracking and
+   the facing probe without replacing any mesh.
+
 **Rules:** capability gates, not level gates. The ruins are the tech tree (recipes past timber tier
 learned from tablets — engrams as archaeology). Tames are the skill tree. Nothing in the arc grants
 anything the sandbox can't get.
