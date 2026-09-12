@@ -186,6 +186,10 @@ check(many.length >= 6, `the rigs with more than one attack bind them all (${man
 const none = Object.entries(atk).filter(([, v]) => v === 0).map(([k]) => k).sort()
 check(none.join(',') === 'dilo,sauropelta,spino', `only the one-clip rigs have no attack action (${none.join(' ') || 'none'})`)
 
+// the raptor eats rather than chewing a slowed bite (its rig ships "Eat Prey")
+const audit = await page.evaluate(() => window.__g.game.animAudit())
+check(!!audit.raptor?.slots?.eat, `the raptor has a feeding clip of its own (${audit.raptor?.slots?.eat})`)
+
 // --- 6b. the death. Four rigs carry a collapse distinct from their knockout
 // and used to play the knockout for both.
 const deaths = await page.evaluate(() => window.__g.game.deathAudit())

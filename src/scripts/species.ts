@@ -65,6 +65,11 @@ export interface SpeciesDef {
    *  does not flinch — there is no plausible substitute in an attack or a
    *  death clip. */
   hurtClip?: RegExp
+  /** What it does over a kill. Feeding was the ATTACK clip at 0.6 speed — a
+   *  slowed bite, which is a fair stand-in and is what most of these rigs
+   *  leave you. The Velociraptor ships an actual "Eat Prey", so it gets to
+   *  eat instead of chewing in slow motion. */
+  eatClip?: RegExp
   /** EXTRA ATTACKS, picked at random alongside the `attack` slot. Fights are
    *  the most-watched animation in the game and most of these rigs have more
    *  than one blow in them — a raptor bites twice over and leaps and tackles,
@@ -105,6 +110,7 @@ export const SPECIES: Record<string, SpeciesDef> = {
     attackDamage: 16,
     attackRange: 2.0,
     rideable: true,
+    eatClip: /^eat prey$/i,
     attackClips: [/^bite_?0?2$/i, /^tackle$/i],
     seat: { x: 0, y: 0.24, z: -0.05 },
     clips: {

@@ -150,6 +150,7 @@ export class Dino {
   private deathActions: THREE.AnimationAction[] = []
   /** the `attack` slot plus whatever else the rig has to hit with */
   private attackActions: THREE.AnimationAction[] = []
+  private eatAction: THREE.AnimationAction | null = null
   /** so a burst of hits reads as one flinch rather than a stutter */
   private hurtT = 0
   private flavorT = 4 + Math.random() * 8
@@ -417,6 +418,10 @@ export class Dino {
         if (clip) this.actions[slot] = this.mixer.clipAction(clip)
       }
     }
+    if (this.species.eatClip) {
+      const clip = animations.find((a) => this.species.eatClip!.test(a.name))
+      if (clip) { this.eatAction = this.mixer.clipAction(clip); this.eatAction.setLoop(THREE.LoopOnce, 1) }
+    }
     if (this.actions.attack) this.attackActions.push(this.actions.attack)
     for (const re of this.species.attackClips ?? []) {
       const clip = animations.find((a) => re.test(a.name))
@@ -526,6 +531,7 @@ export class Dino {
     const out: Record<string, string | null> = {}
     for (const slot of ['idle', 'walk', 'run', 'attack', 'ko'] as const) out[slot] = this.actions[slot]?.getClip().name ?? null
     out.hurt = this.hurtAction?.getClip().name ?? null
+    out.eat = this.eatAction?.getClip().name ?? null
     return out
   }
 
@@ -1017,7 +1023,8 @@ export class Dino {
         this.attackCooldown -= dt
         if (this.attackCooldown <= 0) {
           this.attackCooldown = 2.6
-          this.playAttack(0.6)
+          if (this.eatAction) { this.eatAction.reset().setLoop(THREE.LoopOnce, 1); this.eatAction.weight = 1; this.eatAction.play() }
+          else this.playAttack(0.6)
         }
         if (this.deadT <= 0) {
           this.satiety = 120 + Math.random() * 120

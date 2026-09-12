@@ -157,6 +157,13 @@ check(!land, 'back to walking on the beach')
     'and from the spawn beach, 3 km away, it is not in the scene at all')
 }
 
+// --- the rivers are see-through (user: "make water a bit transparent for
+// rivers"). The depth term rides on the shore block's real heightmap read, so
+// what can break silently is the WIRING: a material that stops being marked
+// clear goes back to a flat sheet with nothing to show for it.
+const clearSheets = await page.evaluate(() => window.__g.setRiverClarity(1))
+check(clearSheets >= 3, `the river sheets are the ones authored see-through (${clearSheets} of them)`)
+
 await browser.close()
 console.log(failed ? '\nGATE FAILED' : '\nGATE PASSED')
 process.exit(failed ? 1 : 0)

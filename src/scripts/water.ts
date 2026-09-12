@@ -37,6 +37,8 @@ export class WaterSystem {
   readonly group = new THREE.Group()
   private materials: THREE.MeshStandardMaterial[] = []
   private rivers: RiverRuntime[] = []
+  /** the see-through sheets and how clear each was authored to be */
+  private clearMats: { mat: THREE.MeshStandardMaterial; base: number }[] = []
   private time = 0
 
   build(): void {
@@ -252,8 +254,8 @@ export class WaterSystem {
       const mesh = new THREE.Mesh(
         geo,
         part.flow
-          ? this.makeWaterMat(0x4a90c0, 0.85, new THREE.Vector2(0, -2.6), 0, true)
-          : this.makeWaterMat(0x3f7fae, 0.9, new THREE.Vector2(0, 0), 0, false),
+          ? this.makeWaterMat(0x4a90c0, 0.85, new THREE.Vector2(0, -2.6), 0, true, 0.34, 0.62)
+          : this.makeWaterMat(0x3f7fae, 0.9, new THREE.Vector2(0, 0), 0, false, 0.34, 0.45),
       )
       mesh.renderOrder = 4 // rivers sit above every standing sheet they cross
       this.group.add(mesh)
@@ -270,6 +272,13 @@ export class WaterSystem {
     swell: number,
     foam = false,
     roughness = 0.34, // (0.18 blew the near sheet out to milk-white under the noon sun — the "bulging" look, M19)
+    /** HOW FAR YOU CAN SEE INTO IT (user: "make water a bit transparent for
+     *  rivers"). The shore block below already measures the real depth under
+     *  each fragment against the baked heightmap, so this rides on that: the
+     *  sheet opens up over a shallow bed and closes again as the channel
+     *  drops away. 0 leaves a material exactly as it was — the sea and the
+     *  lakes keep their own look. */
+    clarity = 0,
   ): THREE.MeshStandardMaterial {
     const mat = new THREE.MeshStandardMaterial({
       color,
@@ -289,6 +298,7 @@ export class WaterSystem {
       shader.uniforms.uFlow = { value: flow }
       shader.uniforms.uSwell = { value: swell }
       shader.uniforms.uFoam = { value: foam ? 1 : 0 }
+      shader.uniforms.uClarity = { value: clarity }
       shader.uniforms.uHeight = { value: heightTexture() }
       shader.uniforms.uHalf = { value: HALF_SIZE }
       ;(mat.userData as { shader?: typeof shader }).shader = shader
@@ -306,7 +316,7 @@ export class WaterSystem {
         )
       shader.fragmentShader = shader.fragmentShader
         .replace('#include <common>', `#include <common>
-          uniform float uTime; uniform vec2 uFlow; uniform float uFoam;
+          uniform float uTime; uniform vec2 uFlow; uniform float uFoam; uniform float uClarity;
           uniform sampler2D uHeight; uniform float uHalf;
           varying vec3 vWaterWorld; varying vec2 vWaterUv;
           // the ground under this fragment (the baked heightmap, 2 m cells)
@@ -367,6 +377,19 @@ export class WaterSystem {
             outgoingLight = mix(outgoingLight, outgoingLight * vec3(0.9, 1.1, 1.05) + vec3(0.04, 0.08, 0.06), shallow * 0.6);
             outgoingLight = mix(outgoingLight, vec3(0.92, 0.96, 1.0), clamp(foamLine, 0.0, 1.0) * 0.8);
             diffuseColor.a *= 1.0 - clearT * 0.92;
+            // SEE THE BED. The clearT term above only opens the last 90 cm
+            // before the bank, which leaves a 1.35 m river reading as poured
+            // paint down the middle. This carries the same idea across the
+            // whole channel: clear over a shallow bed, closing again as it
+            // drops away. Past 220 m the depth is left at 10, so distant
+            // water is untouched. (No backticks in here — this is inside a
+            // template literal and one would end the shader.)
+            // ...and only where you are actually looking INTO it. Water you
+            // look along is a mirror, not a window — without this the same
+            // river read see-through from the bank, where in life it would be
+            // throwing the far bank back at you.
+            float into = abs(normalize(cameraPosition - vWaterWorld).y);
+            diffuseColor.a *= 1.0 - uClarity * smoothstep(0.06, 0.55, into) * (1.0 - smoothstep(0.3, 4.0, depth));
             diffuseColor.a = max(diffuseColor.a, clamp(foamLine, 0.0, 1.0) * 0.85);
             if (uFoam > 0.5) {
               // churning foam bands along both banks
@@ -381,7 +404,19 @@ export class WaterSystem {
         )
     }
     this.materials.push(mat)
+    if (clarity > 0) this.clearMats.push({ mat, base: clarity })
     return mat
+  }
+
+  /** QA/tuning: scale every see-through sheet's clarity (1 = as authored,
+   *  0 = the flat sheets rivers used to be). Live, so the look can be dialled
+   *  in against a screenshot instead of one rebuild per guess. */
+  setRiverClarity(scale: number): number {
+    for (const { mat, base } of this.clearMats) {
+      const shader = (mat.userData as { shader?: { uniforms: Record<string, { value: number }> } }).shader
+      if (shader?.uniforms.uClarity) shader.uniforms.uClarity.value = base * scale
+    }
+    return this.clearMats.length
   }
 
   update(dt: number): void {

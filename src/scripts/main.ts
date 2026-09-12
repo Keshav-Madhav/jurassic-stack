@@ -1155,6 +1155,9 @@ async function boot(): Promise<void> {
       const hit = physics.world.castRay(new RAPIER.Ray({ x, y: 400, z }, { x: 0, y: -1, z: 0 }), 1000, true)
       return hit ? 400 - hit.timeOfImpact : null
     },
+    /** QA/tuning: scale the rivers' see-through-ness live (1 = as authored,
+     *  0 = the flat sheets they used to be) */
+    setRiverClarity: (v: number) => water.setRiverClarity(v),
     /** QA: hide/show whole layers to attribute what's on screen */
     setLayer: (name: 'water' | 'scatter' | 'terrain', visible: boolean) => {
       const g = name === 'water' ? water.group : name === 'scatter' ? scatter.group : terrain.group
