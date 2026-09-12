@@ -344,10 +344,12 @@ and desert flora · M10g ground clutter · M10h boulders and outcrops.
 
 ## The arc: an optional guided path
 
-*Status 2026-09-07: beats 1–3 and 5 are built and live (the beach statue, twelve keystones / eight
+*Status 2026-09-12 (after M91): beats 1–3 and 5 are built (the beach statue, twelve keystones / eight
 open the door, the caldera door in the Ravine's throat, the Gatekeeper alpha, the crater Beacon and
-credits). Beat 4: **cold shipped M50**; the caves shipped M51 and were **CUT in M80** (see below); the aquatic tame remains. Survival (M21), the
-ecology (M19) and the first-minutes hints (M30) are in; see CHECKLIST.md M17–M30.*
+credits). Beat 4: **cold shipped M50**; the caves shipped M51 and were **CUT in M80** (see below);
+the aquatic tame is excluded by the user. Survival (M21), the ecology (M19), the first-minutes hints
+(M30), the ruins-as-tech-tree (M68), the Wayfinder item (M71) and the animation pass (M83–M91) are
+in. **Note that only M76 and earlier are deployed** — see "What is left", §0.*
 
 Sandbox first — no dialogue, no quest log, no obligation. For anyone who wants direction, five acts
 told through geography, ruins, and what you can't survive yet (v1 design, playtest-subject):
@@ -386,32 +388,219 @@ guided playthrough; leave it in a chest = pure sandbox. One item replaces the tu
 *(2026-09-07: still the N key + a toast. Make it the item — carried in a slot, a small compass rose
 on the HUD that points, stowed in a chest to go sandbox. The M30 hints cover the first minutes.)*
 
-**Remaining order (2026-09-07), by rounds that mix one pick from each of feel / performance /
-polish / content:**
+**Remaining order (2026-09-07) — SUPERSEDED. Kept for the strikethroughs, which record what the
+rounds actually cost; the list of what is LEFT is the audit below it, which was taken from the code
+rather than from this list.**
 1. **Animals alive** (feel) · ~~light culling + sky cubemap~~ **DONE M31 — and the round found the
    real enemy: hitches, not fill** (the steady frame is 5–7 ms GPU at 2560×1440; first sight of a
-   region was costing 100–500 ms — closed in M33/M34/M36; the lap is now 9–25 ms worst-frame with
-   zero shader compiles) · ~~sound~~ **DONE M35** (74 CC0 samples: footsteps that follow the ground,
-   animals whose pitch comes from their species, foley, interface; `gate-sound.mjs`)
-   (polish: footsteps by ground, dino calls by species/state, bites, water, fire — Kenney/freesound
-   CC0) · **the build tier from ruins** (content: recipe tablets in the 23 ruins unlock chest, bedroll
-   respawn, workbench, tent, fence, door, thatch roof — the Kenney kit already holds most of these).
+   region was costing 100–500 ms — closed in M33/M34/M36) · ~~sound~~ **DONE M35** (74 CC0 samples)
+   · ~~the build tier from ruins~~ **DONE M68** (`engrams.ts` — a tablet at a ruin teaches a recipe).
 2. ~~Ragdolls~~ **M41 did the honest version** — a directed, accelerating topple with a landing
-   thud, not a jointed ragdoll (a body that is only ever seen lying still afterwards does not repay
-   a per-species joint rig; revisit only if bodies start falling off cliffs) · **opaque grass + far terrain** (perf, B+E) · **the visual LUT + material
-   normalisation** (polish) · ~~cold on the ranges: fur off mammoths~~ **DONE M50** — warmth as a fifth vital, the fur coat off
-   the megafauna as the licence to climb; the crest is deadly without it and survivable with it.
-3. ~~Tames defend you~~ **DONE M36** · **hunger drive** (feel) · **depth pre-pass + occlusion
-   queries** (perf, C+F — note the frame is already 3–5 ms; measure before building either) ·
-   ~~settings menu~~ **DONE M40** (render scale, shadows, grass, draw distance, volume, sensitivity,
-   FOV — key rebinding still open) · **waterfalls + swamp/pine interiors** (content).
-4. **The Wayfinder item + corpse bag death** (feel) · **shadow caching + KTX2** (perf, G+H) · **playtest
-   ritual: F8 report dump + the 10-item first-ten-minutes checklist** (polish) · ~~caves~~ **SHIPPED M51, CUT M80** — three carved bowls with
-   stone roofs. A bowl with a lid is not a cave; see beat 4 above.
-5. ~~Roster honesty~~ **DONE M52** — the claim was wrong: they had ONE clip each, not none, and
-   one clip at four rates is a working animal. Fourteen species with rigs now. the flyer and the aquatic are movement modes (decision
-   7) and come after.
+   thud, not a jointed ragdoll · **opaque grass + far terrain** (perf, B+E — still open, and see the
+   verdict below) · **the visual LUT + material normalisation** (polish — superseded by M42's post
+   chain) · ~~cold on the ranges~~ **DONE M50**.
+3. ~~Tames defend you~~ **DONE M36** · ~~hunger drive~~ **DONE** (`satiety` gates the hunt) ·
+   **depth pre-pass + occlusion queries** (perf, C+F — still open) · ~~settings menu~~ **DONE M40**
+   (key rebinding still open) · ~~waterfalls + swamp/pine interiors~~ **DONE M72/M73**.
+4. ~~The Wayfinder item~~ **DONE M71** · **corpse bag death** (still open) · **shadow caching +
+   KTX2** (perf, G+H — still open) · **playtest ritual: F8 report dump** (still open) · ~~caves~~
+   **SHIPPED M51, CUT M80**.
+5. ~~Roster honesty~~ **DONE M52**. The flyer and the aquatic are movement modes (decision 7).
 6. **Co-op** last, as decided.
+
+---
+
+# WHAT IS LEFT — a full audit (2026-09-12, after M91)
+
+*Taken from the code, not from memory: every "not built" below was checked by reading the source or
+measuring the running game, and the measurements are quoted where they exist. Ordered by what a
+player would notice first, not by what is easiest.*
+
+## 0. The one that blocks everything else
+
+**Fifteen rounds are not live.** `origin/main` is **M76**; local is **M91**. The deployed game has
+none of: the caves cut (M80), the mountains reshaped with traversable summits and shoulders
+(M81/M82), the woods re-traced with blended biomes (M79), the map's marker fix (M80), the whole
+animation pass (M83–M91), or the rivers you can see into (M90). Everything is committed and green.
+**Nothing else on this list matters until this is pushed.**
+
+## 1. Decisions that are the user's, not the engine's
+
+| | What | Why it is a decision |
+|---|---|---|
+| **Oxygen** | You can dive since M86 and nothing stops you staying down for ever | A sixth vital: a new bar, a new HUD row, a new save field, a drowning rule. The alternative — a soft timer that just pushes you up — is cheaper and less ARK |
+| **Attacking from a mount** | `swing()` returns early while riding, so a tamed T-Rex is a fast way to travel and nothing else | Every piece exists (per-species attack clips, damage, reach, cooldown). It is a design call about whether mounts fight, not a build problem |
+| **Replacing three rigs** | `dilo`, `sauropelta`, `spino` ship **one animation each**, re-timed for idle/walk/run/attack/death | Nothing in the repo can replace them; the Quaternius fallbacks are Apato/Parasaur/Stego/TRex/Trike/Raptor. A download, a licence line in ASSETS.md, and a re-check of facing, seat and clip slots |
+| **Source maps in the deploy** | `sourcemap: true` ships **11 MB per deployment** | Harmless to players (Vercel serves brotli; the wire cost is already fine) but it is what filled the 10 GB storage quota. Keep for production debugging, or drop |
+
+## 2. Attacking and being attacked
+
+The thinnest system in the game, and the one a survival player spends the most time inside.
+
+- **Melee is one button with no timing.** LMB swings on a 0.45 s cooldown; there is no **block**, no
+  **parry**, no **dodge roll** (the rig ships a `Roll` clip nothing plays), no wind-up you can read
+  on an animal before it commits. Every fight is walk-in-and-click.
+- **No ranged weapon at all.** The spear is melee; its `throw` slot is a swing variant, not a
+  projectile. No bow, no thrown spear, no sling — so there is no way to open a fight at range, which
+  is what makes a big predator survivable without a mount.
+- **No damage feedback on the player beyond a red vignette and a flinch.** No hit direction
+  indicator, no stagger, no knockback on you (animals take knockback; you do not).
+- **No weak points or hit zones.** A blow to the tail and a blow to the head are the same blow.
+- **Torpor is invisible until you read the nameplate.** A KO has a number and no body language until
+  it drops; the rigs that have a stagger clip could show the fight turning.
+- **Dino attacks do not telegraph.** `attackCooldown` fires the clip and the damage on the same
+  frame, so there is nothing to react to — a 0.3 s wind-up with the damage on the follow-through is
+  the single cheapest fix here.
+- **No aggro readability.** Nothing tells you an animal has noticed you except that it starts moving.
+  A call, a posture, a nameplate state — the sound bank already has calls (M35).
+
+## 3. Mechanics and progression
+
+- **Tames are flat.** No levels, no stats, no breeding, no eggs, no imprinting, no taming
+  *effectiveness*. A tamed raptor on day one is identical to one on day thirty. This is the largest
+  single missing system measured against the genre.
+- **No tame commands.** They follow and they guard (M36), and that is it: no *stay*, no *attack
+  target*, no *whistle*, no *passive/aggressive* stance, no **tame inventory** (a pack animal that
+  cannot carry anything is a horse, not a mule).
+- **No corpse bag on death** (PLAN item 4). Death costs the walk back and a day's meals; your pack is
+  kept, so there is no real stake.
+- **Inventory has no weight and no stack limits** — `counts` is a `Map<ItemId, number>`. Carrying
+  9,999 stone is free, which removes the reason for a base, for a chest, and for a pack animal.
+- **Twenty-four items, fifteen recipes.** The tiers stop at timber: no stone tier, no metal, no
+  cooking beyond meat-on-a-fire, no water container (you drink at the edge and cannot carry water),
+  no repair, no durability.
+- **Building is ten pieces and no openings**: foundation, wall, ceiling, campfire, torch, bedroll,
+  workbench, chest, fence, canopy. **No door, no doorway, no window, no stairs or ramp, no pitched
+  roof** — so a hut is a box you cannot get into without leaving a wall out.
+- **One save slot**, and `warmth` is **not in it** (`save.survival` carries food/water/stamina only),
+  so the cold resets on every reload.
+- **No hostile pressure on a base.** Nothing ever attacks what you built.
+
+## 4. Feel and physics
+
+- **No fall damage.** You can step off the 410 m summit and walk away. This is the single biggest
+  "the world does not take itself seriously" gap left, and the landing crouch (M88) already measures
+  the impact speed that would drive it.
+- **No crouch, no prone, no lean, no climb, no vault.** The character walks, runs, jumps, swims and
+  dives; nothing else. `ControlLeft` is unbound.
+- **No swim stamina and no current danger.** Rivers push you (`riverFlowAt`) but cannot drown or
+  sweep you anywhere you care about.
+- **Nothing has mass.** No push between the player and animals, no ragdoll (M41's topple is the
+  honest stand-in), no physics props you can knock over, no trees that fall.
+- **No hit-stop, no camera shake on landing, no controller support.**
+- **Keys cannot be rebound** (settings has render scale, shadows, grass, draw distance, volume,
+  sensitivity, FOV). Bound today: `W A S D Shift Space E F C T M N O Tab F3 Esc`.
+
+## 5. Animation, after the pass (M83–M91)
+
+The pass covered: directional locomotion, the swim, the dive, held tools, the armed idle, hurt,
+interact/eat/place, the riding straddle and per-species seats, dino flinch, death, attack variety,
+and head-tracking. What it could not reach:
+
+- **Eleven of fifteen rigs have no flinch clip**, and there is no honest substitute in an attack or
+  a death clip. Those species do not wince.
+- **Four rigs — `trike`, `carno`, `sauropelta`, `spino` — name every bone `Bone.001`.** That one
+  fact is why they do not head-track *and* why the facing probe cannot read them. It is a property
+  of those three assets plus the trike, not four separate problems.
+- **A held torch is unlit.** You place a torch to light ground; carrying one is carrying a stick.
+- **No turn-in-place, no walking-pace backpedal twin** (`Run_Back` is retimed), **no idle breaks**.
+- **The one-clip rigs idle by playing their walk cycle at a third speed.** Checked in M89 and left
+  alone: photographed undisturbed they read as standing animals, and the obvious fix risks the
+  failure M52 already hit.
+
+## 6. HUD, UI and the map
+
+- **The map has no fog of war and no discovery.** In survival it shows the island, the water and
+  your own buildings; in creative it reveals every ruin and keystone. Nothing is *earned* by walking
+  — which was the design in the arc ("map unlock by climbing and looking").
+- **No player-placed markers or waypoints**, no route line, no distance readout, no tame icons, no
+  death marker.
+- **The inventory panel is a list.** No drag, no split stacks, no sorting, no item tooltips beyond
+  the name, no equipment slots (armour is a stat, not a slot).
+- **No crafting queue and no progress** — crafting is instant on click.
+- **No death screen, no respawn choice** (bedroll or beach is decided for you), **no pause menu**
+  (settings is a gear panel), **no key help beyond `?`**.
+- **Emoji item icons.** Legible and zero-cost, and the one piece of the UI that reads as a prototype.
+- **Nothing is localised, and nothing is accessible**: no colour-blind palette, no text scaling, no
+  subtitle track for the audio cues, no remappable keys (again).
+
+## 7. Visual, terrain and the world
+
+- **The Alpine Tarn waterfall**, deferred in M72 *with the measurements already taken*: the west rim
+  is a 10–20 m thick, 3 m high dam (234 m at x −1310, 226 at x −1330) and past it the flank falls
+  **226 → 120 m over seventy metres** — a ~57° horsetail visible from Dune Bay and the whole west
+  coast. Parked because a 6.5 m slot down that flank crossed the keystone climb; **M81/M82 reshaped
+  that entire range afterwards, so the blocker may simply be gone.** It needs a re-measure, not a
+  redesign.
+- **No weather.** No rain, no storm, no wind gusts you can see, no fog banks, no snow on the tops
+  that falls. The sky has cloud cards and a day-night grade and nothing else changes, ever.
+- **No seasons, no tides, no moon phase.**
+- **Water is one look everywhere except the rivers** (M90 gave rivers depth-and-angle clarity; the
+  sea and the lakes are still flat sheets). No caustics, no refraction offset, no foam on the
+  shoreline of a lake, no wake behind a swimmer or a boat (there are no boats).
+- **No underwater life.** The sea floor has rocks and weed and nothing that moves — and since M86 it
+  is somewhere you can actually go, which makes the emptiness visible.
+- **No birds, no insects, no small life.** The ambience has birdsong with nothing in the air making
+  it.
+- **Interiors are two idioms** (swamp, pine). PLAN decision 6's answer for caves — portal-loaded
+  hand-built spaces behind a door — was written down, ignored in M51, and is still the only honest
+  route back to underground content.
+- **The ruins are six prefab arrangements across twenty-three sites.** Repetition is visible once
+  you have walked the island.
+- **No LODs on the dino rigs** (impostor cards exist for distance; the near tiers are one mesh).
+
+## 8. Audio
+
+- 74 CC0 samples (M35) plus a procedural ambience bed. Open: **no music at all**, no reverb by
+  space (a gorge sounds like a beach), no occlusion, no distinct footstep sets beyond ground type,
+  no combat impact layering, no stingers for the arc beats.
+
+## 9. Performance — the honest verdict
+
+**This is not where the value is.** `PERFORMANCE.md`'s own conclusion, unchanged: the remaining fill
+levers (**B** opaque grass, **C** depth pre-pass, **E** far-terrain material, **F** occlusion
+queries, **G** shadow caching, **H** KTX2, **I** presets) are together worth **~3 ms of a 5.5 ms
+frame that already meets its 12 ms contract**, and every one of them is unproven against
+measurement. Re-measured 2026-09-12: a full island lap is **worst frame 28.8 ms, one hitch over
+25 ms, p50 3–5 ms**.
+
+Open hitch items, all small:
+- **H6** — a teleport rebuilds terrain synchronously (~770 ms). QA-only today, but the same code path
+  runs at load.
+- **H7** — ~30–50 textures still upload on first sight of the plain, reachable from neither the scene
+  nor the registered roots. ~16 ms, drained by the warden.
+- **H8c** — one `MeshDepthMaterial` compile for an instanced tree trunk at the foothills. **The doc
+  says 165 ms; measured 25 ms on 2026-09-12** — it is the single hitch in the lap above.
+
+Not doing, and why, stays as recorded: N8AO, tessellation, WebGPU.
+
+## 10. Stale in the repo
+
+- **This section's predecessor** — the "Remaining order (2026-09-07)" list above — listed as
+  remaining several things that shipped in M31–M68. Fixed by this audit.
+- **`PERFORMANCE.md` H8c says 165 ms**; it is 25 ms.
+- **`tools/shots.mjs`'s eleven authored vantages predate the world changes.** Several now teleport
+  into water that did not exist when they were written; one fires the swim hint from "spawn".
+- **`tools/artdir.mjs` is an M2-era asset-intake harness** and no longer describes anything shipped.
+- **11 MB of source maps per deployment** (see §1).
+
+## 11. Explicitly not doing (decisions on record)
+
+- **The aquatic tame** — user's call, arc beat 4 stands without it.
+- **A harvestable log from a felled tree** — user's call.
+- **Jointed ragdolls** — M41's directed topple is the answer until bodies start falling off cliffs.
+- **Co-op** — last, as decided (PeerJS host-authority, `net.ts` in minecraft-JS is the reference).
+
+## 12. If you want an order
+
+1. **Push.** Fifteen rounds of work are invisible.
+2. **Fall damage**, then **a wind-up on dino attacks** — the two cheapest changes that make the world
+   feel like it means it, both riding on machinery that already exists.
+3. **A door and a ramp.** A hut you cannot walk into undermines the whole building tier.
+4. **Weight and stacks**, which is what makes the chest, the base and a pack animal mean anything.
+5. **Tame commands and a tame inventory** — the genre's core loop, and the cheapest large win.
+6. **The Tarn fall** — the measurements are already taken; it may only need a re-check.
+7. Then the decisions in §1, and weather.
 
 **Rules:** capability gates, not level gates. The ruins are the tech tree (recipes past timber tier
 learned from tablets — engrams as archaeology). Tames are the skill tree. Nothing in the arc grants
